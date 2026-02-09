@@ -1,0 +1,48 @@
+import { type NextRequest, NextResponse } from 'next/server'
+// import { updateSession } from '@/lib/core/supabase/middleware'
+
+export async function middleware(request: NextRequest) {
+  // In development, if network issues occur, skip auth middleware
+  // This prevents the app from being blocked by network errors
+  // DISABLING SDK MIDDLEWARE temporarily/permanently as we migrate to raw-auth
+  // Client-side protection (AuthProvider) will handle redirects.
+  return NextResponse.next();
+  
+  /*
+  if (process.env.NODE_ENV === 'development') {
+    try {
+      // Try to update session with a timeout
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('timeout')), 2000)
+      );
+      
+      const sessionPromise = updateSession(request);
+      
+      return await Promise.race([sessionPromise, timeoutPromise]) as NextResponse;
+    } catch (error) {
+      // If auth fails in dev, just continue without session check
+      console.warn('⚠️  Middleware auth skipped due to network error');
+      return NextResponse.next({
+        request,
+      });
+    }
+  }
+  
+  // In production, always try to update session
+  return await updateSession(request)
+  */
+}
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - api routes (handled separately)
+     * Feel free to modify this pattern to include more paths.
+     */
+    '/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+  ],
+}

@@ -1,0 +1,279 @@
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { useUserStore } from '@/store/userStore';
+import { 
+  User, 
+  Copy, 
+  CheckCircle, 
+  LogOut, 
+  Clock, 
+  Shield, 
+  AlertTriangle,
+  X,
+  Settings
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+
+interface SessionPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+const SessionPanel: React.FC<SessionPanelProps> = ({ isOpen, onClose }) => {
+  const { session, logout } = useUserStore();
+  const [copiedId, setCopiedId] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [sessionDuration, setSessionDuration] = useState('');
+  const [timeUntilExpiry, setTimeUntilExpiry] = useState('');
+
+  // Calculate session duration and time until expiry
+  useEffect(() => {
+    if (!session.user) return;
+
+    const updateTimes = () => {
+      const now = new Date();
+      const joinedAt = new Date(session.user!.joinedAt);
+      const sessionExpiry = session.sessionExpiry ? new Date(session.sessionExpiry) : null;
+
+      // Calculate session duration
+      const durationMs = now.getTime() - joinedAt.getTime();
+      const hours = Math.floor(durationMs / (1000 * 60 * 60));
+      const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+      
+      if (hours > 0) {
+        setSessionDuration(`${hours}h ${minutes}m`);
+      } else {
+        setSessionDuration(`${minutes}m`);
+      }
+
+      // Calculate time until expiry
+      if (sessionExpiry) {
+        const timeLeft = sessionExpiry.getTime() - now.getTime();
+        if (timeLeft > 0) {
+          const daysLeft = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+          const hoursLeft = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          
+          if (daysLeft > 0) {
+            setTimeUntilExpiry(`${daysLeft}d ${hoursLeft}h`);
+          } else {
+            setTimeUntilExpiry(`${hoursLeft}h`);
+          }
+        } else {
+          setTimeUntilExpiry('Expired');
+        }
+      }
+    };
+
+    updateTimes();
+    const interval = setInterval(updateTimes, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, [session.user, session.sessionExpiry]);
+
+  const copyAnonymousId = async () => {
+    if (session.user?.anonymousId) {
+      try {
+        await navigator.clipboard.writeText(session.user.anonymousId);
+        setCopiedId(true);
+        setTimeout(() => setCopiedId(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy ID:', err);
+      }
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    setShowLogoutConfirm(false);
+    onClose();
+  };
+
+  if (!session.isAuthenticated || !session.user) {
+    return null;
+  }
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
+            onClick={onClose}
+          />
+
+          {/* Slide-out Panel */}
+          <motion.div
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="fixed top-0 right-0 h-full w-full max-w-sm bg-white shadow-2xl z-50 overflow-y-auto"
+          >
+            {/* Panel Content */}
+            <div className="h-full flex flex-col">
+              {/* Header with drag indicator */}
+              <div className="flex flex-col items-center pt-2 pb-4">
+                <div className="w-12 h-1 bg-gray-300 rounded-full mb-4"></div>
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-orange-500 rounded-full flex items-center justify-center">
+                      <Shield className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-gray-900">Session Info</h2>
+                      <p className="text-sm text-gray-500">Anonymous Identity</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={onClose}
+                    className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <X className="w-5 h-5 text-gray-500" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-6">
+                {/* Anonymous ID Section */}
+                <div className="bg-gray-50 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">
+                  Your Anonymous ID
+                </p>
+                <div className="flex items-center gap-1 text-xs text-green-600">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  Active
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between bg-white rounded-md p-3 border border-gray-200 mb-3">
+                <span className="text-gray-900 font-mono text-sm font-medium">
+                  {session.user.anonymousId}
+                </span>
+                <button
+                  onClick={copyAnonymousId}
+                  className="p-1.5 hover:bg-gray-100 rounded-md transition-colors"
+                  title="Copy ID"
+                >
+                  {copiedId ? (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  ) : (
+                    <Copy className="w-4 h-4 text-gray-500" />
+                  )}
+                </button>
+              </div>
+              
+              <p className="text-xs text-gray-500">
+                This is your unique identifier. Others will only see this anonymous ID when you interact.
+              </p>
+            </div>
+
+                {/* Session Stats */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-purple-50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className="w-4 h-4 text-purple-600" />
+                      <span className="text-xs text-purple-600 font-medium">Session Duration</span>
+                    </div>
+                    <p className="text-lg font-semibold text-purple-900">{sessionDuration}</p>
+                  </div>
+                  
+                  <div className="bg-orange-50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <AlertTriangle className="w-4 h-4 text-orange-600" />
+                      <span className="text-xs text-orange-600 font-medium">Expires In</span>
+                    </div>
+                    <p className="text-lg font-semibold text-orange-900">{timeUntilExpiry}</p>
+                  </div>
+                </div>
+
+                {/* Session Actions */}
+                <div className="space-y-3">
+                  <button
+                    onClick={() => {/* TODO: Open preferences */}}
+                    className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 rounded-lg transition-colors"
+                  >
+                    <Settings className="w-5 h-5 text-gray-500" />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">Session Preferences</p>
+                      <p className="text-xs text-gray-500">Manage notifications and privacy</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => setShowLogoutConfirm(true)}
+                    className="w-full flex items-center gap-3 p-3 text-left hover:bg-red-50 rounded-lg transition-colors group"
+                  >
+                    <LogOut className="w-5 h-5 text-red-500" />
+                    <div>
+                      <p className="text-sm font-medium text-red-600 group-hover:text-red-700">
+                        Clear Session
+                      </p>
+                      <p className="text-xs text-red-500">
+                        This will log you out and clear all data
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Logout Confirmation Modal */}
+            <AnimatePresence>
+              {showLogoutConfirm && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-black/60 backdrop-blur-sm rounded-xl flex items-center justify-center p-6"
+                >
+                  <motion.div
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    className="bg-white rounded-lg p-6 w-full max-w-sm"
+                  >
+                    <div className="text-center mb-4">
+                      <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <AlertTriangle className="w-6 h-6 text-red-600" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        Clear Session?
+                      </h3>
+                      <p className="text-sm text-gray-600">
+                        This will log you out and clear all your session data. You'll need to create a new anonymous identity to continue.
+                      </p>
+                    </div>
+                    
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setShowLogoutConfirm(false)}
+                        className="flex-1 px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleLogout}
+                        className="flex-1 px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
+                      >
+                        Clear Session
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+};
+
+export default SessionPanel;

@@ -1,0 +1,1359 @@
+import * as rawDb from '@/lib/core/supabase/raw-db';
+import * as rawAuth from '@/lib/core/supabase/raw-auth';
+import { Thread, ThreadData, ThreadFilters, CreateThreadForm, Participant, Message } from '@/types';
+import { calculateThreadExpiration } from '../utils/utils/helpers/threadHelpers';
+import { uploadService } from '@/lib/utils/upload-service';
+
+export interface ThreadInviteItem {
+  inviteId: string;
+  status: string;
+  createdAt: string;
+  thread: Thread;
+}
+
+/**
+ * Fetch threads with filters, search, and pagination
+ */
+export const fetchThreads = async (
+  filters: ThreadFilters,
+  searchQuery: string,
+  page: number,
+  limit: number,
+  userId?: string
+): Promise<{ threads: Thread[]; hasMore: boolean }> => {
+  try {
+    console.log('fetchThreads called with:', { filters, searchQuery, page, limit, userId });
+    
+    // Build filter object for rawDb
+    const queryFilters: Record<string, string> = {};
+    
+    // Select string
+    const selectStr = '*,thread_likes(user_id),creator:users!threads_creator_id_fkey(id,username,anonymous_id,is_premium,avatar_url),thread_participants(user_id)';
+    
+    // Deleted check
+    queryFilters['deleted_at'] = 'is.null';
+
+    const sanitizeSearch = (value: string) =>
+      value.replace(/[(),]/g, ' ').trim();
+
+    const savedOrConditions = userId
+      ? `is_saved.is.null,is_saved.eq.false,and(is_saved.eq.true,creator_id.eq.${userId})`
+      : 'is_saved.is.null,is_saved.eq.false';
+
+    // Search
+    if (searchQuery) {
+      const safeSearch = sanitizeSearch(searchQuery);
+      const savedLogic = `or(${savedOrConditions})`;
+      const searchLogic = `or(title.ilike.*${safeSearch}*,content.ilike.*${safeSearch}*)`;
+      queryFilters['and'] = `(${savedLogic},${searchLogic})`;
+    } else {
+      // Saved/Visibility logic using horizontal filtering (OR)
+      queryFilters['or'] = `(${savedOrConditions})`;
+    }
+
+    // Category
+    if (filters.category && filters.category !== 'all') {
+      queryFilters['category'] = `eq.${filters.category}`;
+    }
+
+    // Type
+    if (filters.type && filters.type !== 'all') {
+      queryFilters['type'] = `eq.${filters.type}`;
+    }
+
+    // Group
+    if (filters.groupId) {
+      queryFilters['group_id'] = `eq.${filters.groupId}`;
+    }
+
+    // Premium
+    if (filters.isPremium !== undefined) {
+      queryFilters['is_premium'] = `eq.${filters.isPremium}`;
+    }
+
+    // Privacy
+    if (filters.privacy && filters.privacy !== 'all') {
+      if (filters.privacy === 'public') {
+        queryFilters['privacy'] = 'eq.public';
+      } else {
+        queryFilters['privacy'] = `eq.${filters.privacy}`;
+      }
+    } else if (!filters.privacy) {
+      queryFilters['privacy'] = 'eq.public';
+    }
+
+    // Expiration
+    if (filters.expiration === 'active') {
+      queryFilters['expires_at'] = `gt.${new Date().toISOString()}`;
+    } else if (filters.expiration === 'expired') {
+      queryFilters['expires_at'] = `lte.${new Date().toISOString()}`;
+    }
+
+    // Sorting
+    let orderBy = 'created_at';
+    let ascending = false;
+
+    switch (filters.sortBy) {
+      case 'newest':
+        orderBy = 'created_at';
+        break;
+      case 'popular':
+        orderBy = 'likes_count';
+        break;
+      case 'trending':
+        orderBy = 'message_count';
+        break;
+      case 'oldest':
+        orderBy = 'created_at';
+        ascending = true;
+        break;
+      default:
+        orderBy = 'created_at';
+    }
+
+    const { data, error } = await rawDb.select<any[]>('threads', {
+      select: selectStr,
+      filters: queryFilters,
+      order: { column: orderBy, ascending },
+      limit: limit,
+      offset: (page - 1) * limit
+    });
+
+    if (error) {
+      console.error('RawDb query error:', error)
+      throw error
+    }
+
+    console.log('Fetched threads:', data?.length, 'threads');
+
+    // Transform database records to Thread type
+    const threads: Thread[] = (data || []).map(thread => transformThread(thread, userId))
+
+    // Check if there are more threads
+    const hasMore = (data || []).length === limit
+
+    console.log('Returning:', { threadsCount: threads.length, hasMore });
+
+    return { threads, hasMore }
+
+
+  } catch (error) {
+    console.error('fetchThreads error:', error)
+    throw error
+  }
+}
+
+/**
+ * Fetch a single thread by ID with all details
+ */
+export const fetchThreadById = async (
+  threadId: string,
+  userId?: string
+): Promise<ThreadData | null> => {
+  try {
+    const select = `
+      *,
+      creator:users!threads_creator_id_fkey(id, username, anonymous_id, is_premium, avatar_url),
+      thread_likes(user_id),
+      thread_participants(user_id, user:users(id, username, anonymous_id, is_premium, avatar_url)),
+      messages!messages_thread_id_fkey(
+        *,
+        sender:users!messages_sender_id_fkey(id, username, anonymous_id, is_premium, avatar_url),
+        message_likes(user_id),
+        parent_message:messages!parent_message_id(
+          id,
+          content,
+          sender:users!messages_sender_id_fkey(id, username, anonymous_id, avatar_url, is_premium)
+        ),
+        message_reactions(reaction_type, user_id)
+      ),
+      
+      poll:polls(
+        id,
+        question,
+        duration_hours,
+        allow_multiple_votes,
+        expires_at,
+        poll_options(id, text, vote_count, order_index),
+        poll_votes(user_id, option_id)
+      )
+    `.replace(/\s+/g, '');
+
+    const { data, error } = await rawDb.select<any>('threads', {
+      select,
+      filters: {
+        'id': rawDb.filter.eq(threadId),
+        'deleted_at': 'is.null',
+        // Nested ordering/limits for messages
+        'messages.order': 'created_at.desc',
+        'messages.limit': 50
+      },
+      single: true
+    });
+
+    if (error) throw error
+    if (!data) return null
+
+    return transformThreadData(data, userId)
+  } catch (error) {
+    console.error('fetchThreadById error:', error)
+    return null
+  }
+}
+
+/**
+ * Create a new thread
+ */
+export const createThread = async (
+  threadData: CreateThreadForm,
+  userId: string
+): Promise<string | null> => {
+  try {
+    console.log('Service: Creating thread', { threadData, userId });
+    
+    // Get user's premium status
+    const { data: userData } = await rawDb.select('users', {
+      select: 'is_premium',
+      filters: { 'id': rawDb.filter.eq(userId) },
+      single: true
+    });
+    
+    const isUserPremium = (userData as any)?.is_premium || false;
+
+    // Create the thread
+    const { data: threadDataResult, error: threadError } = await rawDb.insert('threads', {
+      creator_id: userId,
+      title: threadData.title,
+      content: threadData.content,
+      type: threadData.type,
+      category: threadData.category,
+      privacy: threadData.privacy || 'public',
+      member_limit: threadData.privacy === 'invite_only'
+        ? (threadData.memberLimit ?? 10)
+        : null,
+      is_premium: threadData.isPremium || false,
+      price: threadData.price,
+      expires_at: threadData.type === 'poll' 
+        ? new Date(Date.now() + (threadData.pollDuration || 24) * 60 * 60 * 1000).toISOString()
+        : calculateThreadExpiration(threadData.isPremium || false), // Use thread premium status
+    });
+
+    const thread = threadDataResult?.[0]; // Insert returns array
+
+    if (threadError) {
+      console.error('Service: Thread creation error:', threadError);
+      throw new Error(`Failed to create thread: ${threadError.message}`);
+    }
+    if (!thread) throw new Error('Thread creation failed - no data returned')
+
+    console.log('Service: Thread created', thread.id);
+
+    // Auto-join creator to thread_participants
+    await rawDb.insert('thread_participants', {
+      thread_id: thread.id,
+      user_id: userId
+    }, { returning: false }).catch(err => {
+      console.warn('⚠️ Service: Failed to auto-join creator:', err);
+    });
+
+    // If it's a poll, create poll and options
+    if (threadData.type === 'poll' && threadData.pollOptions) {
+      console.log('Service: Creating poll for thread', thread.id);
+      const { data: pollData, error: pollError } = await rawDb.insert('polls', {
+        thread_id: thread.id,
+        question: threadData.title,
+        duration_hours: threadData.pollDuration || 24,
+        allow_multiple_votes: false,
+        expires_at: new Date(Date.now() + (threadData.pollDuration || 24) * 60 * 60 * 1000).toISOString(),
+      });
+
+      const poll = pollData?.[0];
+
+      if (pollError) throw pollError
+      if (!poll) throw new Error('Poll creation failed')
+
+      // Create poll options
+      const options = threadData.pollOptions
+        .filter(opt => opt.trim())
+        .map((text, index) => ({
+          poll_id: poll.id,
+          text,
+          order_index: index,
+        }))
+
+      if (options.length > 0) {
+        const { error: optionsError } = await rawDb.insert('poll_options', options);
+
+        if (optionsError) throw optionsError
+      }
+    }
+
+    return thread.id
+  } catch (error) {
+    console.error('createThread error:', error)
+    return null
+  }
+}
+
+
+
+/**
+ * Like a thread
+ */
+export const likeThread = async (threadId: string, userId: string): Promise<boolean> => {
+  try {
+    const { error } = await rawDb.insert('thread_likes', {
+      thread_id: threadId,
+      user_id: userId,
+    }, { returning: false });
+
+    if (error) throw error
+
+    return true
+  } catch (error) {
+    console.error('likeThread error:', error)
+    return false
+  }
+}
+
+/**
+ * Unlike a thread
+ */
+export const unlikeThread = async (threadId: string, userId: string): Promise<boolean> => {
+  try {
+    const { error } = await rawDb.remove('thread_likes', {
+      'thread_id': rawDb.filter.eq(threadId),
+      'user_id': rawDb.filter.eq(userId)
+    });
+
+    if (error) throw error
+    return true
+  } catch (error) {
+    console.error('unlikeThread error:', error)
+    return false
+  }
+}
+
+/**
+ * Like a message
+ */
+export const likeMessage = async (messageId: string, userId: string): Promise<boolean> => {
+  try {
+    const { error } = await rawDb.insert('message_likes', {
+      message_id: messageId,
+      user_id: userId,
+    }, { returning: false });
+
+    if (error) throw error
+
+    return true
+  } catch (error) {
+    console.error('likeMessage error:', error)
+    return false
+  }
+}
+
+/**
+ * Unlike a message
+ */
+export const unlikeMessage = async (messageId: string, userId: string): Promise<boolean> => {
+  try {
+    const { error } = await rawDb.remove('message_likes', {
+      'message_id': rawDb.filter.eq(messageId),
+      'user_id': rawDb.filter.eq(userId)
+    });
+
+    if (error) throw error
+    return true
+  } catch (error) {
+    console.error('unlikeMessage error:', error)
+    return false
+  }
+}
+
+/**
+ * Add a reaction to a message
+ */
+export const addMessageReaction = async (
+  messageId: string,
+  userId: string,
+  reaction: string
+): Promise<boolean> => {
+  try {
+    const { error } = await rawDb.insert('message_reactions', {
+      message_id: messageId,
+      user_id: userId,
+      reaction_type: reaction,
+    }, { returning: false });
+
+    if (error) {
+      const errorMsg = error.message || '';
+      // Ignore unique constraint violations (user already reacted with this emoji)
+      if (errorMsg.includes('23505') || errorMsg.includes('duplicate key')) return true;
+      throw error;
+    }
+
+    
+    return true
+  } catch (error) {
+    console.error('addMessageReaction error:', error)
+    return false
+  }
+}
+
+/**
+ * Remove a reaction from a message
+ */
+export const removeMessageReaction = async (
+  messageId: string,
+  userId: string,
+  reaction: string
+): Promise<boolean> => {
+  try {
+    const { error } = await rawDb.remove('message_reactions', {
+      'message_id': rawDb.filter.eq(messageId),
+      'user_id': rawDb.filter.eq(userId),
+      'reaction_type': rawDb.filter.eq(reaction)
+    });
+
+    if (error) throw error
+    return true
+  } catch (error) {
+    console.error('removeMessageReaction error:', error)
+    return false
+  }
+}
+
+/**
+ * Vote on a poll
+ */
+export const voteOnPoll = async (
+  pollId: string,
+  optionId: string,
+  userId: string
+): Promise<boolean> => {
+  try {
+    const { error } = await rawDb.insert('poll_votes', {
+      poll_id: pollId,
+      option_id: optionId,
+      user_id: userId,
+    }, { returning: false });
+
+    if (error) throw error
+
+    return true
+  } catch (error) {
+    console.error('voteOnPoll error:', error)
+    return false
+  }
+}
+
+/**
+ * Add a message to a thread
+ */
+/**
+ * Add a message to a thread
+ */
+export const addMessage = async (
+  threadId: string,
+  content: string,
+  userId: string,
+  type: 'text' | 'voice' | 'image' | 'file' | 'link' = 'text',
+  attachments?: unknown[],
+  replyToId?: string
+): Promise<Message> => {
+  console.log('📡 [Service] addMessage START', { threadId, userId, contentLength: content.length });
+  
+  // STEP 1: Minimal INSERT
+  console.log('📡 [Service] STEP 1: About to perform INSERT');
+  
+  const { data: insertedData, error: insertError } = await rawDb.insert('messages', {
+    thread_id: threadId,
+    sender_id: userId,
+    content,
+    type,
+    attachments: attachments || [],
+    parent_message_id: replyToId || null,
+  }, { returning: true }); // Return inserted row
+
+  const inserted = insertedData?.[0];
+
+  console.log('📡 [Service] INSERT completed', { 
+    hasData: !!inserted, 
+    hasError: !!insertError,
+    error: insertError,
+    id: inserted?.id 
+  });
+
+  if (insertError) {
+    console.error('❌ [Service] INSERT error:', insertError);
+    throw insertError;
+  }
+
+  if (!inserted?.id) {
+    console.error('❌ [Service] No ID returned from insert');
+    throw new Error('Message entry created but no ID returned');
+  }
+
+  console.log('✅ [Service] INSERT SUCCESS, ID:', inserted.id);
+
+  // STEP 2: Separate Fetch with complex joins
+  console.log('📡 [Service] STEP 2: About to fetch with joins');
+  
+  const selectStr = `
+    *,
+    sender:users!messages_sender_id_fkey(id, username, anonymous_id, is_premium, avatar_url),
+    message_reactions(reaction_type, user_id),
+    parent_message:messages!parent_message_id(
+      id,
+      content,
+      sender:users!messages_sender_id_fkey(id, username, anonymous_id, avatar_url, is_premium)
+    )
+  `.replace(/\s+/g, '');
+
+  const { data: fetchedData, error: fetchError } = await rawDb.select<any>('messages', {
+    select: selectStr,
+    filters: { 'id': rawDb.filter.eq(inserted.id) },
+    single: true
+  });
+
+  const data = fetchedData;
+
+  console.log('📡 [Service] FETCH completed', { 
+    hasData: !!data, 
+    hasError: !!fetchError 
+  });
+
+  if (fetchError) {
+    console.error('❌ [Service] Post-insert fetch error:', fetchError);
+    throw fetchError;
+  }
+
+  if (!data) {
+    console.error('❌ [Service] No data from fetch');
+    throw new Error('Message created but could not be retrieved');
+  }
+
+  console.log('✅ [Service] FETCH SUCCESS');
+
+  
+
+  console.log('📡 [Service] About to transform message');
+  const transformed = transformMessage(data, userId);
+  console.log('✅ [Service] Message transformed, returning');
+  return transformed;
+}
+
+/**
+ * Update a thread
+ */
+export const updateThread = async (
+  threadId: string,
+  updates: Partial<Thread>,
+  userId: string
+): Promise<Thread | null> => {
+  try {
+    // Map Thread types to DB columns
+    const dbUpdates: any = {
+      updated_at: new Date().toISOString()
+    };
+    
+    if (updates.title) dbUpdates.title = updates.title;
+    if (updates.content) dbUpdates.content = updates.content;
+    if (updates.isLocked !== undefined) dbUpdates.is_locked = updates.isLocked;
+    if (updates.isPinned !== undefined) dbUpdates.is_pinned = updates.isPinned;
+    if (updates.privacy) dbUpdates.privacy = updates.privacy;
+    if (updates.memberLimit !== undefined) {
+      dbUpdates.member_limit = updates.memberLimit;
+    } else if (updates.privacy === 'public') {
+      dbUpdates.member_limit = null;
+    }
+    
+    const { data: updatedData, error } = await rawDb.update<any>('threads', dbUpdates, {
+      'id': rawDb.filter.eq(threadId),
+      'creator_id': rawDb.filter.eq(userId)
+    });
+
+    if (error) throw error;
+    if (!updatedData || updatedData.length === 0) return null;
+
+    // Fetch full thread details to return strict Thread object
+    // Or just return simplistic version if acceptable?
+    // Using fetchThreadById logic to ensure consistent return type
+    return fetchThreadById(threadId, userId);
+  } catch (error) {
+    console.error('updateThread error:', error);
+    return null;
+  }
+}
+
+/**
+ * Delete a thread (hard delete)
+ * Removes the thread, all associated data, and storage attachments
+ */
+export const deleteThread = async (threadId: string, userId: string): Promise<boolean> => {
+  try {
+    console.log(`🗑️ Starting hard delete for thread: ${threadId} (User: ${userId})`);
+
+    // 1. Storage Cleanup: Delete all attachments for this thread
+    // Typical folder structure: messages/{threadId}
+    const storageFolder = `messages/${threadId}`;
+    try {
+       await uploadService.deleteFolder('thread-attachments', storageFolder);
+    } catch (storageError) {
+       console.error('⚠️ Storage cleanup failed, continuing with DB deletion:', storageError);
+    }
+
+    // 2. Database Cleanup: Handle constraints by nullifying references in payments/earnings
+    // This is optional if ON DELETE CASCADE is NOT set but we want to keep payment records
+    // Actually the user said "removing all other stuffs related with it", 
+    // but typically payments should be kept for audit/history, just disconnect from thread.
+    
+    // Nullify references in payments
+    await rawDb.update('payments', { thread_id: null }, { 'thread_id': rawDb.filter.eq(threadId) }, { returning: false }).catch(err => {
+      console.warn('⚠️ Failed to nullify payment references:', err);
+    });
+
+    // Nullify references in creator_earnings
+    await rawDb.update('creator_earnings', { thread_id: null }, { 'thread_id': rawDb.filter.eq(threadId) }, { returning: false }).catch(err => {
+      console.warn('⚠️ Failed to nullify earnings references:', err);
+    });
+
+    // 3. Hard Delete the thread record
+    // Cascading deletes will handle messages, reactions, likes etc. if configured in DB
+    const { error: deleteError } = await rawDb.remove('threads', {
+      'id': rawDb.filter.eq(threadId),
+      'creator_id': rawDb.filter.eq(userId)
+    });
+
+    if (deleteError) {
+      console.error('❌ Database delete failed:', deleteError);
+      throw deleteError;
+    }
+
+    console.log(`✅ Thread ${threadId} successfully deleted`);
+    return true;
+  } catch (error: any) {
+    console.error('❌ deleteThread error:', {
+      message: error?.message,
+      details: error?.details,
+      hint: error?.hint,
+      code: error?.code
+    });
+    return false;
+  }
+}
+
+/**
+ * Extend thread expiration by 7 days
+ * Only premium thread creators can extend their threads
+ */
+export const extendThreadExpiration = async (
+  threadId: string,
+  userId: string
+): Promise<{ success: boolean; newExpiresAt?: string; error?: string }> => {
+  try {
+    // Fetch the thread to verify ownership and premium status
+    const { data: threadData, error: fetchError } = await rawDb.select<any>('threads', {
+      select: 'id, creator_id, is_premium, expires_at',
+      filters: { 'id': rawDb.filter.eq(threadId) },
+      single: true
+    })
+
+    const thread = threadData as any;
+
+    if (fetchError || !thread) {
+      return { success: false, error: 'Thread not found' }
+    }
+
+    // Verify user is the creator
+    if (thread.creator_id !== userId) {
+      return { success: false, error: 'Only the thread creator can extend expiration' }
+    }
+
+    // Verify thread is premium
+    if (!thread.is_premium) {
+      return { success: false, error: 'Only premium threads can be extended' }
+    }
+
+    // Calculate new expiration (add 7 days)
+    const currentExpires = thread.expires_at ? new Date(thread.expires_at) : new Date()
+    const newExpires = new Date(currentExpires.getTime() + 7 * 24 * 60 * 60 * 1000)
+    const newExpiresAt = newExpires.toISOString()
+
+    // Update expiration
+    const { error: updateError } = await rawDb.update('threads', { expires_at: newExpiresAt }, {
+      'id': rawDb.filter.eq(threadId),
+      'creator_id': rawDb.filter.eq(userId)
+    }, { returning: false });
+
+    if (updateError) {
+      return { success: false, error: 'Failed to extend thread expiration' }
+    }
+
+    return { success: true, newExpiresAt }
+  } catch (error) {
+    console.error('extendThreadExpiration error:', error)
+    return { success: false, error: 'An error occurred while extending the thread' }
+  }
+}
+
+/**
+ * Save a thread from expiration
+ * Only thread creators can save their threads
+ * Saved threads will not expire and are only visible to the creator
+ */
+export const saveThread = async (
+  threadId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    // Fetch the thread to verify ownership
+    const { data: threadData, error: fetchError } = await rawDb.select<any>('threads', {
+      select: 'id, creator_id, is_saved',
+      filters: { 'id': rawDb.filter.eq(threadId) },
+      single: true
+    })
+
+    const thread = threadData as any;
+
+    if (fetchError || !thread) {
+      return { success: false, error: 'Thread not found' }
+    }
+
+    // Verify user is the creator
+    if (thread.creator_id !== userId) {
+      return { success: false, error: 'Only the thread creator can save threads' }
+    }
+
+    // Check if already saved (handle missing column gracefully)
+    if (thread.is_saved === true) {
+      return { success: false, error: 'Thread is already saved' }
+    }
+
+    // Save the thread (remove expiration and set is_saved flag)
+    const { error: updateError } = await rawDb.update('threads', { 
+        is_saved: true,
+        expires_at: null  // Remove expiration
+      }, {
+        'id': rawDb.filter.eq(threadId),
+        'creator_id': rawDb.filter.eq(userId)
+      }, { returning: false });
+
+    if (updateError) {
+      return { success: false, error: 'Failed to save thread' }
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('saveThread error:', error)
+    return { success: false, error: 'An error occurred while saving the thread' }
+  }
+}
+
+/**
+ * Join a thread
+ */
+export const joinThread = async (threadId: string, userId: string): Promise<boolean> => {
+
+  if (!userId) {
+
+    return false;
+  }
+  try {
+    const { data, error } = await rawDb.rpc('join_thread', {
+      p_thread_id: threadId
+    });
+
+    if (error) {
+      console.error('❌ [Service] joinThread RPC error:', error);
+      const friendly = parseRpcErrorMessage(error);
+      throw new Error(friendly || `Join failed: ${error.message || 'Unknown error'}`);
+    }
+
+    return data !== null ? Boolean(data) : true;
+  } catch (error) {
+    console.error('joinThread error:', error);
+    throw error;
+  }
+}
+
+function parseRpcErrorMessage(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+
+  const msg = error.message || '';
+
+  const jsonStart = msg.indexOf('{');
+  if (jsonStart !== -1) {
+    try {
+      const json = JSON.parse(msg.slice(jsonStart));
+      if (json?.message && typeof json.message === 'string') {
+        if (json.message === 'You are banned from this thread') {
+          return 'You have been removed from this thread.';
+        }
+        return json.message;
+      }
+    } catch {
+      // ignore JSON parse failures
+    }
+  }
+
+  if (msg.includes('You are banned from this thread')) {
+    return 'You have been removed from this thread.';
+  }
+
+  return null;
+}
+
+/**
+ * Generate invite link code for a thread (creator only)
+ */
+export const createThreadInvite = async (
+  threadId: string,
+  maxUses: number | null = null,
+  expiresInDays: number = 7,
+  forceNew: boolean = false
+): Promise<{ code: string | null; error?: string }> => {
+  try {
+    const session = rawAuth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) return { code: null, error: 'Not authenticated' };
+
+    const now = new Date();
+
+    if (!forceNew) {
+      const { data: existing, error: existingError } = await rawDb.select<any[]>('thread_invites', {
+        select: 'id, code, expires_at, max_uses, current_uses',
+        filters: { 'thread_id': rawDb.filter.eq(threadId) },
+        limit: 1,
+      });
+
+      if (!existingError && existing && existing.length > 0) {
+        const invite = existing[0];
+        const expiresAt = invite.expires_at ? new Date(invite.expires_at) : null;
+        const expired = expiresAt ? expiresAt < now : false;
+        const max = invite.max_uses as number | null;
+        const current = invite.current_uses as number | null;
+        const fullyUsed = max !== null && current !== null && current >= max;
+
+        if (!expired && !fullyUsed && invite.code) {
+          return { code: invite.code };
+        }
+      }
+    }
+
+    const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + expiresInDays);
+
+    const payload = {
+      code,
+      created_by: userId,
+      max_uses: maxUses,
+      current_uses: 0,
+      expires_at: expiresAt.toISOString(),
+      created_at: now.toISOString(),
+    };
+
+    const { data: updated, error: updateError } = await rawDb.update<any>(
+      'thread_invites',
+      payload,
+      { 'thread_id': rawDb.filter.eq(threadId) }
+    );
+
+    if (updateError) {
+      return { code: null, error: updateError.message || 'Failed to generate invite code' };
+    }
+
+    if (Array.isArray(updated) && updated.length > 0) {
+      return { code: updated[0]?.code || code };
+    }
+
+    const { data, error } = await rawDb.insert<any>('thread_invites', {
+      thread_id: threadId,
+      ...payload,
+    });
+
+    if (error) {
+      return { code: null, error: error.message || 'Failed to generate invite code' };
+    }
+
+    const created = Array.isArray(data) ? data[0] : data;
+    return { code: created?.code || code };
+  } catch (error: any) {
+    return { code: null, error: error?.message || 'Failed to generate invite code' };
+  }
+};
+
+/**
+ * Redeem invite link code (joins the thread)
+ */
+export const redeemThreadInvite = async (
+  code: string
+): Promise<{ threadId: string | null; error?: string }> => {
+  try {
+    const { data, error } = await rawDb.rpc<string>('redeem_thread_invite', {
+      p_code: code,
+    });
+
+    if (error) {
+      const friendly = parseRpcErrorMessage(error);
+      return { threadId: null, error: friendly || error.message || 'Failed to redeem invite' };
+    }
+
+    return { threadId: data || null };
+  } catch (error: any) {
+    return { threadId: null, error: error?.message || 'Failed to redeem invite' };
+  }
+};
+
+/**
+ * Invite a user to a thread by username/anonymous ID
+ */
+export const inviteUserToThread = async (
+  threadId: string,
+  username: string,
+  threadTitle?: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { data, error } = await rawDb.rpc<any>('invite_user_to_thread', {
+      p_thread_id: threadId,
+      p_username: username,
+    });
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to invite user' };
+    }
+
+    if (!data?.success) {
+      return { success: false, error: data?.error || 'Failed to invite user' };
+    }
+
+    const invitedUserId = data.user_id as string | undefined;
+
+    if (invitedUserId) {
+      const { data: userData } = await rawDb.select<any>('users', {
+        select: 'email, username, anonymous_id, preferences',
+        filters: { 'id': rawDb.filter.eq(invitedUserId) },
+        single: true,
+      });
+
+      const email = userData?.email;
+      const emailEnabled = userData?.preferences?.notifications?.email !== false;
+
+      if (email && emailEnabled && typeof window !== 'undefined') {
+        const threadPath = `/threads/${threadId}`;
+        const inviteUrl = `${window.location.origin}/auth?redirect=${encodeURIComponent(threadPath)}`;
+        await fetch('/api/threads/send-invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email,
+            inviteUrl,
+            threadTitle: threadTitle || 'a thread',
+          }),
+        }).catch(() => null);
+      }
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Failed to invite user' };
+  }
+};
+
+/**
+ * Fetch invited threads for current user (pending invites)
+ */
+export const fetchInvitedThreads = async (
+  userId: string
+): Promise<{ data: ThreadInviteItem[]; error?: string }> => {
+  try {
+    const select = `
+      id,
+      status,
+      created_at,
+      thread:threads(
+        *,
+        creator:users!threads_creator_id_fkey(id, username, anonymous_id, is_premium, avatar_url),
+        thread_likes(user_id),
+        thread_participants(user_id)
+      )
+    `.replace(/\s+/g, '');
+
+    const { data, error } = await rawDb.select<any[]>('thread_user_invites', {
+      select,
+      filters: {
+        'invited_user_id': rawDb.filter.eq(userId),
+        'status': rawDb.filter.eq('pending'),
+      },
+      order: { column: 'created_at', ascending: false },
+    });
+
+    if (error) {
+      return { data: [], error: error.message || 'Failed to fetch invites' };
+    }
+
+    const invites = (data || [])
+      .filter((row: any) => row.thread)
+      .map((row: any) => ({
+        inviteId: row.id,
+        status: row.status,
+        createdAt: row.created_at,
+        thread: transformThread(row.thread, userId),
+      }));
+
+    return { data: invites };
+  } catch (error: any) {
+    return { data: [], error: error?.message || 'Failed to fetch invites' };
+  }
+};
+
+/**
+ * Leave a thread
+ */
+export const leaveThread = async (threadId: string, userId: string): Promise<boolean> => {
+  try {
+    const { data, error } = await rawDb.rpc('leave_thread', {
+      p_thread_id: threadId
+    });
+
+    if (error) {
+      console.error('❌ [Service] leaveThread RPC error:', error);
+      throw new Error(`Leave failed: ${error.message || 'Unknown error'}`);
+    }
+
+    return data !== null ? Boolean(data) : true;
+  } catch (error) {
+    console.error('leaveThread error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Check if a user is banned from a thread
+ */
+export const checkThreadBan = async (
+  threadId: string,
+  userId: string
+): Promise<{ isBanned: boolean; error?: string }> => {
+  try {
+    const { data, error } = await rawDb.rpc<boolean>('is_thread_banned', {
+      p_thread_id: threadId,
+      p_user_id: userId,
+    });
+
+    if (error) {
+      return { isBanned: false, error: error.message || 'Failed to check ban status' };
+    }
+
+    return { isBanned: data === true };
+  } catch (error: any) {
+    return { isBanned: false, error: error?.message || 'Failed to check ban status' };
+  }
+};
+
+/**
+ * Remove participant from thread (creator only) and blacklist
+ */
+export const removeThreadParticipant = async (
+  threadId: string,
+  participantId: string,
+  reason?: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { data, error } = await rawDb.rpc<boolean>('remove_thread_participant', {
+      p_thread_id: threadId,
+      p_user_id: participantId,
+      p_reason: reason || null,
+    });
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to remove participant' };
+    }
+
+    return { success: data === true };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Failed to remove participant' };
+  }
+};
+
+/**
+ * Helper: Transform database thread to Thread type
+ */
+function transformThread(dbThread: any, userId?: string): Thread {
+  const hasLiked = userId
+    ? dbThread.thread_likes?.some((like: any) => like.user_id === userId)
+    : false
+  const hasJoined = userId
+    ? (dbThread.thread_participants || []).some((p: any) => (p.user_id || p.user?.id) === userId)
+    : false
+
+  // Handle creator data - might be joined or might need to be fetched separately
+  const author = dbThread.creator ? {
+    id: dbThread.creator.id,
+    anonymousId: dbThread.creator.anonymous_id,
+  } : {
+    id: dbThread.creator_id,
+    anonymousId: `ANON_${dbThread.creator_id?.substring(0, 8) || 'UNKNOWN'}`,
+  };
+
+  // Calculate participant count based ONLY on users who joined the thread
+  // NOT based on message count - participants are only those who explicitly joined
+  let participantCount = 0;
+  const uniqueParticipants = new Set<string>();
+  
+  // Add from explicit thread_participants table (users who joined)
+  const hasParticipantsArray = Array.isArray(dbThread.thread_participants);
+  if (hasParticipantsArray) {
+    dbThread.thread_participants.forEach((p: any) => {
+      const id = p.user_id || p.user?.id;
+      if (id) uniqueParticipants.add(id);
+    });
+  }
+  
+  const computedCount = uniqueParticipants.size;
+  if (hasParticipantsArray) {
+    participantCount = computedCount;
+  } else if (typeof dbThread.participant_count === 'number') {
+    participantCount = dbThread.participant_count;
+  } else {
+    participantCount = computedCount;
+  }
+
+
+
+  return {
+    id: dbThread.id,
+    title: dbThread.title || 'Untitled Thread',
+    content: dbThread.content || '',
+    type: dbThread.type || 'text',
+    category: dbThread.category || 'general',
+    author,
+    authorId: dbThread.creator_id,
+    createdAt: dbThread.created_at,
+    updatedAt: dbThread.updated_at,
+    likes: Math.max(typeof dbThread.likes_count === 'number' ? dbThread.likes_count : 0, dbThread.thread_likes?.length || 0),
+    messageCount: dbThread.message_count || 0,
+    hasLiked,
+    hasJoined,
+    isPremium: dbThread.is_premium || false,
+    memberLimit: dbThread.member_limit ?? undefined,
+    price: dbThread.price,
+    timeRemaining: calculateTimeRemaining(dbThread.expires_at),
+    expiresAt: dbThread.expires_at,
+    latestMessage: (dbThread.content || '').substring(0, 100),
+    tags: [],
+    rating: 0,
+    ratingCount: 0,
+    participantCount,
+    isPinned: false,
+    isLocked: false,
+    privacy: dbThread.privacy || 'public',
+    isSaved: dbThread.is_saved ?? false,  // Fallback if column doesn't exist yet
+  }
+}
+
+/**
+ * Helper: Transform database thread to ThreadData type (with full details)
+ */
+function transformThreadData(dbThread: any, userId?: string): ThreadData {
+  const baseThread = transformThread(dbThread, userId)
+
+  // Build participants map - ONLY from users who explicitly joined the thread
+  const participantsMap = new Map<string, Participant>();
+  
+  // 1. Add joined participants from thread_participants table
+  if (dbThread.thread_participants && Array.isArray(dbThread.thread_participants)) {
+    dbThread.thread_participants.forEach((p: any) => {
+      const userData = p.user;
+      const userIdFromTable = p.user_id || userData?.id;
+      
+      if (!userIdFromTable) return;
+      
+      participantsMap.set(userIdFromTable, {
+        id: userIdFromTable,
+        anonymousId: userData?.anonymous_id || `User ${userIdFromTable.substring(0, 5)}`,
+        name: userData?.username || userData?.anonymous_id || `User ${userIdFromTable.substring(0, 5)}`,
+        avatar: userData?.avatar_url || '#cccccc',
+        status: 'online',
+        messageCount: 0,
+        isPremium: userData?.is_premium || false,
+      });
+    });
+  }
+  
+  // 2. Count messages for participants who joined
+  // (Only count messages from users who are already in the participants map)
+  (dbThread.messages || []).forEach((msg: any) => {
+    const senderId = msg.sender?.id || msg.sender_id;
+    if (!senderId) return;
+    
+    // Only count messages if the sender is a participant (joined the thread)
+    const participant = participantsMap.get(senderId);
+    if (participant) {
+      participant.messageCount = (participant.messageCount || 0) + 1;
+    }
+  });
+
+  // 3. Ensure thread creator is included in participants list
+  const creatorData = dbThread.creator;
+  const creatorId = creatorData?.id || dbThread.creator_id;
+  if (creatorId && !participantsMap.has(creatorId)) {
+    participantsMap.set(creatorId, {
+      id: creatorId,
+      anonymousId: creatorData?.anonymous_id || `ANON_${creatorId.substring(0, 5)}`,
+      name: creatorData?.username || creatorData?.anonymous_id || `User ${creatorId.substring(0, 5)}`,
+      avatar: creatorData?.avatar_url || '#cccccc',
+      status: 'online',
+      messageCount: 0,
+      isPremium: creatorData?.is_premium || false,
+    });
+  }
+
+  const participants = Array.from(participantsMap.values());
+
+
+  return {
+    ...baseThread,
+    expiresAt: dbThread.expires_at,
+    pollId: dbThread.poll?.id,
+    // Reverse messages to show oldest first (since we fetched newest first)
+    // Reverse messages to show oldest first (since we fetched newest first)
+    messages: (dbThread.messages || []).slice().reverse().map((msg: any) => transformMessage(msg, userId)),
+    pollOptions: (() => {
+      if (!dbThread.poll?.poll_options) return undefined;
+      
+      const pollOptions = dbThread.poll.poll_options;
+      const pollVotes = dbThread.poll.poll_votes || [];
+      
+      // Pre-calculate counts in one pass
+      const voteCountsMap: Record<string, number> = {};
+      pollVotes.forEach((v: any) => {
+        voteCountsMap[v.option_id] = (voteCountsMap[v.option_id] || 0) + 1;
+      });
+
+      // Calculate effective vote counts for each option
+      const optionCounts = pollOptions.map((opt: any) => {
+        return Math.max(opt.vote_count || 0, voteCountsMap[opt.id] || 0);
+      });
+      
+      const totalVotes = optionCounts.reduce((sum: number, count: number) => sum + count, 0);
+
+      return pollOptions.map((opt: any, index: number) => {
+        const votes = optionCounts[index];
+        const hasVoted = userId
+          ? pollVotes.some((vote: any) => vote.user_id === userId && vote.option_id === opt.id)
+          : false;
+
+        return {
+          id: opt.id,
+          text: opt.text,
+          votes,
+          percentage: totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0,
+          hasVoted,
+        };
+      });
+    })(),
+    isExpired: dbThread.expires_at ? new Date(dbThread.expires_at) < new Date() : false,
+    viewCount: dbThread.view_count || 0,
+    participants,
+    author: {
+      id: dbThread.creator.id,
+      anonymousId: dbThread.creator.anonymous_id,
+      name: dbThread.creator.username || dbThread.creator.anonymous_id,
+      avatar: dbThread.creator.avatar_url || '#cccccc',
+      isPremium: dbThread.creator.is_premium,
+    },
+    authorId: dbThread.creator.id,
+    createdBy: {
+      id: dbThread.creator.id,
+      anonymousId: dbThread.creator.anonymous_id,
+      name: dbThread.creator.username || dbThread.creator.anonymous_id,
+      avatar: dbThread.creator.avatar_url || '#cccccc',
+      status: 'online' as const,
+      isPremium: dbThread.creator.is_premium,
+    },
+    reportCount: 0,
+  }
+}
+
+/**
+ * Helper: Calculate time remaining
+ */
+function calculateTimeRemaining(expiresAt: string | null): string | undefined {
+  if (!expiresAt) return undefined
+
+  const now = new Date()
+  const expiry = new Date(expiresAt)
+  const diff = expiry.getTime() - now.getTime()
+
+  if (diff <= 0) return '0h'
+
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  return `${hours}h`
+}
+
+/**
+ * Helper: Transform database message to Message type
+ */
+export function transformMessage(msg: any, userId?: string): Message {
+  // Transform reactions from array to object format
+  const reactions: any = {};
+  if (msg.message_reactions && msg.message_reactions.length > 0) {
+    msg.message_reactions.forEach((reaction: any) => {
+      if (!reactions[reaction.reaction_type]) {
+        reactions[reaction.reaction_type] = {
+          count: 0,
+          users: [],
+        };
+      }
+      reactions[reaction.reaction_type].count++;
+      reactions[reaction.reaction_type].users.push(reaction.user_id);
+    });
+  }
+
+  return {
+    id: msg.id,
+    threadId: msg.thread_id,
+    authorId: msg.sender?.id || msg.sender_id,
+    authorName: msg.sender?.username || msg.sender?.anonymous_id || 'Unknown',
+    sender: {
+      id: msg.sender?.id || msg.sender_id,
+      anonymousId: msg.sender?.anonymous_id || 'Unknown',
+      name: msg.sender?.username || msg.sender?.anonymous_id || 'Unknown',
+      avatar: msg.sender?.avatar_url || '#cccccc',
+      status: 'online' as const,
+      isPremium: msg.sender?.is_premium,
+    },
+    content: msg.content,
+    type: msg.type,
+    timestamp: msg.created_at,
+    likes: msg.likes_count || 0,
+    hasLiked: userId ? (msg.message_likes || []).some((like: any) => like.user_id === userId) : false,
+    replyToId: msg.parent_message_id,
+    // Populate the actual replied message object if parent data exists
+    repliedMessage: msg.parent_message ? {
+      id: msg.parent_message.id,
+      content: msg.parent_message.content,
+      sender: msg.parent_message.sender ? {
+         id: msg.parent_message.sender.id,
+         anonymousId: msg.parent_message.sender.anonymous_id,
+         name: msg.parent_message.sender.username || msg.parent_message.sender.anonymous_id,
+         avatar: msg.parent_message.sender.avatar_url || '#cccccc',
+         status: 'online' as const,
+         isPremium: msg.parent_message.sender.is_premium,
+      } : {
+         id: 'deleted',
+         anonymousId: 'Deleted User',
+         name: 'Deleted User',
+         avatar: '#cccccc',
+         status: 'offline' as const,
+      }
+    } : undefined,
+    replies: [],
+    reactions,
+    attachments: msg.attachments || [],
+  };
+}
+
