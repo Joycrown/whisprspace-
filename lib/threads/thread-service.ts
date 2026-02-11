@@ -1,6 +1,6 @@
 import * as rawDb from '@/lib/core/supabase/raw-db';
 import * as rawAuth from '@/lib/core/supabase/raw-auth';
-import { Thread, ThreadData, ThreadFilters, CreateThreadForm, Participant, Message } from '@/types';
+import { Thread, ThreadData, ThreadFilters, CreateThreadForm, Participant, Message, AccessCode } from '@/types';
 import { calculateThreadExpiration } from '../utils/utils/helpers/threadHelpers';
 import { uploadService } from '@/lib/utils/upload-service';
 
@@ -126,8 +126,28 @@ export const fetchThreads = async (
 
     console.log('Fetched threads:', data?.length, 'threads');
 
+    const threadRows = data || []
+    const threadIds = threadRows.map((thread: any) => thread.id).filter(Boolean)
+    let purchasedThreadIds = new Set<string>()
+
+    if (userId && threadIds.length > 0) {
+      const { data: purchases, error: purchaseError } = await rawDb.select<any[]>('thread_purchases', {
+        select: 'thread_id',
+        filters: {
+          'user_id': rawDb.filter.eq(userId),
+          'thread_id': rawDb.filter.in(threadIds),
+        },
+      })
+
+      if (purchaseError) {
+        console.warn('Failed to fetch thread purchases for access checks:', purchaseError)
+      } else {
+        purchasedThreadIds = new Set((purchases || []).map((row: any) => row.thread_id))
+      }
+    }
+
     // Transform database records to Thread type
-    const threads: Thread[] = (data || []).map(thread => transformThread(thread, userId))
+    const threads: Thread[] = threadRows.map(thread => transformThread(thread, userId, purchasedThreadIds))
 
     // Check if there are more threads
     const hasMore = (data || []).length === limit
@@ -209,7 +229,7 @@ export const createThread = async (
   userId: string
 ): Promise<string | null> => {
   try {
-    console.log('Service: Creating thread', { threadData, userId });
+      console.log('Service: Creating thread', { threadData, userId });
     
     // Get user's premium status
     const { data: userData } = await rawDb.select('users', {
@@ -218,7 +238,71 @@ export const createThread = async (
       single: true
     });
     
-    const isUserPremium = (userData as any)?.is_premium || false;
+      const isUserPremium = (userData as any)?.is_premium || false;
+
+      const isPremiumThread = threadData.type === 'premium' || threadData.isPremium === true;
+
+      if (isPremiumThread) {
+        const price = Number(threadData.price);
+        if (!price || Number.isNaN(price) || price <= 0) {
+          throw new Error('Premium threads require a valid price');
+        }
+
+        const minPrice = 1.0;
+        const maxPrice = isUserPremium ? 4.99 : 2.99;
+        if (price < minPrice) {
+          throw new Error(`Minimum price is $${minPrice.toFixed(2)} for premium threads.`);
+        }
+
+        if (price > maxPrice) {
+          throw new Error(
+            `Maximum price for ${isUserPremium ? 'premium' : 'free'} creators is $${maxPrice.toFixed(2)}.`
+          );
+        }
+      }
+
+      if (threadData.type === 'poll' && !isUserPremium) {
+        const now = new Date();
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+        const { data: recentPolls, error: recentError } = await rawDb.select<any[]>('threads', {
+          select: 'id',
+          filters: {
+            'creator_id': rawDb.filter.eq(userId),
+            'type': rawDb.filter.eq('poll'),
+            'deleted_at': 'is.null',
+            'created_at': rawDb.filter.gte(weekAgo),
+          },
+          limit: 2,
+        });
+
+        if (recentError) {
+          throw new Error('Failed to validate poll limits');
+        }
+
+        if ((recentPolls || []).length >= 2) {
+          throw new Error('Free users can create up to 2 polls per week. Upgrade to Premium for unlimited polls.');
+        }
+
+        const { data: activePolls, error: activeError } = await rawDb.select<any[]>('threads', {
+          select: 'id',
+          filters: {
+            'creator_id': rawDb.filter.eq(userId),
+            'type': rawDb.filter.eq('poll'),
+            'deleted_at': 'is.null',
+            'expires_at': rawDb.filter.gt(now.toISOString()),
+          },
+          limit: 2,
+        });
+
+        if (activeError) {
+          throw new Error('Failed to validate active poll limits');
+        }
+
+        if ((activePolls || []).length >= 2) {
+          throw new Error('Free users can have at most 2 active polls at a time. Upgrade to Premium for unlimited polls.');
+        }
+      }
 
     // Create the thread
     const { data: threadDataResult, error: threadError } = await rawDb.insert('threads', {
@@ -256,9 +340,9 @@ export const createThread = async (
       console.warn('⚠️ Service: Failed to auto-join creator:', err);
     });
 
-    // If it's a poll, create poll and options
-    if (threadData.type === 'poll' && threadData.pollOptions) {
-      console.log('Service: Creating poll for thread', thread.id);
+      // If it's a poll, create poll and options
+      if (threadData.type === 'poll' && threadData.pollOptions) {
+        console.log('Service: Creating poll for thread', thread.id);
       const { data: pollData, error: pollError } = await rawDb.insert('polls', {
         thread_id: thread.id,
         question: threadData.title,
@@ -291,7 +375,57 @@ export const createThread = async (
     return thread.id
   } catch (error) {
     console.error('createThread error:', error)
-    return null
+    throw error
+  }
+}
+
+/**
+ * Get poll creation stats for a user (weekly + active)
+ */
+export const getUserPollStats = async (
+  userId: string
+): Promise<{ weeklyCount: number; activeCount: number }> => {
+  try {
+    const now = new Date()
+    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+    const { data: weeklyPolls, error: weeklyError } = await rawDb.select<any[]>('threads', {
+      select: 'id',
+      filters: {
+        'creator_id': rawDb.filter.eq(userId),
+        'type': rawDb.filter.eq('poll'),
+        'deleted_at': 'is.null',
+        'created_at': rawDb.filter.gte(weekAgo),
+      },
+      limit: 100,
+    })
+
+    if (weeklyError) {
+      throw weeklyError
+    }
+
+    const { data: activePolls, error: activeError } = await rawDb.select<any[]>('threads', {
+      select: 'id',
+      filters: {
+        'creator_id': rawDb.filter.eq(userId),
+        'type': rawDb.filter.eq('poll'),
+        'deleted_at': 'is.null',
+        'expires_at': rawDb.filter.gt(now.toISOString()),
+      },
+      limit: 100,
+    })
+
+    if (activeError) {
+      throw activeError
+    }
+
+    return {
+      weeklyCount: (weeklyPolls || []).length,
+      activeCount: (activePolls || []).length,
+    }
+  } catch (error) {
+    console.error('getUserPollStats error:', error)
+    return { weeklyCount: 0, activeCount: 0 }
   }
 }
 
@@ -646,16 +780,16 @@ export const deleteThread = async (threadId: string, userId: string): Promise<bo
 
 /**
  * Extend thread expiration by 7 days
- * Only premium thread creators can extend their threads
+ * Only premium creators can extend their threads (all thread types)
  */
 export const extendThreadExpiration = async (
   threadId: string,
   userId: string
 ): Promise<{ success: boolean; newExpiresAt?: string; error?: string }> => {
   try {
-    // Fetch the thread to verify ownership and premium status
+    // Fetch the thread to verify ownership
     const { data: threadData, error: fetchError } = await rawDb.select<any>('threads', {
-      select: 'id, creator_id, is_premium, expires_at',
+      select: 'id, creator_id, expires_at',
       filters: { 'id': rawDb.filter.eq(threadId) },
       single: true
     })
@@ -671,9 +805,15 @@ export const extendThreadExpiration = async (
       return { success: false, error: 'Only the thread creator can extend expiration' }
     }
 
-    // Verify thread is premium
-    if (!thread.is_premium) {
-      return { success: false, error: 'Only premium threads can be extended' }
+    // Verify user is premium (premium creators can extend any thread type)
+    const { data: userData, error: userError } = await rawDb.select<any>('users', {
+      select: 'is_premium',
+      filters: { 'id': rawDb.filter.eq(userId) },
+      single: true
+    })
+
+    if (userError || !userData?.is_premium) {
+      return { success: false, error: 'Only premium users can extend thread expiration' }
     }
 
     // Calculate new expiration (add 7 days)
@@ -908,6 +1048,118 @@ export const redeemThreadInvite = async (
 };
 
 /**
+ * Fetch partner access codes for a premium thread (creator only)
+ */
+export const fetchThreadAccessCodes = async (
+  threadId: string
+): Promise<{ data: AccessCode[]; error?: string }> => {
+  try {
+    const { data, error } = await rawDb.select<any[]>('thread_access_codes', {
+      filters: { 'thread_id': rawDb.filter.eq(threadId) },
+      order: { column: 'created_at', ascending: false },
+    });
+
+    if (error) {
+      return { data: [], error: error.message || 'Failed to fetch access codes' };
+    }
+
+    const codes: AccessCode[] = (data || []).map((row) => ({
+      code: row.code,
+      createdAt: row.created_at,
+      maxUses: Number(row.max_uses ?? 0),
+      currentUses: Number(row.current_uses ?? 0),
+      isActive: Boolean(row.is_active),
+      expiresAt: row.expires_at || undefined,
+    }));
+
+    return { data: codes };
+  } catch (error: any) {
+    return { data: [], error: error?.message || 'Failed to fetch access codes' };
+  }
+};
+
+/**
+ * Create a partner access code (limit 2 codes per thread)
+ */
+export const createThreadAccessCode = async (
+  threadId: string
+): Promise<{ data: AccessCode | null; error?: string }> => {
+  try {
+    const { data, error } = await rawDb.rpc<any>('create_thread_access_code', {
+      p_thread_id: threadId,
+    });
+
+    if (error) {
+      return { data: null, error: error.message || 'Failed to generate access code' };
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) {
+      return { data: null, error: 'Failed to generate access code' };
+    }
+
+    return {
+      data: {
+        code: row.code,
+        createdAt: row.created_at,
+        maxUses: Number(row.max_uses ?? 0),
+        currentUses: Number(row.current_uses ?? 0),
+        isActive: Boolean(row.is_active),
+        expiresAt: row.expires_at || undefined,
+      },
+    };
+  } catch (error: any) {
+    return { data: null, error: error?.message || 'Failed to generate access code' };
+  }
+};
+
+/**
+ * Revoke a partner access code (creator only)
+ */
+export const revokeThreadAccessCode = async (
+  threadId: string,
+  code: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { data, error } = await rawDb.rpc<any>('revoke_thread_access_code', {
+      p_thread_id: threadId,
+      p_code: code,
+    });
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to revoke access code' };
+    }
+
+    return { success: Boolean(data) };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Failed to revoke access code' };
+  }
+};
+
+/**
+ * Redeem a partner access code (grant free access)
+ */
+export const redeemThreadAccessCode = async (
+  threadId: string,
+  code: string
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { data, error } = await rawDb.rpc<any>('redeem_thread_access_code', {
+      p_thread_id: threadId,
+      p_code: code,
+    });
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to redeem access code' };
+    }
+
+    return { success: Boolean(data) };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Failed to redeem access code' };
+  }
+};
+
+/**
  * Invite a user to a thread by username/anonymous ID
  */
 export const inviteUserToThread = async (
@@ -1081,21 +1333,27 @@ export const removeThreadParticipant = async (
 /**
  * Helper: Transform database thread to Thread type
  */
-function transformThread(dbThread: any, userId?: string): Thread {
+function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Set<string>): Thread {
   const hasLiked = userId
     ? dbThread.thread_likes?.some((like: any) => like.user_id === userId)
     : false
   const hasJoined = userId
     ? (dbThread.thread_participants || []).some((p: any) => (p.user_id || p.user?.id) === userId)
     : false
+  const hasAccess = userId ? (purchasedThreadIds?.has(dbThread.id) ?? false) : false
 
   // Handle creator data - might be joined or might need to be fetched separately
   const author = dbThread.creator ? {
     id: dbThread.creator.id,
     anonymousId: dbThread.creator.anonymous_id,
+    name: dbThread.creator.username || dbThread.creator.anonymous_id,
+    avatar: dbThread.creator.avatar_url || undefined,
+    isPremium: dbThread.creator.is_premium || false,
   } : {
     id: dbThread.creator_id,
     anonymousId: `ANON_${dbThread.creator_id?.substring(0, 8) || 'UNKNOWN'}`,
+    name: `ANON_${dbThread.creator_id?.substring(0, 8) || 'UNKNOWN'}`,
+    isPremium: false,
   };
 
   // Calculate participant count based ONLY on users who joined the thread
@@ -1137,6 +1395,7 @@ function transformThread(dbThread: any, userId?: string): Thread {
     messageCount: dbThread.message_count || 0,
     hasLiked,
     hasJoined,
+    hasAccess,
     isPremium: dbThread.is_premium || false,
     memberLimit: dbThread.member_limit ?? undefined,
     price: dbThread.price,

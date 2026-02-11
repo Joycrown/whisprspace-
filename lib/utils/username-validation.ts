@@ -152,7 +152,7 @@ export function getChangeCooldownMessage(
     ? USERNAME_CONFIG.COOLDOWN_DAYS_PREMIUM
     : USERNAME_CONFIG.COOLDOWN_DAYS_FREE;
 
-  return `You can change your username again in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'} (${cooldownDays}-day cooldown for ${isPremium ? 'premium' : 'free'} users)`;
+  return `You can change your username again in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`;
 }
 
 /**

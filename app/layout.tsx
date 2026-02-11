@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { RealtimeNotificationProvider } from "@/components/providers/RealtimeNotificationProvider";
+import AnalyticsProvider from "@/components/providers/AnalyticsProvider";
 import { QueryProvider } from "@/lib/react-query";
 import { generateMetadata as generateSEO } from "@/lib/seo";
 
@@ -21,12 +22,6 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
-// Enhanced SEO Metadata
-export const metadata: Metadata = generateSEO({
-  title: "WhisprSpace - Anonymous Platform for Free Expression",
-  description: "A digital sanctuary for honest expression without identity-based judgment. Share thoughts, join discussions, and connect anonymously on topics that matter.",
-});
-
 // Viewport configuration for mobile optimization
 export const viewport: Viewport = {
   width: 'device-width',
@@ -37,6 +32,23 @@ export const viewport: Viewport = {
     { media: '(prefers-color-scheme: light)', color: '#ffffff' },
     { media: '(prefers-color-scheme: dark)', color: '#121212' },
   ],
+};
+
+// Add apple-mobile-web-app-capable and other PWA specific meta tags
+export const metadata: Metadata = {
+  ...generateSEO({
+    title: "WhisprSpace - Anonymous Platform for Free Expression",
+    description: "A digital sanctuary for honest expression without identity-based judgment. Share thoughts, join discussions, and connect anonymously on topics that matter.",
+  }),
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "WhisprSpace",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export default function RootLayout({
@@ -50,16 +62,18 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden w-full max-w-full`}
       >
         <QueryProvider>
-          <AuthProvider>
-            <ThemeProvider>
-              <ToastProvider>
-                <RealtimeNotificationProvider />
-                <MainLayout>
-                  {children}
-                </MainLayout>
-              </ToastProvider>
-            </ThemeProvider>
-          </AuthProvider>
+          <AnalyticsProvider>
+            <AuthProvider>
+              <ThemeProvider>
+                <ToastProvider>
+                  <RealtimeNotificationProvider />
+                  <MainLayout>
+                    {children}
+                  </MainLayout>
+                </ToastProvider>
+              </ThemeProvider>
+            </AuthProvider>
+          </AnalyticsProvider>
         </QueryProvider>
       </body>
     </html>

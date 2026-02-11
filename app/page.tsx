@@ -1,6 +1,6 @@
 'use client'
 import React, { useState, useEffect } from 'react';
-import { MessageCircle, Users, Vote, Shield, EyeOff, Heart, Send, Play } from 'lucide-react';
+import { MessageCircle, Users, Vote, Shield, EyeOff, Heart, Send } from 'lucide-react';
 
 
 const WhisprSpaceLanding = () => {
@@ -43,6 +43,7 @@ const WhisprSpaceLanding = () => {
       description: "Prioritize thoughtful, helpful posts over hype"
     }
   ];
+  const currentYear = new Date().getFullYear();
 
   return (
     <div className="min-h-screen bg-white text-gray-900 overflow-hidden">
@@ -95,24 +96,26 @@ const WhisprSpaceLanding = () => {
                     <Send className="w-5 h-5" />
                   </button>
                 </a>
-                <button className="border border-purple-500 text-purple-500 px-8 py-4 rounded-full text-lg font-semibold hover:bg-purple-500 hover:text-white transition-all duration-300 flex items-center justify-center space-x-2 w-full sm:w-auto">
-                  <Play className="w-5 h-5" />
-                  <span>Watch Demo</span>
-                </button>
+                <a
+                  href="#how-it-works"
+                  className="border border-purple-500 text-purple-500 px-8 py-4 rounded-full text-lg font-semibold hover:bg-purple-500 hover:text-white transition-all duration-300 flex items-center justify-center w-full sm:w-auto"
+                >
+                  How It Works
+                </a>
               </div>
 
-              <div className="flex items-center space-x-8">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-purple-600">10K+</div>
-                  <div className="text-sm text-gray-600">Anonymous Voices</div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-sm text-gray-500">Anonymous by default</div>
+                  <div className="text-lg font-semibold text-gray-900">No real identity required</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-purple-600">50K+</div>
-                  <div className="text-sm text-gray-600">Messages Shared</div>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-sm text-gray-500">Private by design</div>
+                  <div className="text-lg font-semibold text-gray-900">Small, focused communities</div>
                 </div>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-purple-600">500+</div>
-                  <div className="text-sm text-gray-600">Private Groups</div>
+                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                  <div className="text-sm text-gray-500">Quality first</div>
+                  <div className="text-lg font-semibold text-gray-900">Value over virality</div>
                 </div>
               </div>
             </div>
@@ -334,7 +337,7 @@ const WhisprSpaceLanding = () => {
             </div>
           </div>
           <div className="border-t border-gray-300 mt-8 pt-8 text-center text-sm text-gray-600">
-            <p>&copy; 2025 WhisprSpace. All rights reserved.</p>
+            <p>&copy; {currentYear} WhisprSpace. All rights reserved.</p>
           </div>
         </div>
       </footer>

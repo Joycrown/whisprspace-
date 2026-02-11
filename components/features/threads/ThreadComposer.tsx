@@ -39,6 +39,7 @@ import { FaGlobe, FaEnvelope } from 'react-icons/fa';
 import PremiumThreadComposer from './PremiumThreadComposer';
 import PremiumPaymentForm from '@/components/features/premium/PremiumPaymentForm';
 import SignupPromptModal from '@/components/auth/SignupPromptModal';
+import { getUserPollStats } from '@/lib/threads/thread-service';
 
 interface ThreadComposerProps {
   isOpen: boolean;
@@ -76,6 +77,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft 
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showPremiumPayment, setShowPremiumPayment] = useState(false);
   const [showSignupPrompt, setShowSignupPrompt] = useState(false);
+  const [pollStats, setPollStats] = useState<{ weeklyCount: number; activeCount: number } | null>(null);
 
   // Character counts
   const titleCount = formData.title.length;
@@ -127,6 +129,22 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft 
   useEffect(() => {
     setHasUnsavedChanges(true);
   }, [formData]);
+
+  useEffect(() => {
+    const userId = session.user?.id;
+    if (!userId || formData.type !== 'poll') return;
+
+    let isActive = true;
+    getUserPollStats(userId).then((stats) => {
+      if (isActive) {
+        setPollStats(stats);
+      }
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [formData.type, session.user?.id]);
 
   // Validation
   const validateForm = (): boolean => {
@@ -561,6 +579,18 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft 
                         <BarChart3 className="w-5 h-5 text-blue-600" />
                         <h3 className="text-sm font-medium text-blue-800">Poll Options</h3>
                       </div>
+                      {session.user && !session.user.isPremium && (
+                        <div className="mb-3 rounded-lg border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs text-yellow-800">
+                          <div>Free users can create up to 2 polls per week and keep only 2 active at a time.</div>
+                          {pollStats && (
+                            <div className="mt-1 flex flex-wrap gap-3 text-[11px] font-semibold text-yellow-900">
+                              <span>Polls this week: {pollStats.weeklyCount}/2</span>
+                              <span>Active polls: {pollStats.activeCount}/2</span>
+                            </div>
+                          )}
+                          <div className="mt-1">Upgrade to Premium for unlimited polls.</div>
+                        </div>
+                      )}
                       <p className="text-sm text-blue-700 mb-3">
                         Add options for users to vote on. You can have 2-6 options.
                       </p>

@@ -2,34 +2,25 @@
 
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Copy, Plus, Trash2, Gift, Link2, Check, RefreshCw } from 'lucide-react';
-import { AccessCode } from '../utils/types';
+import { Copy, Plus, Gift, Check } from 'lucide-react';
+import { AccessCode } from '@/types';
 
 interface AccessManagementProps {
-  threadId: string;
-  threadTitle: string;
   accessCodes: AccessCode[];
-  secretToken?: string;
-  onGenerateCode: (maxUses: number, expiryDays?: number) => void;
-  onDeleteCode: (code: string) => void;
-  onRegenerateSecretLink: () => void;
+  onGenerateCode: () => void;
+  isGenerating?: boolean;
+  errorMessage?: string | null;
+  isThreadActive?: boolean;
 }
 
 export default function AccessManagement({
-  threadId,
-  threadTitle,
   accessCodes,
-  secretToken,
   onGenerateCode,
-  onDeleteCode,
-  onRegenerateSecretLink,
+  isGenerating,
+  errorMessage,
+  isThreadActive = true,
 }: AccessManagementProps) {
-  const [maxUses, setMaxUses] = useState(10);
-  const [expiryDays, setExpiryDays] = useState<number | undefined>(30);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [copiedLink, setCopiedLink] = useState(false);
-
-  const secretLink = `${typeof window !== 'undefined' ? window.location.origin : ''}/threads/${threadId}?access=${secretToken}`;
 
   const handleCopyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -37,14 +28,17 @@ export default function AccessManagement({
     setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(secretLink);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
+  const isUnlimited = (code: AccessCode) => code.maxUses <= 0;
+  const isUsable = (code: AccessCode) => isUnlimited(code) || code.currentUses < code.maxUses;
 
-  const activeAccessCodes = accessCodes.filter(ac => ac.isActive && ac.currentUses < ac.maxUses);
-  const expiredCodes = accessCodes.filter(ac => !ac.isActive || ac.currentUses >= ac.maxUses);
+  const effectiveActive = accessCodes.filter(
+    (ac) => isThreadActive && ac.isActive && isUsable(ac)
+  );
+  const effectiveInactive = accessCodes.filter(
+    (ac) => !isThreadActive || !ac.isActive || !isUsable(ac)
+  );
+
+  const canGenerate = isThreadActive && accessCodes.length < 2;
 
   return (
     <div className="space-y-6">
@@ -54,119 +48,55 @@ export default function AccessManagement({
           <Gift className="w-6 h-6 text-purple-400" />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-white">Free Access Management</h2>
-          <p className="text-sm text-gray-400">Grant free access to collaborators and partners</p>
-        </div>
-      </div>
-
-      {/* Secret Link Section */}
-      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Link2 className="w-5 h-5 text-orange-400" />
-            <h3 className="text-lg font-semibold text-white">Secret Access Link</h3>
-          </div>
-          <button
-            onClick={onRegenerateSecretLink}
-            className="flex items-center gap-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm text-gray-300 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Regenerate
-          </button>
-        </div>
-        
-        <p className="text-sm text-gray-400 mb-4">
-          Share this link for instant free access. Anyone with this link can access your premium thread without payment.
-        </p>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="text"
-            value={secretLink}
-            readOnly
-            className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-gray-300 text-sm font-mono"
-          />
-          <button
-            onClick={handleCopyLink}
-            className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white transition-colors"
-          >
-            {copiedLink ? (
-              <>
-                <Check className="w-4 h-4" />
-                Copied!
-              </>
-            ) : (
-              <>
-                <Copy className="w-4 h-4" />
-                Copy
-              </>
-            )}
-          </button>
-        </div>
-
-        <div className="mt-3 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
-          <p className="text-xs text-blue-300">
-            💡 <strong>Tip:</strong> Regenerate this link if it gets leaked or you want to revoke previous access.
+          <h2 className="text-xl font-bold text-white">Partner Access Codes</h2>
+          <p className="text-sm text-gray-400">
+            Two permanent codes per premium thread. Codes stay active while the thread is active.
           </p>
         </div>
       </div>
 
+      {!isThreadActive && (
+        <div className="rounded-xl border border-yellow-500/30 bg-yellow-900/20 p-4 text-sm text-yellow-200">
+          This thread has expired. Access codes are now inactive.
+        </div>
+      )}
+
       {/* Generate New Code Section */}
       <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Generate Invite Code</h3>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Max Uses
-            </label>
-            <input
-              type="number"
-              value={maxUses}
-              onChange={(e) => setMaxUses(parseInt(e.target.value) || 1)}
-              min="1"
-              max="1000"
-              className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Expires In (Days)
-            </label>
-            <input
-              type="number"
-              value={expiryDays || ''}
-              onChange={(e) => setExpiryDays(e.target.value ? parseInt(e.target.value) : undefined)}
-              min="1"
-              max="365"
-              placeholder="Never"
-              className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-            />
-          </div>
-        </div>
+        <h3 className="text-lg font-semibold text-white mb-2">Generate Access Codes</h3>
+        <p className="text-sm text-gray-400 mb-4">
+          Generate up to two unique access codes for contributors or partners.
+        </p>
 
         <button
-          onClick={() => {
-            onGenerateCode(maxUses, expiryDays);
-            setMaxUses(10);
-            setExpiryDays(30);
-          }}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-orange-500 hover:opacity-90 rounded-lg text-white font-semibold transition-opacity"
+          onClick={onGenerateCode}
+          disabled={!canGenerate || isGenerating}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-600 to-orange-500 hover:opacity-90 rounded-lg text-white font-semibold transition-opacity disabled:opacity-50"
         >
           <Plus className="w-5 h-5" />
-          Generate New Code
+          {isGenerating ? 'Generating...' : 'Generate Access Code'}
         </button>
+
+        {accessCodes.length >= 2 && (
+          <p className="text-xs text-yellow-400 mt-3">
+            You already have two codes for this thread.
+          </p>
+        )}
+
+        {errorMessage && (
+          <p className="text-xs text-red-400 mt-3">{errorMessage}</p>
+        )}
       </div>
 
       {/* Active Codes */}
-      {activeAccessCodes.length > 0 && (
+      {effectiveActive.length > 0 && (
         <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
           <h3 className="text-lg font-semibold text-white mb-4">
-            Active Invite Codes ({activeAccessCodes.length})
+            Active Codes ({effectiveActive.length})
           </h3>
-          
+
           <div className="space-y-3">
-            {activeAccessCodes.map((accessCode) => (
+            {effectiveActive.map((accessCode) => (
               <motion.div
                 key={accessCode.code}
                 initial={{ opacity: 0, y: 10 }}
@@ -189,44 +119,36 @@ export default function AccessManagement({
                       )}
                     </button>
                   </div>
-                  
+
                   <div className="flex items-center gap-4 text-sm text-gray-400">
                     <span>
-                      Used: <span className="text-white font-semibold">
-                        {accessCode.currentUses}/{accessCode.maxUses}
+                      Uses: <span className="text-white font-semibold">
+                        {isUnlimited(accessCode)
+                          ? accessCode.currentUses
+                          : `${accessCode.currentUses}/${accessCode.maxUses}`}
                       </span>
+                      {isUnlimited(accessCode) && (
+                        <span className="ml-2 text-xs text-purple-300">Unlimited uses</span>
+                      )}
                     </span>
-                    {accessCode.expiresAt && (
-                      <span>
-                        Expires: {new Date(accessCode.expiresAt).toLocaleDateString()}
-                      </span>
-                    )}
-                    <span className="text-green-400">● Active</span>
+                    <span className="text-green-400">Active</span>
                   </div>
                 </div>
-
-                <button
-                  onClick={() => onDeleteCode(accessCode.code)}
-                  className="p-2 hover:bg-red-500/20 rounded-lg text-red-400 transition-colors"
-                  title="Delete code"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
               </motion.div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Expired/Full Codes */}
-      {expiredCodes.length > 0 && (
+      {/* Inactive Codes */}
+      {effectiveInactive.length > 0 && (
         <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
           <h3 className="text-lg font-semibold text-gray-400 mb-4">
-            Inactive Codes ({expiredCodes.length})
+            Inactive Codes ({effectiveInactive.length})
           </h3>
-          
+
           <div className="space-y-2">
-            {expiredCodes.map((accessCode) => (
+            {effectiveInactive.map((accessCode) => (
               <div
                 key={accessCode.code}
                 className="flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-gray-800 opacity-60"
@@ -236,15 +158,13 @@ export default function AccessManagement({
                     {accessCode.code}
                   </code>
                   <span className="ml-3 text-xs text-gray-600">
-                    {accessCode.currentUses >= accessCode.maxUses ? 'Fully Used' : 'Expired'}
+                    {isThreadActive
+                      ? (!isUnlimited(accessCode) && accessCode.currentUses >= accessCode.maxUses)
+                        ? 'Fully Used'
+                        : 'Inactive'
+                      : 'Thread expired'}
                   </span>
                 </div>
-                <button
-                  onClick={() => onDeleteCode(accessCode.code)}
-                  className="p-1 hover:bg-red-500/20 rounded text-red-500/50 transition-colors"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
               </div>
             ))}
           </div>

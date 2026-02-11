@@ -18,6 +18,7 @@ import WhisprSpinner from '@/components/ui/WhisprSpinner';
 import { useRealtimeThread, useTypingIndicator } from '@/lib/core/realtime/useRealtimeThread';
 import { useToast } from '@/components/ui/Toast';
 import { findDirectConversationWithUser } from '@/lib/messaging';
+import { confirmThreadPurchase } from '@/lib/flutterwave/flutterwave-service';
 
 
 const ThreadPage = () => {
@@ -32,7 +33,7 @@ const ThreadPage = () => {
   }, [params.threadId]);
 
   // React Query hooks for data fetching and mutations
-  const { thread: currentThread, isLoading, error } = useThreadQuery(threadId);
+  const { thread: currentThread, isLoading, error, refetch } = useThreadQuery(threadId);
   const createMessageMutation = useCreateThreadMessageMutation();
   const likeThreadMutation = useLikeThreadMutation();
   const deleteThreadMutation = useDeleteThreadMutation();
@@ -93,6 +94,58 @@ const ThreadPage = () => {
   }, [isSidebarOpen]);
 
   const currentUserId = useMemo(() => session.user?.id || '', [session.user?.id]);
+
+  useEffect(() => {
+    if (!threadId) return;
+
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const purchased = params.get('purchased') === 'true';
+    const gateway = params.get('gateway');
+    const status = params.get('status');
+    const txRef = params.get('tx_ref');
+    const transactionId = params.get('transaction_id');
+
+    if (!purchased || gateway !== 'flutterwave' || status !== 'successful') return;
+    if (!transactionId) return;
+
+    let isActive = true;
+
+    const confirmPayment = async () => {
+      const result = await confirmThreadPurchase({
+        threadId,
+        transactionId,
+        txRef,
+      });
+
+      if (result.success) {
+        await refetch();
+        showToast({
+          type: 'success',
+          title: 'Payment Confirmed',
+          message: 'Your access is now active.',
+          duration: 4000,
+        });
+      } else {
+        showToast({
+          type: 'error',
+          title: 'Payment Pending',
+          message: result.error || 'We are still confirming your payment.',
+          duration: 5000,
+        });
+      }
+
+      if (isActive) {
+        router.replace(`/threads/${threadId}`);
+      }
+    };
+
+    confirmPayment();
+
+    return () => {
+      isActive = false;
+    };
+  }, [threadId, refetch, router, showToast]);
 
   // Subscribe to real-time messages is now handled entirely by useRealtimeThread hook
   // which manages the React Query cache directly for instant updates

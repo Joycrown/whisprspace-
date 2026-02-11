@@ -92,9 +92,9 @@ const fetchCreatorEarnings = async (): Promise<EarningsData> => {
         status: 'completed',
       },
       {
-        id: 'txn_2',
-        threadTitle: 'Building Scalable APIs',
-        amount: 9.99,
+          id: 'txn_2',
+          threadTitle: 'Building Scalable APIs',
+          amount: 2.0,
         date: '2025-10-04',
         status: 'completed',
       },

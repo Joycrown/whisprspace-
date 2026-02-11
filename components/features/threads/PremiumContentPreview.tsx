@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Crown, Lock, Eye } from 'lucide-react';
 import PaymentModal from '../modals/PaymentModal';
+import { redeemThreadAccessCode } from '@/lib/threads/thread-service';
 
 interface PremiumContentPreviewProps {
   threadId: string;
@@ -123,6 +124,7 @@ export default function PremiumContentPreview({
         price={price}
         creatorId={creatorId}
         onSuccess={handlePaymentSuccess}
+        onValidateCode={(code) => redeemThreadAccessCode(threadId, code).then((res) => res.success)}
       />
     </>
   );

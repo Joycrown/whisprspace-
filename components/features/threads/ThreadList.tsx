@@ -6,11 +6,11 @@ import { ArrowRight, Heart, MessageCircle, Star, Crown } from "lucide-react";
 import { Thread } from "@/types";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FaLock } from 'react-icons/fa'; // Import FaLock
 import PaymentModal from "@/components/modals/PaymentModal";
 import { useUserStore } from "@/store/userStore";
-import { validateAccessCode } from "@/utils/accessCodeUtils";
+import { redeemThreadAccessCode } from "@/lib/threads/thread-service";
 import { useJoinThreadMutation } from "@/lib/threads/hooks/useThreadMutations";
 import { Loader2 } from "lucide-react";
 
@@ -21,13 +21,25 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
   const router = useRouter();
   const { session } = useUserStore();
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [hasAccess, setHasAccess] = useState(false);
+  const [hasAccess, setHasAccess] = useState(!!thread.hasJoined || !!thread.hasAccess);
   const [isJoining, setIsJoining] = useState(false);
   const joinMutation = useJoinThreadMutation();
 
   // Check if current user is the thread creator
   const isCreator = session?.user?.id === thread.author.id;
   const canAccessPremium = !thread.isPremium || hasAccess || isCreator;
+
+  useEffect(() => {
+    if (thread.hasJoined) {
+      setHasAccess(true);
+    }
+  }, [thread.hasJoined]);
+
+  useEffect(() => {
+    if (thread.hasAccess) {
+      setHasAccess(true);
+    }
+  }, [thread.hasAccess]);
 
   const handleThreadClick = (e: React.MouseEvent) => {
     if (thread.isPremium && !canAccessPremium) {
@@ -44,13 +56,12 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
   };
 
   const handleValidateCode = async (code: string): Promise<boolean> => {
-    // Validate the access code against thread's access codes
-    if (!thread.accessCodes || thread.accessCodes.length === 0) {
+    if (!session?.user?.id) {
+      router.push('/auth');
       return false;
     }
-
-    const validation = validateAccessCode(code, thread.accessCodes);
-    return validation.valid;
+    const result = await redeemThreadAccessCode(thread.id, code);
+    return result.success;
   };
 
   const handleJoinClick = async (e: React.MouseEvent) => {
@@ -157,8 +168,11 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
                 </div>
                 {thread.author && (
                   <div>
-                    <p className="text-purple-400 text-[10px] md:text-sm mt-1">
-                      by {thread.author.name || thread.author.anonymousId}
+                    <p className="text-purple-400 text-[10px] md:text-sm mt-1 flex items-center gap-1">
+                      <span>by {thread.author.name || thread.author.anonymousId}</span>
+                      {thread.author.isPremium && (
+                        <Crown className="w-3 h-3 text-yellow-400" />
+                      )}
                     </p>
                   </div>
                 )}

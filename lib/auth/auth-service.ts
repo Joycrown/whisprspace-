@@ -34,6 +34,9 @@ const convertAuthUserToUser = async (userId: string): Promise<User> => {
     lastActiveAt: user.last_active_at,
     preferences: user.preferences,
     isPremium: user.is_premium,
+    premiumExpiresAt: user.premium_expires_at,
+    premiumProvider: user.premium_provider,
+    premiumLastTxRef: user.premium_last_tx_ref,
   }
 }
 

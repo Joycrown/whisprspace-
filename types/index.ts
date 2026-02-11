@@ -13,6 +13,9 @@ export interface User {
   lastActiveAt: string;
   preferences: UserPreferences;
   isPremium?: boolean; // Premium membership status
+  premiumExpiresAt?: string | null;
+  premiumProvider?: string | null;
+  premiumLastTxRef?: string | null;
   premiumThreadsCreatedThisMonth?: number; // Track monthly premium thread creation
   totalPremiumThreadsCreated?: number; // Total lifetime premium threads
   totalEarnings?: number; // Total creator earnings from premium threads
@@ -178,6 +181,7 @@ export interface Thread {
   messageCount: number;
   hasLiked: boolean;
   hasJoined?: boolean;
+  hasAccess?: boolean;
   isPremium: boolean;
   price?: number;
   purchasedBy?: string[]; // User IDs who purchased access
@@ -369,9 +373,10 @@ export interface AnonymousMessage {
 export interface AccessCode {
   code: string;
   createdAt: string;
-  usedBy?: string[]; // User IDs who used this code
-  maxUses?: number; // Maximum number of times this code can be used
-  expiresAt?: string; // When this code expires
+  maxUses: number;
+  currentUses: number;
+  isActive: boolean;
+  expiresAt?: string;
 }
 
 // ===== PREMIUM THREAD CREATION TYPES =====

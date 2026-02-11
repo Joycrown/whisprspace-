@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react'
 import { usePremiumThread } from '@/lib/stripe/usePremiumThread'
 import { getUserCountry } from '@/lib/payments/geo'
+import { getCurrencyForCountry, convertPrice, formatCurrency } from '@/lib/payments/currency'
 
 interface DualGatewayPremiumGateProps {
   threadId: string
@@ -43,7 +44,8 @@ export function DualGatewayPremiumGate({
   }, [])
 
   const handlePurchase = async () => {
-    await purchaseAccess(userCountry)
+    const currency = getCurrencyForCountry(userCountry)
+    await purchaseAccess(userCountry, currency)
   }
 
   if (isChecking || isDetecting) {
@@ -58,7 +60,9 @@ export function DualGatewayPremiumGate({
     return <>{children}</>
   }
 
-  const displayPrice = `$${price.toFixed(2)}`
+  const currency = getCurrencyForCountry(userCountry)
+  const localPrice = convertPrice(price, currency)
+  const displayPrice = formatCurrency(localPrice, currency)
 
   return (
     <div className="max-w-2xl mx-auto p-8">
@@ -117,7 +121,7 @@ export function DualGatewayPremiumGate({
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
             </div>
-            <span>Pay with cards, bank transfer, or mobile money (where supported)</span>
+            <span>Pay with cards, bank transfer, mobile money, or USSD (where supported)</span>
           </div>
         </div>
 
