@@ -1,5 +1,6 @@
 import * as rawAuth from '@/lib/core/supabase/raw-auth'
 import * as rawDb from '@/lib/core/supabase/raw-db'
+import { supabase } from '@/lib/core/supabase/client'
 import type { User } from '@/types'
 
 // Generate anonymous user ID
@@ -232,22 +233,26 @@ export const updatePassword = async (newPassword: string): Promise<{
   message: string
 }> => {
   try {
-    // Note: This requires the user to be authenticated with a valid reset token
-    // The reset token flow remains unchanged (email-based)
-    const session = rawAuth.getSession()
-    if (!session) {
+    // Requires the user to be authenticated with a valid reset token.
+    // The reset token flow is handled client-side (implicit grant).
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) {
+      console.error('Update password session error:', sessionError);
+    }
+
+    if (!sessionData?.session) {
       return {
         success: false,
         message: 'No active session. Please use the reset link from your email.'
       }
     }
 
-    // Password update would need direct API call to Supabase Auth
-    // For now, keeping minimal implementation
-    console.warn('[Auth] Password update via raw API not yet implemented')
-    return {
-      success: false,
-      message: 'Password update temporarily unavailable. Please contact support.'
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      return {
+        success: false,
+        message: error.message || 'Failed to update password. Please try again.'
+      }
     }
 
     return {
