@@ -192,15 +192,55 @@ async function handleChargeCompleted(data: any, flutterwaveSecretKey: string) {
       return
     }
 
-    const meta = verified?.meta || verified?.meta_data || {}
+    const normalizeMeta = (raw: any) => {
+      if (!raw) return {}
+      if (Array.isArray(raw)) {
+        return raw.reduce<Record<string, any>>((acc, item) => {
+          if (!item || typeof item !== 'object') return acc
+          const key =
+            item.metaname ||
+            item.meta_name ||
+            item.name ||
+            item.key
+          const value =
+            item.metavalue ||
+            item.meta_value ||
+            item.value
+          if (key !== undefined) {
+            acc[String(key)] = value
+          }
+          return acc
+        }, {})
+      }
+      if (typeof raw === 'object') return raw
+      return {}
+    }
+
+    const meta = normalizeMeta(verified?.meta || verified?.meta_data)
+    const paymentType = String(meta?.paymentType || meta?.payment_type || '').toLowerCase()
     const threadId = meta.threadId
     const userId = meta.userId
     const metaCreatorId = meta.creatorId
-    const amountUsd = meta.amountUsd
+    const amountUsd = Number(meta.amountUsd ?? meta.amount_usd)
     const txRef = String(verified?.tx_ref || data?.tx_ref || '')
+    const transactionRef = String(verified?.id || transactionId)
+    const paymentMethod = verified?.payment_type || verified?.payment_method
 
     if (!threadId || !userId || !amountUsd || !txRef) {
-      console.error('Missing metadata in Flutterwave payment')
+      if (paymentType !== 'premium_upgrade') {
+        console.error('Missing metadata in Flutterwave payment')
+        return
+      }
+    }
+
+    if (paymentType === 'premium_upgrade') {
+      await handlePremiumUpgradePayment({
+        verified,
+        txRef,
+        transactionRef,
+        paymentMethod,
+        meta,
+      })
       return
     }
 
@@ -237,10 +277,16 @@ async function handleChargeCompleted(data: any, flutterwaveSecretKey: string) {
 
     const verifiedAmount = Number(verified?.amount)
     const verifiedCurrency = String(verified?.currency || '').toUpperCase()
-    const expectedAmount = Number(amountUsd)
+    const expectedCurrency = String(meta.currency || verifiedCurrency || 'USD').toUpperCase()
+    const expectedAmount = Number(
+      meta.amount ?? meta.amount_local ?? meta.amountUsd ?? meta.amount_usd ?? verifiedAmount
+    )
 
-    if (verifiedCurrency && verifiedCurrency !== 'USD') {
-      console.error('Unexpected currency for Flutterwave payment:', verifiedCurrency)
+    if (verifiedCurrency && expectedCurrency && verifiedCurrency !== expectedCurrency) {
+      console.error('Unexpected currency for Flutterwave payment:', {
+        expectedCurrency,
+        verifiedCurrency,
+      })
       return
     }
 
@@ -257,12 +303,24 @@ async function handleChargeCompleted(data: any, flutterwaveSecretKey: string) {
       return
     }
 
-    const amountDecimal = expectedAmount
-    const platformFee = amountDecimal * 0.3
-    const creatorEarnings = amountDecimal * 0.7
+    const amountDecimal = amountUsd
+    const ledgerCurrency = expectedCurrency || 'USD'
+    const ledgerAmount =
+      !Number.isNaN(expectedAmount) && expectedAmount > 0 ? expectedAmount : amountUsd
+    const { data: creatorProfile, error: creatorProfileError } = await supabase
+      .from('users')
+      .select('is_premium')
+      .eq('id', creatorId)
+      .maybeSingle()
 
-    const transactionRef = String(verified?.id || transactionId)
-    const paymentMethod = verified?.payment_type || verified?.payment_type
+    if (creatorProfileError) {
+      console.error('Failed to fetch creator premium status:', creatorProfileError)
+    }
+
+    const isCreatorPremium = creatorProfile?.is_premium === true
+    const creatorShare = isCreatorPremium ? 0.7 : 0.5
+    const platformFee = amountDecimal * (1 - creatorShare)
+    const creatorEarnings = amountDecimal * creatorShare
 
     const { data: existingPayment } = await supabase
       .from('payments')
@@ -324,6 +382,20 @@ async function handleChargeCompleted(data: any, flutterwaveSecretKey: string) {
       }
     }
 
+    const { error: participantError } = await supabase
+      .from('thread_participants')
+      .upsert(
+        {
+          thread_id: threadId,
+          user_id: userId,
+        },
+        { onConflict: 'thread_id,user_id' }
+      )
+
+    if (participantError) {
+      console.error('Failed to auto-join participant after purchase:', participantError)
+    }
+
     if (paymentId) {
       const { data: existingEarning } = await supabase
         .from('creator_earnings')
@@ -363,8 +435,8 @@ async function handleChargeCompleted(data: any, flutterwaveSecretKey: string) {
           tx_ref: txRef,
           provider_transaction_id: transactionRef,
           payment_method: paymentMethod || null,
-          amount: amountDecimal,
-          currency: 'USD',
+          amount: ledgerAmount,
+          currency: ledgerCurrency,
           amount_usd: amountDecimal,
           status: 'completed',
           description: 'Premium thread purchase',
@@ -372,7 +444,7 @@ async function handleChargeCompleted(data: any, flutterwaveSecretKey: string) {
             threadId,
             creatorId,
             userId,
-            currency: 'USD',
+            currency: ledgerCurrency,
           },
           raw_payload: verified,
           occurred_at: verified?.created_at || new Date().toISOString(),
@@ -401,6 +473,134 @@ async function handleChargeCompleted(data: any, flutterwaveSecretKey: string) {
     }
   } catch (error) {
     console.error('Error handling Flutterwave charge completed:', error)
+  }
+}
+
+async function handlePremiumUpgradePayment({
+  verified,
+  txRef,
+  transactionRef,
+  paymentMethod,
+  meta,
+}: {
+  verified: any
+  txRef: string
+  transactionRef: string
+  paymentMethod?: string | null
+  meta: Record<string, any>
+}) {
+  try {
+    const userId = meta.userId
+    const plan = meta.plan
+    const amountUsd = Number(meta.amountUsd ?? meta.amount_usd)
+
+    if (!userId || !plan || Number.isNaN(amountUsd) || amountUsd <= 0) {
+      console.error('Missing metadata for premium upgrade payment')
+      return
+    }
+
+    const verifiedAmount = Number(verified?.amount)
+    const verifiedCurrency = String(verified?.currency || '').toUpperCase()
+    const expectedCurrency = String(meta.currency || verifiedCurrency || 'USD').toUpperCase()
+    const expectedAmount = Number(
+      meta.amount ?? meta.amount_local ?? meta.amountUsd ?? meta.amount_usd ?? verifiedAmount
+    )
+
+    if (verifiedCurrency && expectedCurrency && verifiedCurrency !== expectedCurrency) {
+      console.error('Unexpected currency for premium upgrade:', {
+        expectedCurrency,
+        verifiedCurrency,
+      })
+      return
+    }
+
+    if (
+      !Number.isNaN(expectedAmount) &&
+      expectedAmount > 0 &&
+      !Number.isNaN(verifiedAmount) &&
+      Math.abs(verifiedAmount - expectedAmount) > 0.01
+    ) {
+      console.error('Amount mismatch in premium upgrade payment:', {
+        expectedAmount,
+        verifiedAmount,
+      })
+      return
+    }
+
+    const { data: userProfile, error: userProfileError } = await supabase
+      .from('users')
+      .select('premium_expires_at')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (userProfileError) {
+      console.error('Failed to fetch user premium expiry:', userProfileError)
+    }
+
+    const now = new Date()
+    const currentExpiry =
+      userProfile?.premium_expires_at && new Date(userProfile.premium_expires_at) > now
+        ? new Date(userProfile.premium_expires_at)
+        : now
+
+    const durationDays = plan === 'annual' ? 365 : 30
+    const newExpiry = new Date(currentExpiry.getTime() + durationDays * 24 * 60 * 60 * 1000)
+
+    await supabase
+      .from('users')
+      .update({
+        is_premium: true,
+        premium_expires_at: newExpiry.toISOString(),
+        premium_provider: 'flutterwave',
+        premium_last_tx_ref: txRef,
+        premium_reminder_sent_for: null,
+      })
+      .eq('id', userId)
+
+    const ledgerAmount =
+      !Number.isNaN(expectedAmount) && expectedAmount > 0 ? expectedAmount : amountUsd
+    const ledgerCurrency = expectedCurrency || 'USD'
+
+    await supabase
+      .from('transaction_ledger')
+      .upsert(
+        {
+          user_id: userId,
+          creator_id: null,
+          thread_id: null,
+          payment_id: null,
+          payment_provider: 'flutterwave',
+          payment_type: 'premium_upgrade',
+          tx_ref: txRef,
+          provider_transaction_id: transactionRef,
+          payment_method: paymentMethod || null,
+          amount: ledgerAmount,
+          currency: ledgerCurrency,
+          amount_usd: amountUsd,
+          status: 'completed',
+          description: `Premium upgrade (${plan})`,
+          metadata: {
+            paymentType: 'premium_upgrade',
+            plan,
+            userId,
+            currency: ledgerCurrency,
+          },
+          raw_payload: verified,
+          occurred_at: verified?.created_at || new Date().toISOString(),
+        },
+        { onConflict: 'payment_provider,tx_ref' }
+      )
+
+    await supabase.from('notifications').insert({
+      user_id: userId,
+      type: 'thread_like',
+      category: 'system',
+      title: 'Premium Activated',
+      message: 'Your premium upgrade is complete. Enjoy the full experience!',
+      data: { plan },
+    })
+  } catch (error) {
+    console.error('Error handling premium upgrade payment:', error)
   }
 }
 

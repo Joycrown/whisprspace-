@@ -48,6 +48,9 @@ export function useCurrentUserQuery() {
         lastActiveAt: userData.last_active_at,
         preferences: userData.preferences,
         isPremium: userData.is_premium,
+        premiumExpiresAt: userData.premium_expires_at,
+        premiumProvider: userData.premium_provider,
+        premiumLastTxRef: userData.premium_last_tx_ref,
       }
 
       return user
@@ -124,6 +127,9 @@ export function useUserProfileQuery(userId: string | undefined) {
         lastActiveAt: userData.last_active_at,
         preferences: userData.preferences,
         isPremium: userData.is_premium,
+        premiumExpiresAt: userData.premium_expires_at,
+        premiumProvider: userData.premium_provider,
+        premiumLastTxRef: userData.premium_last_tx_ref,
       }
 
       return user

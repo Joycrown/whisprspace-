@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseServerClient } from '@/lib/core/supabase/server'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { convertPrice, formatCurrency, SupportedCurrency, SUPPORTED_CURRENCIES } from '@/lib/payments/currency'
 
 const supabaseAdmin = createSupabaseAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -49,8 +50,78 @@ const hasExistingPurchase = async (threadId: string, userId: string) => {
   return !!data
 }
 
-const getBaseUrl = (request: NextRequest) =>
-  process.env.NEXT_PUBLIC_APP_URL || request.headers.get('origin') || ''
+const normalizeBaseUrl = (rawUrl: string) => {
+  try {
+    const parsed = new URL(rawUrl)
+    return `${parsed.protocol}//${parsed.host}`
+  } catch {
+    return rawUrl.replace(/\/+$/, '')
+  }
+}
+
+const getBaseUrl = (request: NextRequest) => {
+  const origin = request.headers.get('origin') || ''
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL || ''
+  const raw = origin || envUrl
+  return raw ? normalizeBaseUrl(raw) : ''
+}
+
+const decodeJwtPayload = (token: string) => {
+  try {
+    const payload = token.split('.')[1]
+    if (!payload) return null
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = normalized.padEnd(normalized.length + (4 - (normalized.length % 4)) % 4, '=')
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf-8'))
+  } catch {
+    return null
+  }
+}
+
+const resolveUserFromRequest = async (request: NextRequest) => {
+  let user: any = null
+  const authHeader = request.headers.get('authorization')
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice('Bearer '.length)
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const { data, error } = await supabaseAdmin.auth.getUser(token)
+        if (!error && data?.user) {
+          return data.user
+        }
+      } catch (error) {
+        console.error('Supabase auth getUser failed:', error)
+      }
+    } else {
+      const payload = decodeJwtPayload(token)
+      const userId = payload?.sub || payload?.user_id
+      if (userId) {
+        const { data: userRow } = await supabaseAdmin
+          .from('users')
+          .select('id,email')
+          .eq('id', userId)
+          .maybeSingle()
+        if (userRow) {
+          user = {
+            id: userRow.id,
+            email: userRow.email || payload?.email,
+            user_metadata: payload?.user_metadata || {},
+          }
+        }
+      }
+    }
+  }
+
+  if (!user) {
+    const supabase = await createSupabaseServerClient()
+    const { data } = await supabase.auth.getUser()
+    if (data?.user) {
+      user = data.user
+    }
+  }
+
+  return user
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -63,7 +134,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { threadId } = await request.json()
+    const { threadId, currency: requestedCurrency } = await request.json()
 
     if (!threadId) {
       return NextResponse.json(
@@ -72,10 +143,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await createSupabaseServerClient()
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-
-    if (userError || !user) {
+    const user = await resolveUserFromRequest(request)
+    if (!user) {
       return NextResponse.json(
         { error: 'Authentication required' },
         { status: 401 }
@@ -142,6 +211,13 @@ export async function POST(request: NextRequest) {
     const txRef = `whispr_${threadId}_${crypto.randomUUID()}`
     const email = user.email || `${user.id}@anonymous.whisprspace.com`
 
+    // Determine final currency and amount
+    const currency = (requestedCurrency && Object.values(SUPPORTED_CURRENCIES).includes(requestedCurrency)) 
+      ? requestedCurrency as SupportedCurrency 
+      : 'USD';
+    
+    const finalAmount = convertPrice(price, currency);
+
     const response = await fetch('https://api.flutterwave.com/v3/payments', {
       method: 'POST',
       headers: {
@@ -150,9 +226,10 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         tx_ref: txRef,
-        amount: price,
-        currency: 'USD',
+        amount: finalAmount,
+        currency: currency,
         redirect_url: `${baseUrl}/threads/${threadId}?purchased=true&gateway=flutterwave`,
+        payment_options: 'card, mobilemoney, ussd, banktransfer, account, credit, nqr',
         customer: {
           email,
           name: user.user_metadata?.username || user.user_metadata?.full_name || undefined,
@@ -161,12 +238,14 @@ export async function POST(request: NextRequest) {
           threadId,
           userId: user.id,
           creatorId: thread.creator_id,
-          amountUsd: price.toFixed(2),
-          currency: 'USD',
+          amountUsd: price,
+          amount: finalAmount,
+          currency: currency,
+          originalAmount: price,
         },
         customizations: {
           title: thread.title ? `Premium Thread: ${thread.title}` : 'Premium Thread Access',
-          description: 'Access to premium thread',
+          description: `Access to premium thread (${formatCurrency(finalAmount, currency)})`,
         },
       }),
     })
@@ -201,16 +280,16 @@ export async function POST(request: NextRequest) {
           payment_provider: 'flutterwave',
           payment_type: 'thread_purchase',
           tx_ref: txRef,
-          amount: price,
+          amount: finalAmount,
           amount_usd: price,
-          currency: 'USD',
+          currency: currency,
           status: 'pending',
           description: 'Premium thread purchase',
           metadata: {
             threadId,
             creatorId: thread.creator_id,
             userId: user.id,
-            currency: 'USD',
+            currency: currency,
           },
         },
         { onConflict: 'payment_provider,tx_ref' }

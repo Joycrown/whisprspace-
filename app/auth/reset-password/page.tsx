@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Lock, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
@@ -18,7 +18,6 @@ const ResetPasswordContent = () => {
   const [resetSuccess, setResetSuccess] = useState(false);
 
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { showToast } = useToast();
 
 

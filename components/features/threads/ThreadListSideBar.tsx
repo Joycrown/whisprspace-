@@ -4,6 +4,9 @@ import GlobalSearchBar from './GlobalSearchBar'; // Import GlobalSearchBar
 import { useThreadStore } from '@/store/threadStore';
 import { stringUtils } from '@/lib/utils';
 import { Thread } from '@/types';
+import { useState } from 'react';
+import PremiumPaymentForm from '@/components/features/premium/PremiumPaymentForm';
+import { useUserStore } from '@/store/userStore';
 
 interface ThreadListSidebarProps {
   threads?: Thread[];
@@ -12,6 +15,9 @@ interface ThreadListSidebarProps {
 const ThreadListSidebar = ({ threads: threadsProp }: ThreadListSidebarProps) => {
   const { threads: storeThreads, setSearchQuery } = useThreadStore();
   const threads = threadsProp && threadsProp.length > 0 ? threadsProp : storeThreads;
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const { session } = useUserStore();
+  const isPremiumUser = session?.user?.isPremium;
 
   const trendingTopics = useMemo(() => {
     const fallbackTopics = ['#General', '#Tech', '#Lifestyle', '#Education', '#Business', '#Health'];
@@ -134,16 +140,28 @@ const ThreadListSidebar = ({ threads: threadsProp }: ThreadListSidebarProps) => 
             </div>
 
             {/* Premium Upgrade */}
-            <div className="bg-gradient-to-r from-purple-900 to-purple-800 rounded-xl p-4">
-              <h2 className="text-white font-bold">Upgrade to Premium</h2>
-              <p className="text-gray-300 text-sm mt-1">Get extended thread duration and more features</p>
-              <button className="w-full bg-white text-purple-900 font-semibold py-2 rounded-full mt-3 hover:bg-gray-100 transition-colors">
-                Upgrade Now
-              </button>
-            </div>
+            {!isPremiumUser && (
+              <div className="bg-gradient-to-r from-purple-900 to-purple-800 rounded-xl p-4">
+                <h2 className="text-white font-bold">Upgrade to Premium</h2>
+                <p className="text-gray-300 text-sm mt-1">Get extended thread duration and more features</p>
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="w-full bg-white text-purple-900 font-semibold py-2 rounded-full mt-3 hover:bg-gray-100 transition-colors"
+                >
+                  Upgrade Now
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {showUpgradeModal && (
+        <PremiumPaymentForm
+          onSuccess={() => setShowUpgradeModal(false)}
+          onCancel={() => setShowUpgradeModal(false)}
+        />
+      )}
     </div>
   );
 };

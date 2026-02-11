@@ -2,7 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useThreadStore } from '@/store/threadStore';
 import { SearchBar } from './ThreadSearchBar';
 
-const GlobalSearchBar: React.FC = () => {
+interface GlobalSearchBarProps {
+  className?: string;
+}
+
+const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className }) => {
   const { searchQuery, setSearchQuery } = useThreadStore();
   const [inputValue, setInputValue] = useState(searchQuery);
 
@@ -21,11 +25,13 @@ const GlobalSearchBar: React.FC = () => {
   }, [inputValue, searchQuery, setSearchQuery]);
 
   return (
-    <SearchBar 
-      placeholder="Search all threads..." 
-      searchQuery={inputValue} 
-      setSearchQuery={setInputValue} 
-    />
+    <div className={className}>
+      <SearchBar
+        placeholder="Search all threads..."
+        searchQuery={inputValue}
+        setSearchQuery={setInputValue}
+      />
+    </div>
   );
 };
 

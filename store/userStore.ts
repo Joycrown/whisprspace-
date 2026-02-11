@@ -29,6 +29,8 @@ export interface UserStore {
   updateUsername: (username: string) => void;
   clearError: () => void;
   refreshSession: () => Promise<void>;
+  refreshUser: () => Promise<void>;
+  applyPremiumUpgrade: (expiresAt?: string | null) => void;
   
   // Helpers
   canCreateThread: () => boolean;
@@ -286,6 +288,40 @@ export const useUserStore = create<UserStore>()(
             console.error('Refresh session error:', error);
           }
         }
+      },
+
+      refreshUser: async () => {
+        const { session } = get();
+        if (!session.user) return;
+        try {
+          const updatedUser = await authService.getCurrentSession();
+          if (updatedUser) {
+            set({
+              session: {
+                ...session,
+                user: updatedUser,
+              },
+            });
+          }
+        } catch (error) {
+          console.error('Refresh user error:', error);
+        }
+      },
+
+      applyPremiumUpgrade: (expiresAt?: string | null) => {
+        set((state) => {
+          if (!state.session.user) return state;
+          return {
+            session: {
+              ...state.session,
+              user: {
+                ...state.session.user,
+                isPremium: true,
+                premiumExpiresAt: expiresAt ?? state.session.user.premiumExpiresAt ?? null,
+              },
+            },
+          };
+        });
       },
 
       // Helpers

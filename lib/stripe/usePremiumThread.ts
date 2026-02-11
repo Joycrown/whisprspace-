@@ -31,7 +31,7 @@ export const usePremiumThread = (threadId: string | null) => {
     setIsChecking(false)
   }
 
-  const purchaseAccess = async (country?: string) => {
+  const purchaseAccess = async (country?: string, currency?: string) => {
     if (!threadId || !session.user) {
       setError('Missing required information')
       return false
@@ -40,9 +40,14 @@ export const usePremiumThread = (threadId: string | null) => {
     setIsPurchasing(true)
     setError(null)
 
-    const { url, error } = await createThreadPurchaseSession(threadId, country)
+    const { url, error, alreadyPurchased } = await createThreadPurchaseSession(threadId, country, currency)
 
     setIsPurchasing(false)
+
+    if (alreadyPurchased) {
+      setHasAccess(true)
+      return true
+    }
 
     if (error) {
       setError(error)

@@ -482,21 +482,21 @@ const AuthPage = () => {
         )}
 
         {view !== 'forgot' && view !== 'anonymous' && view !== 'welcome' && view !== 'main' && (
-          <div className="flex justify-center gap-4 mb-6">
+          <div className="grid grid-cols-3 gap-2 mb-6 w-full sm:flex sm:justify-center sm:gap-4">
             <button
-              className={`px-4 py-2 rounded-md transition-colors ${view === 'login' ? 'text-white bg-purple-600' : 'text-gray-600 hover:text-gray-900'}`}
+              className={`w-full sm:w-auto px-2 sm:px-4 py-2 text-xs sm:text-sm rounded-md transition-colors whitespace-nowrap ${view === 'login' ? 'text-white bg-purple-600' : 'text-gray-600 hover:text-gray-900'}`}
               onClick={() => setView('login')}
             >
               Log In
             </button>
             <button
-              className={`px-4 py-2 rounded-md transition-colors ${view === 'signup' ? 'text-white bg-purple-600' : 'text-gray-600 hover:text-gray-900'}`}
+              className={`w-full sm:w-auto px-2 sm:px-4 py-2 text-xs sm:text-sm rounded-md transition-colors whitespace-nowrap ${view === 'signup' ? 'text-white bg-purple-600' : 'text-gray-600 hover:text-gray-900'}`}
               onClick={() => setView('signup')}
             >
               Sign Up
             </button>
             <button
-              className="px-4 py-2 rounded-md transition-colors text-gray-600 hover:text-gray-900"
+              className="w-full sm:w-auto px-2 sm:px-4 py-2 text-xs sm:text-sm rounded-md transition-colors text-gray-600 hover:text-gray-900 whitespace-nowrap"
               onClick={() => setView('main')}
             >
               ← Back

@@ -1,7 +1,7 @@
 'use client'
 
 import { use, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Send, MessageCircle } from 'lucide-react';
 import { createOneTimeConversation, getOrCreateConversation, sendMessage } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
@@ -16,7 +16,6 @@ export default function DMPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const { userId } = resolvedParams;
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { session, loginAnonymously } = useUserStore();
   
   const [message, setMessage] = useState('');
@@ -26,16 +25,15 @@ export default function DMPage({ params }: PageProps) {
 
   const recipientAnonymousId = userId;
   const isLoggedIn = session?.isAuthenticated || false;
-  const modeParam = searchParams.get('mode');
-  const [mode, setMode] = useState<'one-time' | 'conversation'>(
-    modeParam === 'one-time' ? 'one-time' : 'conversation'
-  );
+  const [mode, setMode] = useState<'one-time' | 'conversation'>('conversation');
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const modeParam = new URLSearchParams(window.location.search).get('mode');
     if (modeParam === 'one-time' || modeParam === 'conversation') {
       setMode(modeParam);
     }
-  }, [modeParam]);
+  }, []);
 
   const handleSend = async () => {
     if (!message.trim()) return;

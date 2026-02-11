@@ -7,8 +7,11 @@ import { ArrowLeft } from 'lucide-react';
 import AccessManagement from '@/components/features/premium/AccessManagement';
 import { useThreadStore } from '@/store/threadStore';
 import { useUserStore } from '@/store/userStore';
-import { createAccessCode, generateSecretToken } from '@/utils/accessCodeUtils';
 import { AccessCode } from '@/types';
+import {
+  fetchThreadAccessCodes,
+  createThreadAccessCode,
+} from '@/lib/threads/thread-service';
 
 interface PageProps {
   params: Promise<{
@@ -20,9 +23,18 @@ export default function ThreadManagePage({ params }: PageProps) {
   const resolvedParams = use(params);
   const { threadId } = resolvedParams;
   const router = useRouter();
-  const { currentThread, fetchThreadById, updateThread } = useThreadStore();
+  const { currentThread, fetchThreadById } = useThreadStore();
   const { session } = useUserStore();
   const [isLoading, setIsLoading] = useState(true);
+  const [accessCodes, setAccessCodes] = useState<AccessCode[]>([]);
+  const [codesLoading, setCodesLoading] = useState(false);
+  const [codesError, setCodesError] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const isThreadActive = Boolean(
+    currentThread &&
+    (!currentThread.expiresAt || new Date(currentThread.expiresAt) > new Date())
+  );
+  const freeAccessCount = accessCodes.reduce((sum, code) => sum + code.currentUses, 0);
 
   useEffect(() => {
     const loadThread = async () => {
@@ -32,6 +44,25 @@ export default function ThreadManagePage({ params }: PageProps) {
     };
     loadThread();
   }, [threadId, fetchThreadById]);
+
+  useEffect(() => {
+    const loadCodes = async () => {
+      if (!currentThread) return;
+      setCodesLoading(true);
+      const { data, error } = await fetchThreadAccessCodes(threadId);
+      if (error) {
+        setCodesError(error);
+      } else {
+        setAccessCodes(data);
+        setCodesError(null);
+      }
+      setCodesLoading(false);
+    };
+
+    if (currentThread?.id) {
+      loadCodes();
+    }
+  }, [currentThread?.id, threadId]);
 
   // Check if user is the creator
   const isCreator = session?.user?.id === currentThread?.author.id;
@@ -98,30 +129,19 @@ export default function ThreadManagePage({ params }: PageProps) {
     );
   }
 
-  const handleGenerateCode = (maxUses: number, expiryDays?: number) => {
-    const newCode = createAccessCode(maxUses, expiryDays);
-    const updatedCodes = [...(currentThread.accessCodes || []), newCode];
-
-    updateThread(threadId, {
-      accessCodes: updatedCodes,
-    });
+  const handleGenerateCode = async () => {
+    setIsGenerating(true);
+    const { data, error } = await createThreadAccessCode(threadId);
+    if (error || !data) {
+      setCodesError(error || 'Failed to generate access code');
+      setIsGenerating(false);
+      return;
+    }
+    setAccessCodes((prev) => [data, ...prev]);
+    setCodesError(null);
+    setIsGenerating(false);
   };
 
-  const handleDeleteCode = (code: string) => {
-    const updatedCodes = (currentThread.accessCodes || []).filter((ac:any) => ac.code !== code);
-
-    updateThread(threadId, {
-      accessCodes: updatedCodes,
-    });
-  };
-
-  const handleRegenerateSecretLink = () => {
-    const newToken = generateSecretToken();
-
-    updateThread(threadId, {
-      secretToken: newToken,
-    });
-  };
 
   return (
     <div className="min-h-screen bg-[#121212] py-8">
@@ -149,7 +169,7 @@ export default function ThreadManagePage({ params }: PageProps) {
               <span>Sales: <span className="text-green-400 font-semibold">0</span></span>
               <span>•</span>
               <span>Free Access: <span className="text-purple-400 font-semibold">
-                {currentThread.freeAccessUsers?.length || 0}
+                {freeAccessCount}
               </span></span>
             </div>
           </div>
@@ -157,13 +177,11 @@ export default function ThreadManagePage({ params }: PageProps) {
 
         {/* Access Management Component */}
         <AccessManagement
-          threadId={threadId}
-          threadTitle={currentThread.title}
-          accessCodes={currentThread.accessCodes || []}
-          secretToken={currentThread.secretToken || generateSecretToken()}
+          accessCodes={accessCodes}
           onGenerateCode={handleGenerateCode}
-          onDeleteCode={handleDeleteCode}
-          onRegenerateSecretLink={handleRegenerateSecretLink}
+          isGenerating={isGenerating || codesLoading}
+          errorMessage={codesError}
+          isThreadActive={isThreadActive}
         />
       </div>
     </div>

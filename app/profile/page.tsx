@@ -1,37 +1,112 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/store/userStore';
 import { motion } from 'framer-motion';
-import { Settings, TrendingUp, Calendar, Clock, ArrowLeft, DollarSign, Crown, Edit3 } from 'lucide-react';
+import { Settings, TrendingUp, Calendar, Clock, ArrowLeft, DollarSign, Crown, Edit3, BarChart3 } from 'lucide-react';
 import NotificationPreferencesModal from '@/components/features/notifications/NotificationPreferencesModal';
 import ActivityFeed from '@/components/features/profile/ActivityFeed';
 import PremiumPaymentForm from '@/components/features/premium/PremiumPaymentForm';
 import UsernameChanger from '@/components/features/profile/UsernameChanger';
+import { getUserPollStats } from '@/lib/threads/thread-service';
+import { confirmPremiumUpgrade } from '@/lib/flutterwave/flutterwave-service';
+import WhisprSpinner from '@/components/ui/WhisprSpinner';
 
 const ProfilePage = () => {
   const router = useRouter();
-  const { session } = useUserStore();
+  const { session, refreshUser, applyPremiumUpgrade, sessionValidated } = useUserStore();
   const [showPreferencesModal, setShowPreferencesModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual' | null>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [pollStats, setPollStats] = useState<{ weeklyCount: number; activeCount: number } | null>(null);
+  const premiumConfirmRef = useRef(false);
 
   const currentUser = useMemo(() => session.user, [session.user]);
 
-  const handleUpgradeSuccess = () => {
-    // TODO: Update user premium status in backend
+  // Auth Redirect Logic
+  useEffect(() => {
+    // Only redirect if session check is complete and user is not authenticated
+    if (sessionValidated && !currentUser) {
+      router.push('/auth');
+    }
+  }, [sessionValidated, currentUser, router]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    if (premiumConfirmRef.current) return;
+
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const upgrade = params.get('upgrade');
+    const gateway = params.get('gateway');
+    const status = params.get('status');
+    const transactionId = params.get('transaction_id');
+    const txRef = params.get('tx_ref');
+    const storedTxRef = typeof window !== 'undefined'
+      ? localStorage.getItem('whispr_premium_tx_ref')
+      : null;
+
+    if (upgrade !== 'success' || gateway !== 'flutterwave') {
+      if (!storedTxRef) return;
+    }
+
+    if (status && !['successful', 'success', 'succeeded', 'completed'].includes(status.toLowerCase())) {
+      return;
+    }
+
+    premiumConfirmRef.current = true;
+
+    (async () => {
+      const result = await confirmPremiumUpgrade({ transactionId, txRef: txRef || storedTxRef });
+      if (result.success) {
+        applyPremiumUpgrade(result.premiumExpiresAt);
+        await refreshUser();
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('whispr_premium_tx_ref');
+        }
+        router.replace('/profile');
+        return;
+      }
+
+      console.warn('Premium confirmation failed:', result.error);
+    })();
+  }, [currentUser?.id, applyPremiumUpgrade, refreshUser, router]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    let isActive = true;
+    getUserPollStats(currentUser.id).then((stats) => {
+      if (isActive) {
+        setPollStats(stats);
+      }
+    });
+
+    return () => {
+      isActive = false;
+    };
+  }, [currentUser?.id]);
+
+  const handleUpgradeSuccess = async () => {
     alert('🎉 Welcome to Premium! Your account has been upgraded successfully.');
+    applyPremiumUpgrade();
+    await refreshUser();
     setShowUpgradeModal(false);
     setShowPaymentForm(false);
     setSelectedPlan(null);
   };
 
 
-  if (!currentUser) {
-    return <div className="flex flex-col items-center justify-center h-screen bg-[#121212] text-white">Please log in to view your profile.</div>;
+  if (!sessionValidated || !currentUser) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen bg-[#121212]">
+        <WhisprSpinner size={40} />
+        <p className="text-gray-400 mt-4 animate-pulse">Checking access...</p>
+      </div>
+    );
   }
 
   return (
@@ -48,13 +123,19 @@ const ProfilePage = () => {
         <div className="bg-[#1E1E1E] rounded-lg p-6 mb-6">
           <div className="flex items-center gap-4 mb-4">
             <div
-              className="w-20 h-20 rounded-full flex items-center justify-center text-white text-3xl font-bold bg-purple-600"
+              className="w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center text-white text-xl sm:text-3xl font-bold bg-purple-600 flex-shrink-0"
             >
               {(currentUser.username || currentUser.anonymousId).charAt(0).toUpperCase()}
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <h2 className="text-2xl font-bold text-white">{currentUser.username || currentUser.anonymousId}</h2>
+                {currentUser.isPremium && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 text-xs font-semibold">
+                    <Crown className="w-3 h-3" />
+                    Premium
+                  </span>
+                )}
                 <button
                   onClick={() => setShowUsernameModal(true)}
                   className="p-2 hover:bg-gray-700 rounded-full transition-colors group"
@@ -63,7 +144,9 @@ const ProfilePage = () => {
                   <Edit3 className="w-5 h-5 text-gray-400 group-hover:text-purple-400 transition-colors" />
                 </button>
               </div>
-              <p className="text-gray-400">Anonymous User</p>
+              <p className="text-gray-400">
+                {currentUser.isPremium ? 'Premium Member' : 'Anonymous User'}
+              </p>
             </div>
           </div>
 
@@ -79,6 +162,10 @@ const ProfilePage = () => {
             <div className="flex items-center gap-2">
               <Clock className="w-5 h-5 text-orange-400" />
               <span>Last Active: {new Date(currentUser.lastActiveAt).toLocaleString()}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-purple-400" />
+              <span>Active Polls: {pollStats ? pollStats.activeCount : '0'}</span>
             </div>
           </div>
         </div>
@@ -101,6 +188,11 @@ const ProfilePage = () => {
                   <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
                   <span className="font-medium">Active Premium Member</span>
                 </div>
+                {currentUser.premiumExpiresAt && (
+                  <p className="text-sm text-gray-400">
+                    Renews on {new Date(currentUser.premiumExpiresAt).toLocaleDateString()}
+                  </p>
+                )}
                 <button className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors">Manage Subscription</button>
               </div>
             ) : (
@@ -168,7 +260,7 @@ const ProfilePage = () => {
                 className={`bg-white/10 backdrop-blur rounded-lg p-4 border-2 transition-all hover:bg-white/20 ${selectedPlan === 'monthly' ? 'border-yellow-500' : 'border-transparent'
                   }`}
               >
-                <div className="text-xl sm:text-2xl font-bold mb-1">$9.99/mo</div>
+                <div className="text-xl sm:text-2xl font-bold mb-1">$2.00/mo</div>
                 <div className="text-xs sm:text-sm text-purple-200">Monthly Plan</div>
               </button>
               <button
@@ -176,7 +268,7 @@ const ProfilePage = () => {
                 className={`bg-white/10 backdrop-blur rounded-lg p-4 border-2 transition-all hover:bg-white/20 ${selectedPlan === 'annual' ? 'border-yellow-500' : 'border-transparent'
                   }`}
               >
-                <div className="text-xl sm:text-2xl font-bold mb-1">$89.99/yr</div>
+                <div className="text-xl sm:text-2xl font-bold mb-1">$18.00/yr</div>
                 <div className="text-xs sm:text-sm text-purple-200">
                   Annual Plan <span className="text-green-400 font-semibold">(Save 25%)</span>
                 </div>
@@ -185,34 +277,6 @@ const ProfilePage = () => {
 
             <div className="space-y-2 sm:space-y-3 mb-6 sm:mb-8">
               <h3 className="font-semibold text-base sm:text-lg mb-2 sm:mb-3">Premium Features:</h3>
-              <div className="flex items-start gap-2 sm:gap-3">
-                <div className="w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-xs sm:text-sm">✓</div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm sm:text-base">Create Premium Threads</div>
-                  <div className="text-xs sm:text-sm text-purple-200">Monetize your content with $1-$4.99 pricing</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2 sm:gap-3">
-                <div className="w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-xs sm:text-sm">✓</div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm sm:text-base">Higher Revenue Split</div>
-                  <div className="text-xs sm:text-sm text-purple-200">Earn 70% on all sales (vs 60% for free users)</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2 sm:gap-3">
-                <div className="w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-xs sm:text-sm">✓</div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm sm:text-base">Unlimited Polls</div>
-                  <div className="text-xs sm:text-sm text-purple-200">Create as many polls as you want</div>
-                </div>
-              </div>
-              <div className="flex items-start gap-2 sm:gap-3">
-                <div className="w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-xs sm:text-sm">✓</div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm sm:text-base">Priority Support</div>
-                  <div className="text-xs sm:text-sm text-purple-200">Get help faster with dedicated support</div>
-                </div>
-              </div>
               <div className="flex items-start gap-2 sm:gap-3">
                 <div className="w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-xs sm:text-sm">✓</div>
                 <div className="flex-1 min-w-0">

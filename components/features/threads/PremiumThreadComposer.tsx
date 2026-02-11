@@ -219,7 +219,7 @@ export default function PremiumThreadComposer({
                   className="w-full py-2.5 sm:py-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-sm sm:text-base font-bold rounded-lg hover:from-yellow-600 hover:to-orange-600 transition-all flex items-center justify-center gap-2 shadow-lg"
                 >
                   <Zap size={18} className="sm:w-5 sm:h-5" />
-                  <span className="truncate">Upgrade to Premium - $5/month</span>
+                  <span className="truncate">Upgrade to Premium - $2/month</span>
                 </button>
               )}
 

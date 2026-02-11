@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Home, Settings, User, MessageCircle, FolderOpen, DollarSign } from 'lucide-react';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useUserStore } from '@/store/userStore';
 import SessionPanel from '../SessionPanel';
@@ -31,13 +32,15 @@ const Sidebar = () => {
         className="hidden md:flex fixed top-0 left-0 h-full w-20 bg-gray-950 shadow-xl z-40 border-r border-white/5 flex-col"
       >
         {/* Logo Section */}
-        <div className="px-4 py-8">
-          <div className="group relative w-12 h-12 mx-auto">
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500 to-orange-400 rounded-xl transform transition-all duration-300 group-hover:rotate-45 group-hover:scale-110">
-              <div className="w-full h-full bg-gray-950/30 rounded-xl backdrop-blur-xl flex items-center justify-center">
-                <div className="w-6 h-6 bg-white/20 rounded-lg transform -rotate-45" />
-              </div>
-            </div>
+        <div className="px-4 py-8 flex justify-center">
+          <div className="relative w-12 h-12">
+            <Image
+              src="/assets/WS icon.png"
+              alt="WhisprSpace Logo"
+              fill
+              className="object-contain"
+              priority
+            />
           </div>
         </div>
 
