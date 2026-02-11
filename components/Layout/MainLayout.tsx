@@ -14,6 +14,7 @@ export default function MainLayout({
   const pathname = usePathname()
   const isPublicRoute =
     publicRoutes.includes(pathname || '') ||
+    (pathname?.startsWith('/auth/') ?? false) ||
     (pathname?.startsWith('/profile/') ?? false) ||
     (pathname?.startsWith('/message/') ?? false)
 
