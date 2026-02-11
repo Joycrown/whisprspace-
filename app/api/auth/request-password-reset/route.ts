@@ -22,6 +22,28 @@ export async function POST(request: Request) {
     }
 
     // Generate recovery link
+    const getBaseUrl = (req: Request) => {
+      const envUrl =
+        process.env.NEXT_PUBLIC_APP_URL ||
+        process.env.APP_URL ||
+        process.env.SITE_URL ||
+        (process.env.NEXT_PUBLIC_APP_URL ? `https://${process.env.NEXT_PUBLIC_APP_URL}` : '');
+      if (envUrl) {
+        return envUrl.replace(/\/+$/, '');
+      }
+
+      const forwardedHost = req.headers.get('x-forwarded-host');
+      const host = forwardedHost || req.headers.get('host');
+      const proto = req.headers.get('x-forwarded-proto') || 'http';
+      if (host) {
+        return `${proto}://${host}`;
+      }
+
+      return 'http://localhost:3000';
+    };
+
+    const redirectTo = new URL('/auth/reset-password', getBaseUrl(request)).toString();
+
     const { data, error } = await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery',
       email,
@@ -29,7 +51,7 @@ export async function POST(request: Request) {
         // Redirect directly to the reset password page.
         // The project uses Implicit Grant (hash fragment), so we must handle session client-side.
         // Server-side callback route cannot see the hash.
-        redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/reset-password`,
+        redirectTo,
       },
     });
 
