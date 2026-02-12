@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import * as rawAuth from '@/lib/core/supabase/raw-auth'
 import { useUserStore } from '@/store/userStore'
 import { getCurrentSession } from './auth-service'
+import { getAnonymousSessionExpiry, getRegisteredSessionExpiry } from '@/lib/utils/session-expiry'
 
 /**
  * Auth hook that syncs Supabase auth state with Zustand store
@@ -50,13 +51,15 @@ export const useAuth = () => {
       if (event === 'SIGNED_IN' && session?.user) {
         const user = await getCurrentSession()
         if (user) {
+          const { rememberMe } = useUserStore.getState()
+          const sessionExpiry = user.isAnonymous
+            ? getAnonymousSessionExpiry()
+            : getRegisteredSessionExpiry(rememberMe)
           useUserStore.setState({
             session: {
               user,
               isAuthenticated: !user.isAnonymous,
-              sessionExpiry: session.expires_at
-                ? new Date(session.expires_at * 1000).toISOString()
-                : null,
+              sessionExpiry,
             },
             sessionInfo: user.isAnonymous
               ? {
@@ -80,10 +83,14 @@ export const useAuth = () => {
       } else if (event === 'TOKEN_REFRESHED') {
         // Update session expiry
         if (session?.expires_at) {
+          const { rememberMe, session: currentSession } = useUserStore.getState()
+          if (!currentSession.isAuthenticated || currentSession.user?.isAnonymous) {
+            return
+          }
           useUserStore.setState((state) => ({
             session: {
               ...state.session,
-              sessionExpiry: new Date(session.expires_at! * 1000).toISOString(),
+              sessionExpiry: getRegisteredSessionExpiry(rememberMe),
             },
           }))
         }

@@ -18,7 +18,19 @@ const AuthPage = () => {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
 
-  const { loginAnonymously, login, signup, session, sessionInfo, isLoading, error, clearError, sessionValidated } = useUserStore();
+  const {
+    loginAnonymously,
+    login,
+    signup,
+    session,
+    sessionInfo,
+    isLoading,
+    error,
+    clearError,
+    sessionValidated,
+    rememberMe,
+    setRememberMe,
+  } = useUserStore();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
@@ -149,7 +161,7 @@ const AuthPage = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError(); // Clear previous errors
-    await login(loginForm.email, loginForm.password);
+    await login(loginForm.email, loginForm.password, rememberMe);
   };
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -550,6 +562,8 @@ const AuthPage = () => {
                 <input
                   type="checkbox"
                   id="remember"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
                   className="rounded bg-white border-gray-300 text-purple-600 focus:ring-purple-600"
                 />
                 <label htmlFor="remember" className="ml-2 text-sm text-gray-700">
