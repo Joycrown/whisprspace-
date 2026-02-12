@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User, UserSession, UserPreferences } from '@/types';
 import * as authService from '../lib/auth/auth-service';
+import { getAnonymousSessionExpiry, getRegisteredSessionExpiry } from '@/lib/utils/session-expiry';
 
 // Anonymous session for users who join anonymously (can interact but not create)
 export interface AnonymousSession {
@@ -19,10 +20,11 @@ export interface UserStore {
   isLoading: boolean;
   error: string | null;
   sessionValidated: boolean; // Track if session has been validated by AuthProvider
+  rememberMe: boolean;
 
   // Actions
   loginAnonymously: () => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   signup: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updatePreferences: (preferences: Partial<UserPreferences>) => Promise<void>;
@@ -31,6 +33,7 @@ export interface UserStore {
   refreshSession: () => Promise<void>;
   refreshUser: () => Promise<void>;
   applyPremiumUpgrade: (expiresAt?: string | null) => void;
+  setRememberMe: (rememberMe: boolean) => void;
   
   // Helpers
   canCreateThread: () => boolean;
@@ -98,6 +101,7 @@ export const useUserStore = create<UserStore>()(
       isLoading: false,
       error: null,
       sessionValidated: false, // Not validated until AuthProvider checks
+      rememberMe: false,
 
       // Actions
       loginAnonymously: async () => {
@@ -105,9 +109,6 @@ export const useUserStore = create<UserStore>()(
         
         try {
           const user = await authService.signInAnonymously();
-          
-          // Calculate 24-hour expiry for anonymous users
-          const expiryTime = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
           
           // Create anonymous session (can interact but not create)
           set({
@@ -120,9 +121,10 @@ export const useUserStore = create<UserStore>()(
             session: {
               user,
               isAuthenticated: false,
-              sessionExpiry: expiryTime, // 24 hours for anonymous
+              sessionExpiry: getAnonymousSessionExpiry(), // 24 hours for anonymous
             },
             isLoading: false,
+            rememberMe: false,
           });
         } catch (error) {
           set({
@@ -132,23 +134,22 @@ export const useUserStore = create<UserStore>()(
         }
       },
 
-      login: async (email: string, password: string) => {
-        set({ isLoading: true, error: null });
+      login: async (email: string, password: string, rememberMe?: boolean) => {
+        const remember = typeof rememberMe === 'boolean' ? rememberMe : get().rememberMe;
+        set({ isLoading: true, error: null, rememberMe: remember });
         
         try {
           const user = await authService.signInWithEmail(email, password);
-          
-          // Calculate 72-hour expiry for registered users (3 days)
-          const sessionExpiry = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
           
           set({
             session: {
               user,
               isAuthenticated: true,
-              sessionExpiry,
+              sessionExpiry: getRegisteredSessionExpiry(remember),
             },
             sessionInfo: null, // Clear anonymous session
             isLoading: false,
+            rememberMe: remember,
           });
         } catch (error) {
           set({
@@ -166,17 +167,15 @@ export const useUserStore = create<UserStore>()(
           // They can change it later in profile with cooldown period
           const user = await authService.signUpWithEmail(email, password);
           
-          // Calculate 72-hour expiry for registered users (3 days)
-          const sessionExpiry = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
-          
           set({
             session: {
               user,
               isAuthenticated: true,
-              sessionExpiry,
+              sessionExpiry: getRegisteredSessionExpiry(false),
             },
             sessionInfo: null, // Clear anonymous session
             isLoading: false,
+            rememberMe: false,
           });
         } catch (error) {
           set({
@@ -202,6 +201,7 @@ export const useUserStore = create<UserStore>()(
             },
             sessionInfo: null, // Clear anonymous session too
             error: null,
+            rememberMe: false,
           });
           
           // Force a hard refresh to clear any cached state
@@ -219,6 +219,7 @@ export const useUserStore = create<UserStore>()(
             },
             sessionInfo: null,
             error: null,
+            rememberMe: false,
           });
           
           // Force refresh even on error
@@ -324,6 +325,10 @@ export const useUserStore = create<UserStore>()(
         });
       },
 
+      setRememberMe: (rememberMe: boolean) => {
+        set({ rememberMe });
+      },
+
       // Helpers
       canCreateThread: () => {
         const { session } = get();
@@ -342,7 +347,8 @@ export const useUserStore = create<UserStore>()(
       name: 'whisprspace-user-session',
       partialize: (state) => ({ 
         session: state.session, // This includes sessionExpiry
-        sessionInfo: state.sessionInfo 
+        sessionInfo: state.sessionInfo,
+        rememberMe: state.rememberMe,
       }),
     }
   )

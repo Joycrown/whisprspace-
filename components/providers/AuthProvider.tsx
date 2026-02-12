@@ -6,6 +6,7 @@ import * as rawAuth from '@/lib/core/supabase/raw-auth'
 import { useUserStore } from '@/store/userStore'
 import { getCurrentSession } from '@/lib/auth/auth-service'
 import { initializeStorage } from '@/lib/utils/storage-migration'
+import { getAnonymousSessionExpiry, getRegisteredSessionExpiry } from '@/lib/utils/session-expiry'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -118,11 +119,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Session exists but no expiry set - calculate one based on user type
           if (user.isAnonymous) {
             // Anonymous users: 24 hours
-            validSessionExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+            validSessionExpiry = getAnonymousSessionExpiry()
 
           } else {
-            // Registered users: 72 hours
-            validSessionExpiry = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
+            // Registered users: 72 hours (or remember me duration)
+            const { rememberMe } = useUserStore.getState()
+            validSessionExpiry = getRegisteredSessionExpiry(rememberMe)
 
           }
         }
@@ -199,13 +201,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (event === 'SIGNED_IN' && session) {
         const user = await getCurrentSession()
         if (user) {
+          const { rememberMe } = useUserStore.getState()
+          const sessionExpiry = user.isAnonymous
+            ? getAnonymousSessionExpiry()
+            : getRegisteredSessionExpiry(rememberMe)
           useUserStore.setState({
             session: {
               user,
               isAuthenticated: !user.isAnonymous,
-              sessionExpiry: session.expires_at
-                ? new Date(session.expires_at * 1000).toISOString()
-                : null,
+              sessionExpiry,
             },
             sessionInfo: user.isAnonymous
               ? {
@@ -244,8 +248,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { session: currentSession } = useUserStore.getState()
 
         if (currentSession.isAuthenticated && !currentSession.user?.isAnonymous) {
-          // Registered user - extend session by 72 hours from now
-          const newExpiry = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString()
+          // Registered user - extend session by configured duration
+          const { rememberMe } = useUserStore.getState()
+          const newExpiry = getRegisteredSessionExpiry(rememberMe)
 
           useUserStore.setState((state) => ({
             session: {
