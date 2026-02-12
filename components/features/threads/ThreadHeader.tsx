@@ -78,7 +78,7 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
   const threadPath = `/threads/${thread.id}`;
   const threadUrl = typeof window !== 'undefined' ? `${window.location.origin}${threadPath}` : '';
   const shareUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/auth?redirect=${encodeURIComponent(threadPath)}`
+    ? `${window.location.origin}/auth?redirect=${encodeURIComponent(`${threadPath}?from=share`)}`
     : '';
   const shareText = `Check out this thread: ${thread.title}`;
 

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import ThreadMessages from '@/components/features/threads/ThreadMessages';
 import ThreadInput from '@/components/features/threads/ThreadInput';
@@ -25,6 +25,7 @@ import { DualGatewayPremiumGate } from '@/components/features/premium/DualGatewa
 const ThreadPage = () => {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { session, sessionInfo, sessionValidated } = useUserStore();
 
   // Get thread ID
@@ -487,6 +488,10 @@ const ThreadPage = () => {
     return currentThread?.privacy === 'private' || currentThread?.privacy === 'invite_only';
   }, [currentThread?.privacy]);
 
+  const isShareEntry = useMemo(() => {
+    return searchParams?.get('from') === 'share';
+  }, [searchParams]);
+
   useEffect(() => {
     if (!threadId) return;
     if (!sessionValidated) return;
@@ -736,7 +741,7 @@ const ThreadPage = () => {
               </button>
             </div>
           </div>
-        ) : currentThread.isPremium && !isCreator ? (
+        ) : currentThread.isPremium && !isCreator && isShareEntry ? (
           <DualGatewayPremiumGate threadId={threadId ?? ''} price={currentThread.price ?? 0}>
             {contentBlock}
           </DualGatewayPremiumGate>
