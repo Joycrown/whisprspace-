@@ -162,6 +162,7 @@ const MessageItem: React.FC<{
   onRetry?: (message: Message) => void;
 }> = ({ message, threadId, threadCreatorId, onReply, onReact, isCurrentUser, currentUserId, getRepliedMessage, onQuoteClick, onRetry }) => {
   const [showReactions, setShowReactions] = useState(false);
+  const [activeImage, setActiveImage] = useState<{ url: string; name?: string } | null>(null);
   const [pickerPosition, setPickerPosition] = useState<{ top: number; left: number; showBelow: boolean }>({
     top: 0,
     left: 0,
@@ -169,6 +170,22 @@ const MessageItem: React.FC<{
   });
   const buttonRef = React.useRef<HTMLButtonElement>(null);
   const repliedMessage = message.replyToId ? getRepliedMessage(message.replyToId) : null;
+
+  useEffect(() => {
+    if (!activeImage) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveImage(null);
+      }
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeImage]);
 
   const handleReaction = (reaction: string) => {
     onReact(message.id, reaction);
@@ -207,16 +224,23 @@ const MessageItem: React.FC<{
   const renderAttachment = (attachment: Attachment) => {
     if (attachment.type === 'file') {
       return attachment.fileType === 'image' ? (
-        <div className="relative max-w-[200px] overflow-hidden rounded-lg">
+        <button
+          type="button"
+          className="relative max-w-[200px] overflow-hidden rounded-lg cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-purple-500/60"
+          onClick={() => setActiveImage({ url: attachment.url, name: attachment.fileName })}
+          aria-label="Open image preview"
+        >
           <img
             src={attachment.url}
             alt={attachment.fileName}
             className="w-full h-auto object-cover max-h-48"
+            draggable={false}
+            onContextMenu={(event) => event.preventDefault()}
           />
           <div className="absolute top-2 right-2 p-1 rounded bg-black/50">
             <FiImage className="w-4 h-4 text-white" />
           </div>
-        </div>
+        </button>
       ) : (
         <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-800 border border-gray-700">
           <FiFile className="w-4 h-4 text-blue-400" />
@@ -246,13 +270,20 @@ const MessageItem: React.FC<{
 
     // Handle ImageAttachment
     return (
-      <div className="relative max-w-[200px] overflow-hidden rounded-lg">
+      <button
+        type="button"
+        className="relative max-w-[200px] overflow-hidden rounded-lg cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-purple-500/60"
+        onClick={() => setActiveImage({ url: attachment.url, name: attachment.fileName || 'Image' })}
+        aria-label="Open image preview"
+      >
         <img
           src={attachment.url}
           alt={attachment.fileName || 'Image'}
           className="w-full h-auto object-cover max-h-48"
+          draggable={false}
+          onContextMenu={(event) => event.preventDefault()}
         />
-      </div>
+      </button>
     );
   };
 
@@ -413,6 +444,38 @@ const MessageItem: React.FC<{
                 ))}
               </div>
             </>,
+            document.body
+          )}
+          {activeImage && typeof window !== 'undefined' && createPortal(
+            <div
+              className="fixed inset-0 z-[1100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 overscroll-contain"
+              onClick={() => setActiveImage(null)}
+              onWheel={(event) => event.preventDefault()}
+              onTouchMove={(event) => event.preventDefault()}
+              role="dialog"
+              aria-modal="true"
+            >
+              <button
+                type="button"
+                className="absolute top-4 right-4 md:top-6 md:right-6 inline-flex items-center gap-2 rounded-full bg-white/10 text-white border border-white/20 px-3 py-1.5 text-xs uppercase tracking-widest hover:bg-white/20 backdrop-blur"
+                onClick={() => setActiveImage(null)}
+                aria-label="Close image preview"
+              >
+                Close
+              </button>
+              <div
+                className="relative max-w-[96vw] max-h-[92vh]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <img
+                  src={activeImage.url}
+                  alt={activeImage.name || 'Image preview'}
+                  className="max-w-[96vw] max-h-[92vh] object-contain rounded-2xl shadow-2xl"
+                  draggable={false}
+                  onContextMenu={(event) => event.preventDefault()}
+                />
+              </div>
+            </div>,
             document.body
           )}
         </div>

@@ -148,7 +148,31 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const meta = verified?.meta || verified?.meta_data || {}
+    const normalizeMeta = (raw: any) => {
+      if (!raw) return {}
+      if (Array.isArray(raw)) {
+        return raw.reduce<Record<string, any>>((acc, item) => {
+          if (!item || typeof item !== 'object') return acc
+          const key =
+            item.metaname ||
+            item.meta_name ||
+            item.name ||
+            item.key
+          const value =
+            item.metavalue ||
+            item.meta_value ||
+            item.value
+          if (key !== undefined) {
+            acc[String(key)] = value
+          }
+          return acc
+        }, {})
+      }
+      if (typeof raw === 'object') return raw
+      return {}
+    }
+
+    const meta = normalizeMeta(verified?.meta || verified?.meta_data)
     const paymentType = String(meta?.paymentType || meta?.payment_type || '').toLowerCase()
     if (paymentType === 'premium_upgrade') {
       return NextResponse.json(
