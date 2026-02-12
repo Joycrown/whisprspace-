@@ -182,27 +182,29 @@ const ProfilePage = () => {
         {/* Quick Access Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           {/* Premium Status */}
-          <div className="bg-[#1E1E1E] rounded-lg p-6 border border-gray-800">
+          <div className="bg-[#1E1E1E] rounded-lg p-6 border border-gray-800 h-full flex flex-col">
             <h3 className="text-xl font-bold text-white mb-4">Premium Status</h3>
             {currentUser.isPremium ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-green-400">
-                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                  <span className="font-medium">Active Premium Member</span>
+              <div className="flex flex-col flex-1">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-green-400">
+                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                    <span className="font-medium">Active Premium Member</span>
+                  </div>
+                  {currentUser.premiumExpiresAt && (
+                    <p className="text-sm text-gray-400">
+                      Renews on {new Date(currentUser.premiumExpiresAt).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
-                {currentUser.premiumExpiresAt && (
-                  <p className="text-sm text-gray-400">
-                    Renews on {new Date(currentUser.premiumExpiresAt).toLocaleDateString()}
-                  </p>
-                )}
-                <button className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors">Manage Subscription</button>
+                <button className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors mt-auto">Manage Subscription</button>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="flex flex-col flex-1">
                 <p className="text-gray-400 text-sm">Unlock exclusive features with Premium.</p>
                 <button
                   onClick={() => setShowUpgradeModal(true)}
-                  className="w-full px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                  className="w-full px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 mt-auto"
                 >
                   <Crown className="w-4 h-4" />
                   Upgrade to Premium
@@ -212,13 +214,13 @@ const ProfilePage = () => {
           </div>
 
           {/* Creator Earnings */}
-          <div className="bg-[#1E1E1E] rounded-lg p-6 border border-gray-800">
+          <div className="bg-[#1E1E1E] rounded-lg p-6 border border-gray-800 h-full flex flex-col">
             <h3 className="text-xl font-bold text-white mb-4">Creator Earnings</h3>
-            <div className="space-y-3">
+            <div className="flex flex-col flex-1">
               <p className="text-gray-400 text-sm">Track your premium content earnings</p>
               <button
                 onClick={() => router.push('/profile/earnings')}
-                className="w-full px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="w-full px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 mt-auto"
               >
                 <DollarSign className="w-4 h-4" />
                 View Earnings

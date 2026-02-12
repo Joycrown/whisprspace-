@@ -546,7 +546,7 @@ async function handlePremiumUpgradePayment({
     const durationDays = plan === 'annual' ? 365 : 30
     const newExpiry = new Date(currentExpiry.getTime() + durationDays * 24 * 60 * 60 * 1000)
 
-    await supabase
+    const { error: premiumUpdateError } = await supabase
       .from('users')
       .update({
         is_premium: true,
@@ -556,6 +556,11 @@ async function handlePremiumUpgradePayment({
         premium_reminder_sent_for: null,
       })
       .eq('id', userId)
+
+    if (premiumUpdateError) {
+      console.error('Failed to update premium status in webhook:', premiumUpdateError)
+      return
+    }
 
     const ledgerAmount =
       !Number.isNaN(expectedAmount) && expectedAmount > 0 ? expectedAmount : amountUsd

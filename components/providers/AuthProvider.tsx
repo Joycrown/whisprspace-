@@ -38,6 +38,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const validateSessionFromBackend = async (retryCount = 0) => {
       try {
+        const storedSession = rawAuth.getStoredSession()
+        if (storedSession && rawAuth.isSessionExpired(storedSession)) {
+          const refreshed = await rawAuth.refreshToken()
+          if (!refreshed.session) {
+            useUserStore.setState({
+              session: {
+                user: null,
+                isAuthenticated: false,
+                sessionExpiry: null,
+              },
+              sessionInfo: null,
+              sessionValidated: true,
+            })
+
+            if (!isPublicRoute(pathname)) {
+              router.push('/')
+            }
+            return
+          }
+        }
 
 
         // Get session from raw auth (source of truth)
