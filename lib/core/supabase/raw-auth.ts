@@ -35,16 +35,13 @@ function getAuthHeaders(): Record<string, string> {
   };
 }
 
-/**
- * Get current session from localStorage
- */
-export function getSession(): Session | null {
+const readStoredSession = (): Session | null => {
   if (typeof window === 'undefined') return null;
-  
+
   try {
     const stored = localStorage.getItem(SESSION_KEY);
     if (!stored) return null;
-    
+
     const session: Session = JSON.parse(stored);
 
     // If session is malformed (no access token), clear it
@@ -53,18 +50,39 @@ export function getSession(): Session | null {
       saveSession(null);
       return null;
     }
-    
-    // Check if expired
-    if (session.expires_at && Date.now() / 1000 > session.expires_at) {
 
-      return null;
-    }
-    
     return session;
   } catch (err) {
-    console.error('[RawAuth] Failed to get session:', err);
+    console.error('[RawAuth] Failed to read session:', err);
     return null;
   }
+};
+
+export const isSessionExpired = (session: Session | null): boolean => {
+  if (!session?.expires_at) return false;
+  return Date.now() / 1000 > session.expires_at;
+};
+
+/**
+ * Get current session from localStorage
+ */
+export function getSession(): Session | null {
+  const session = readStoredSession();
+  if (!session) return null;
+
+  if (isSessionExpired(session)) {
+    return null;
+  }
+
+  return session;
+}
+
+/**
+ * Get stored session (even if expired).
+ * Useful for refresh flows.
+ */
+export function getStoredSession(): Session | null {
+  return readStoredSession();
 }
 
 /**
@@ -247,7 +265,7 @@ export async function signOut(): Promise<{ error: Error | null }> {
  */
 export async function refreshToken(): Promise<AuthResponse> {
   try {
-    const session = getSession();
+    const session = readStoredSession();
     
     if (!session?.refresh_token) {
       throw new Error('No refresh token available');
@@ -337,7 +355,7 @@ function cancelTokenRefresh() {
 
 // Initialize on module load
 if (typeof window !== 'undefined') {
-  const session = getSession();
+  const session = readStoredSession();
   if (session) {
     const timeUntilExpiry = session.expires_at - Math.floor(Date.now() / 1000);
     if (timeUntilExpiry > 0) {

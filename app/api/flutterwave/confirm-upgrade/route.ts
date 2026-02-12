@@ -242,7 +242,7 @@ export async function POST(request: NextRequest) {
       !Number.isNaN(expectedAmount) && expectedAmount > 0 ? expectedAmount : amountUsd
     const ledgerCurrency = expectedCurrency || 'USD'
 
-    await supabaseAdmin
+    const { error: premiumUpdateError } = await supabaseAdmin
       .from('users')
       .update({
         is_premium: true,
@@ -252,6 +252,14 @@ export async function POST(request: NextRequest) {
         premium_reminder_sent_for: null,
       })
       .eq('id', user.id)
+
+    if (premiumUpdateError) {
+      console.error('Failed to update premium status:', premiumUpdateError)
+      return NextResponse.json(
+        { error: 'Failed to update premium status' },
+        { status: 500 }
+      )
+    }
 
     await supabaseAdmin
       .from('transaction_ledger')
