@@ -19,12 +19,13 @@ import { useRealtimeThread, useTypingIndicator } from '@/lib/core/realtime/useRe
 import { useToast } from '@/components/ui/Toast';
 import { findDirectConversationWithUser } from '@/lib/messaging';
 import { confirmThreadPurchase } from '@/lib/flutterwave/flutterwave-service';
+import { DualGatewayPremiumGate } from '@/components/features/premium/DualGatewayPremiumGate';
 
 
 const ThreadPage = () => {
   const params = useParams();
   const router = useRouter();
-  const { session } = useUserStore();
+  const { session, sessionInfo, sessionValidated } = useUserStore();
 
   // Get thread ID
   const threadId = useMemo(() => {
@@ -33,7 +34,11 @@ const ThreadPage = () => {
   }, [params.threadId]);
 
   // React Query hooks for data fetching and mutations
-  const { thread: currentThread, isLoading, error, refetch } = useThreadQuery(threadId);
+  const hasSession = Boolean(session.user || sessionInfo);
+  const { thread: currentThread, isLoading, error, refetch } = useThreadQuery(
+    threadId,
+    Boolean(threadId && sessionValidated && hasSession)
+  );
   const createMessageMutation = useCreateThreadMessageMutation();
   const likeThreadMutation = useLikeThreadMutation();
   const deleteThreadMutation = useDeleteThreadMutation();
@@ -478,6 +483,18 @@ const ThreadPage = () => {
     return participants.some(p => p.id === currentUserId);
   }, [participants, currentUserId]);
 
+  const isPrivateThread = useMemo(() => {
+    return currentThread?.privacy === 'private' || currentThread?.privacy === 'invite_only';
+  }, [currentThread?.privacy]);
+
+  useEffect(() => {
+    if (!threadId) return;
+    if (!sessionValidated) return;
+    if (!hasSession) {
+      router.replace(`/auth?redirect=/threads/${threadId}`);
+    }
+  }, [threadId, sessionValidated, hasSession, router]);
+
   const joinErrorMessage = useMemo(() => {
     if (joinActionError) return joinActionError;
     if (isBanned || banPresentation === 'toast') return '';
@@ -586,6 +603,22 @@ const ThreadPage = () => {
     });
   };
 
+  if (!sessionValidated) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#121212]">
+        <WhisprSpinner size={60} />
+      </div>
+    );
+  }
+
+  if (!hasSession) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-[#121212]">
+        <WhisprSpinner size={60} />
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#121212]">
@@ -602,192 +635,224 @@ const ThreadPage = () => {
     return <div className="text-white p-4">Thread not found.</div>;
   }
 
+  const isPrivateBlocked = isPrivateThread && !isCreator && !isJoined;
+
+  const contentBlock = (
+    <>
+      {/* Poll Section */}
+      {currentThread.type === 'poll' && currentThread.pollOptions && (
+        <div className="p-3 md:p-4 border-b border-gray-800 bg-gray-900/50 flex-shrink-0">
+          <h2 className="text-lg md:text-xl font-bold text-white mb-3 md:mb-4">Poll: {currentThread.title}</h2>
+          <p className="text-sm md:text-base text-gray-400 mb-3 md:mb-4">{currentThread.content}</p>
+          <div className="space-y-2 md:space-y-3">
+            {currentThread.pollOptions.map(option => (
+              <div
+                key={option.id}
+                className={`relative flex items-center gap-2 md:gap-3 p-2.5 md:p-3 rounded-lg transition-colors overflow-hidden min-h-[48px] ${option.hasVoted
+                  ? 'bg-purple-900/50 border border-purple-500'
+                  : hasAlreadyVoted
+                    ? 'bg-gray-800/50 border border-gray-700 opacity-80 cursor-default'
+                    : 'bg-gray-800 hover:bg-gray-700 active:bg-gray-600 cursor-pointer'
+                  }`}
+                onClick={() => !hasAlreadyVoted && handleVote(option.id)}
+              >
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-r from-purple-600/30 to-transparent"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${option.percentage || 0}%` }}
+                  transition={{ duration: 0.5 }}
+                />
+                <div className="relative z-10 flex items-center justify-between w-full gap-2">
+                  <span className="text-sm md:text-base font-medium text-white">{option.text}</span>
+                  <span className="text-xs md:text-sm text-gray-400 whitespace-nowrap">{option.votes} ({option.percentage}%)</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Messages Area - Scrollable */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pb-[calc(8rem+env(safe-area-inset-bottom))] md:pb-20 scrollbar-hide">
+        <ThreadMessages
+          messages={messages}
+          currentUserId={currentUserId}
+          threadId={threadId ?? ''}
+          threadCreatorId={threadCreatorId}
+          onReply={handleReply}
+          onReact={handleReact}
+          getRepliedMessage={(id: string) => messagesMap[id]}
+          onReportMessage={handleReportMessage}
+          messageFilter={messageFilter}
+          onRetry={(msg) => {
+            // Extract raw files from attachments if available
+            const retryAttachments = msg.attachments?.map(a => a.file).filter(Boolean) as File[];
+            handleSendMessage(msg.content, retryAttachments);
+          }}
+        />
+      </div>
+
+      {/* Fixed Input at Bottom */}
+      <div className="fixed bottom-0 left-0 right-0 md:left-20 lg:right-80 border-t border-gray-800 bg-[#121212] z-50 pointer-events-auto pb-[env(safe-area-inset-bottom)]">
+        <ThreadInput
+          onSendMessage={(content, attachments) => handleSendMessage(content, attachments)}
+          replyTo={replyingTo || null}
+          onCancelReply={() => setReplyingTo(undefined)}
+          replyPreview={
+            replyingTo ? `Replying to ${messagesMap[replyingTo.id]?.sender.name || 'User'}: ${messagesMap[replyingTo.id]?.content.substring(0, 30) || 'Attachment'}...` : undefined
+          }
+          isLoading={createMessageMutation.isPending}
+          isDisabled={isBanned}
+          disabledMessage="You have been removed from this thread."
+        />
+      </div>
+    </>
+  );
+
   return (
-    <div className="flex h-screen bg-[#121212] overflow-hidden w-full max-w-full">
+    <div className="flex h-[100dvh] md:h-screen bg-[#121212] overflow-hidden w-full max-w-full">
       {/* Main content area (messages + input) with its own header */}
-      <div className="flex-1 min-w-0 max-w-full border-x-0 md:border-x border-gray-800 flex flex-col h-screen overflow-x-hidden">
+      <div className="flex-1 min-w-0 max-w-full border-x-0 md:border-x border-gray-800 flex flex-col h-[100dvh] md:h-screen overflow-hidden">
         {/* Fixed Header - only for main chat area */}
-        <div className="sticky top-0 z-[60]">
+        <div className="sticky top-0 z-[60] shrink-0">
           <ThreadHeader
             thread={currentThread}
             onLike={handleLike}
             onToggleSidebar={() => setIsSidebarOpen(true)}
           />
         </div>
-
-        {/* Poll Section */}
-        {currentThread.type === 'poll' && currentThread.pollOptions && (
-          <div className="p-3 md:p-4 border-b border-gray-800 bg-gray-900/50 flex-shrink-0">
-            <h2 className="text-lg md:text-xl font-bold text-white mb-3 md:mb-4">Poll: {currentThread.title}</h2>
-            <p className="text-sm md:text-base text-gray-400 mb-3 md:mb-4">{currentThread.content}</p>
-            <div className="space-y-2 md:space-y-3">
-              {currentThread.pollOptions.map(option => (
-                <div
-                  key={option.id}
-                  className={`relative flex items-center gap-2 md:gap-3 p-2.5 md:p-3 rounded-lg transition-colors overflow-hidden min-h-[48px] ${option.hasVoted
-                    ? 'bg-purple-900/50 border border-purple-500'
-                    : hasAlreadyVoted
-                      ? 'bg-gray-800/50 border border-gray-700 opacity-80 cursor-default'
-                      : 'bg-gray-800 hover:bg-gray-700 active:bg-gray-600 cursor-pointer'
-                    }`}
-                  onClick={() => !hasAlreadyVoted && handleVote(option.id)}
-                >
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-purple-600/30 to-transparent"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${option.percentage || 0}%` }}
-                    transition={{ duration: 0.5 }}
-                  />
-                  <div className="relative z-10 flex items-center justify-between w-full gap-2">
-                    <span className="text-sm md:text-base font-medium text-white">{option.text}</span>
-                    <span className="text-xs md:text-sm text-gray-400 whitespace-nowrap">{option.votes} ({option.percentage}%)</span>
-                  </div>
-                </div>
-              ))}
+        {isPrivateBlocked ? (
+          <div className="flex-1 flex items-center justify-center p-6 text-center">
+            <div className="max-w-md space-y-3">
+              <h2 className="text-xl font-semibold text-white">This thread is private</h2>
+              <p className="text-sm text-gray-400">
+                You need an invite link from the creator to join this thread.
+              </p>
+              <button
+                onClick={() => router.push('/threads')}
+                className="px-4 py-2 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition-colors"
+              >
+                Back to Threads
+              </button>
             </div>
           </div>
+        ) : currentThread.isPremium && !isCreator ? (
+          <DualGatewayPremiumGate threadId={threadId ?? ''} price={currentThread.price ?? 0}>
+            {contentBlock}
+          </DualGatewayPremiumGate>
+        ) : (
+          contentBlock
         )}
-
-        {/* Messages Area - Scrollable */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden pb-32 md:pb-20 scrollbar-hide">
-          <ThreadMessages
-            messages={messages}
-            currentUserId={currentUserId}
-            threadId={threadId ?? ''}
-            threadCreatorId={threadCreatorId}
-            onReply={handleReply}
-            onReact={handleReact}
-            getRepliedMessage={(id: string) => messagesMap[id]}
-            onReportMessage={handleReportMessage}
-            messageFilter={messageFilter}
-            onRetry={(msg) => {
-              // Extract raw files from attachments if available
-              const retryAttachments = msg.attachments?.map(a => a.file).filter(Boolean) as File[];
-              handleSendMessage(msg.content, retryAttachments);
-            }}
-          />
-        </div>
-
-        {/* Fixed Input at Bottom */}
-        <div className="fixed bottom-0 left-0 right-0 md:left-20 lg:right-80 border-t border-gray-800 bg-[#121212] z-50 pointer-events-auto">
-          <ThreadInput
-            onSendMessage={(content, attachments) => handleSendMessage(content, attachments)}
-            replyTo={replyingTo || null}
-            onCancelReply={() => setReplyingTo(undefined)}
-            replyPreview={
-              replyingTo ? `Replying to ${messagesMap[replyingTo.id]?.sender.name || 'User'}: ${messagesMap[replyingTo.id]?.content.substring(0, 30) || 'Attachment'}...` : undefined
-            }
-            isLoading={createMessageMutation.isPending}
-            isDisabled={isBanned}
-            disabledMessage="You have been removed from this thread."
-          />
-        </div>
       </div>
 
-      {/* Mobile Sidebar Drawer */}
-      <AnimatePresence>
-        {isSidebarOpen && (
-          <>
-            {/* Overlay */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSidebarOpen(false)}
-              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden"
-            />
-
-            {/* Drawer */}
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              drag="x"
-              dragConstraints={{ left: 0, right: 0 }}
-              dragElastic={0.2}
-              onDragEnd={(e, info) => {
-                if (info.offset.x > 100) {
-                  setIsSidebarOpen(false);
-                }
-              }}
-              className="fixed top-0 right-0 bottom-0 w-[85%] max-w-sm bg-[#121212] shadow-2xl z-[70] lg:hidden overflow-hidden flex flex-col"
-            >
-              {/* Drag Handle */}
-              <div className="flex justify-center pt-3 pb-1">
-                <div className="w-12 h-1 bg-gray-600 rounded-full" />
-              </div>
-
-              {/* Close Button */}
-              <div className="flex-shrink-0 bg-[#1E1E1E] border-b border-gray-800 px-4 py-3 flex items-center justify-between">
-                <h2 className="text-white font-semibold text-lg">Thread Details</h2>
-                <button
+      {!isPrivateBlocked && (
+        <>
+          {/* Mobile Sidebar Drawer */}
+          <AnimatePresence>
+            {isSidebarOpen && (
+              <>
+                {/* Overlay */}
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
                   onClick={() => setIsSidebarOpen(false)}
-                  className="text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto">
-                <MobileSidebarContent
-                  participants={participants}
-                  messages={messages}
-                  currentThread={currentThread}
-                  isMuted={isMuted}
-                  setIsMuted={setIsMuted}
-                  messageFilter={messageFilter}
-                  isCreator={isCreator}
-                  handleRemoveParticipant={handleRemoveParticipant}
-                  handleMessageParticipant={handleMessageParticipant}
-                  handleLeaveThread={handleLeaveThread}
-                  handleDeleteThread={handleDeleteThread}
-                  handleUpdateThreadPrivacy={handleUpdateThreadPrivacy}
-                  handleInviteParticipant={handleInviteParticipant}
-                  handleSetMessageFilter={handleSetMessageFilter}
-                  handleLockThread={handleLockThread}
-                  handleViewReportedMessages={handleViewReportedMessages}
-                  isDeleting={deleteThreadMutation.isPending}
-                  onlineCount={onlineCount}
-                  onJoinThread={handleJoinThread}
-                  isJoined={isJoined}
-                  joinErrorMessage={joinErrorMessage}
-                  isBanned={isBanned}
+                  className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden"
                 />
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
 
-      {/* Thread Sidebar - Desktop Only */}
-      <div className="hidden lg:block lg:w-80 h-screen overflow-y-auto flex-shrink-0 scrollbar-hide">
-        <DesktopSidebarContent
-          participants={participants}
-          messages={messages}
-          currentThread={currentThread}
-          isMuted={isMuted}
-          setIsMuted={setIsMuted}
-          messageFilter={messageFilter}
-          isCreator={isCreator}
-          handleRemoveParticipant={handleRemoveParticipant}
-          handleMessageParticipant={handleMessageParticipant}
-          handleLeaveThread={handleLeaveThread}
-          handleDeleteThread={handleDeleteThread}
-          handleUpdateThreadPrivacy={handleUpdateThreadPrivacy}
-          handleInviteParticipant={handleInviteParticipant}
-          handleSetMessageFilter={handleSetMessageFilter}
-          handleLockThread={handleLockThread}
-          handleViewReportedMessages={handleViewReportedMessages}
-          isDeleting={deleteThreadMutation.isPending}
-          onJoinThread={handleJoinThread}
-          isJoined={isJoined}
-          joinErrorMessage={joinErrorMessage}
-          isBanned={isBanned}
-        />
-      </div>
+                {/* Drawer */}
+                <motion.div
+                  initial={{ x: '100%' }}
+                  animate={{ x: 0 }}
+                  exit={{ x: '100%' }}
+                  transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                  drag="x"
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.2}
+                  onDragEnd={(e, info) => {
+                    if (info.offset.x > 100) {
+                      setIsSidebarOpen(false);
+                    }
+                  }}
+                  className="fixed top-0 right-0 bottom-0 w-[85%] max-w-sm bg-[#121212] shadow-2xl z-[70] lg:hidden overflow-hidden flex flex-col"
+                >
+                  {/* Drag Handle */}
+                  <div className="flex justify-center pt-3 pb-1">
+                    <div className="w-12 h-1 bg-gray-600 rounded-full" />
+                  </div>
+
+                  {/* Close Button */}
+                  <div className="flex-shrink-0 bg-[#1E1E1E] border-b border-gray-800 px-4 py-3 flex items-center justify-between">
+                    <h2 className="text-white font-semibold text-lg">Thread Details</h2>
+                    <button
+                      onClick={() => setIsSidebarOpen(false)}
+                      className="text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto">
+                    <MobileSidebarContent
+                      participants={participants}
+                      messages={messages}
+                      currentThread={currentThread}
+                      isMuted={isMuted}
+                      setIsMuted={setIsMuted}
+                      messageFilter={messageFilter}
+                      isCreator={isCreator}
+                      handleRemoveParticipant={handleRemoveParticipant}
+                      handleMessageParticipant={handleMessageParticipant}
+                      handleLeaveThread={handleLeaveThread}
+                      handleDeleteThread={handleDeleteThread}
+                      handleUpdateThreadPrivacy={handleUpdateThreadPrivacy}
+                      handleInviteParticipant={handleInviteParticipant}
+                      handleSetMessageFilter={handleSetMessageFilter}
+                      handleLockThread={handleLockThread}
+                      handleViewReportedMessages={handleViewReportedMessages}
+                      isDeleting={deleteThreadMutation.isPending}
+                      onlineCount={onlineCount}
+                      onJoinThread={handleJoinThread}
+                      isJoined={isJoined}
+                      joinErrorMessage={joinErrorMessage}
+                      isBanned={isBanned}
+                    />
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+
+          {/* Thread Sidebar - Desktop Only */}
+          <div className="hidden lg:block lg:w-80 h-screen overflow-y-auto flex-shrink-0 scrollbar-hide">
+            <DesktopSidebarContent
+              participants={participants}
+              messages={messages}
+              currentThread={currentThread}
+              isMuted={isMuted}
+              setIsMuted={setIsMuted}
+              messageFilter={messageFilter}
+              isCreator={isCreator}
+              handleRemoveParticipant={handleRemoveParticipant}
+              handleMessageParticipant={handleMessageParticipant}
+              handleLeaveThread={handleLeaveThread}
+              handleDeleteThread={handleDeleteThread}
+              handleUpdateThreadPrivacy={handleUpdateThreadPrivacy}
+              handleInviteParticipant={handleInviteParticipant}
+              handleSetMessageFilter={handleSetMessageFilter}
+              handleLockThread={handleLockThread}
+              handleViewReportedMessages={handleViewReportedMessages}
+              isDeleting={deleteThreadMutation.isPending}
+              onJoinThread={handleJoinThread}
+              isJoined={isJoined}
+              joinErrorMessage={joinErrorMessage}
+              isBanned={isBanned}
+            />
+          </div>
+        </>
+      )}
 
       {/* Report Modal (positioned as overlay, outside flex flow) */}
       <ReportModal

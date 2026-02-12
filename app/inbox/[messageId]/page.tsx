@@ -1,10 +1,13 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react';
+import type { ChangeEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter, useParams } from 'next/navigation';
-import { ArrowLeft, Send, Loader2, Check, CheckCheck, Clock } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Check, CheckCheck, Clock, Image as ImageIcon, X } from 'lucide-react';
 import { createReadReceipt, markConversationRead, useConversationQuery, useMessagesQuery, useSendMessageMutation } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
+import { uploadService } from '@/lib/utils/upload-service';
 import * as rawRealtime from '@/lib/core/supabase/raw-realtime';
 
 export default function ConversationPage() {
@@ -25,12 +28,45 @@ export default function ConversationPage() {
   const orderedMessages = [...messages].reverse();
 
   const [messageText, setMessageText] = useState('');
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [activeImage, setActiveImage] = useState<{ url: string; name?: string } | null>(null);
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const [isOtherOnline, setIsOtherOnline] = useState(false);
   const typingChannelRef = useRef<ReturnType<typeof rawRealtime.createChannel> | null>(null);
   const presenceChannelRef = useRef<ReturnType<typeof rawRealtime.createChannel> | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!selectedImage) {
+      setImagePreviewUrl(null);
+      return;
+    }
+    const previewUrl = URL.createObjectURL(selectedImage);
+    setImagePreviewUrl(previewUrl);
+    return () => {
+      URL.revokeObjectURL(previewUrl);
+    };
+  }, [selectedImage]);
+
+  useEffect(() => {
+    if (!activeImage) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setActiveImage(null);
+      }
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeImage]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -124,7 +160,8 @@ export default function ConversationPage() {
   }, [conversationId, session.user, otherUser?.user?.id, otherUser?.userId]);
 
   const handleSend = async () => {
-    if (!messageText.trim() || !conversationId) return;
+    const trimmedContent = messageText.trim();
+    if ((!trimmedContent && !selectedImage) || !conversationId) return;
 
     if (typingChannelRef.current && session.user) {
       typingChannelRef.current.broadcast('typing', {
@@ -133,14 +170,35 @@ export default function ConversationPage() {
       });
     }
 
-    sendMessageMutation.mutate({
-      content: messageText,
-      messageType: 'text',
-    }, {
-      onSuccess: () => {
-        setMessageText('');
+    try {
+      if (selectedImage) {
+        setIsUploadingImage(true);
+        const upload = await uploadService.uploadFile(
+          selectedImage,
+          'thread-attachments',
+          `direct-messages/${conversationId}`
+        );
+        await sendMessageMutation.mutateAsync({
+          content: trimmedContent,
+          messageType: 'image',
+          attachmentUrl: upload.url,
+        });
+        setSelectedImage(null);
+        if (imageInputRef.current) {
+          imageInputRef.current.value = '';
+        }
+      } else {
+        await sendMessageMutation.mutateAsync({
+          content: trimmedContent,
+          messageType: 'text',
+        });
       }
-    });
+      setMessageText('');
+    } catch (sendError) {
+      console.error('Failed to send message:', sendError);
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -169,6 +227,19 @@ export default function ConversationPage() {
         isTyping: false,
       });
     }, 1200);
+  };
+
+  const handleImageSelect = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    setSelectedImage(file);
+  };
+
+  const clearSelectedImage = () => {
+    setSelectedImage(null);
+    if (imageInputRef.current) {
+      imageInputRef.current.value = '';
+    }
   };
 
   if (isLoading) {
@@ -228,9 +299,9 @@ export default function ConversationPage() {
   );
 
   return (
-    <div className="flex flex-col h-screen bg-[#121212]">
+    <div className="flex flex-col bg-[#121212] h-[calc(100vh-4rem)] md:h-screen overflow-hidden">
       {/* Header */}
-      <div className="flex items-center gap-3 p-4 border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-10">
+      <div className="shrink-0 flex items-center gap-3 p-4 border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-20">
         <button
           onClick={() => router.push('/inbox')}
           className="p-2 hover:bg-gray-800 rounded-lg transition-colors"
@@ -244,9 +315,8 @@ export default function ConversationPage() {
               {otherUser?.user?.anonymousId?.charAt(0) || 'A'}
             </span>
             <span
-              className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#121212] ${
-                isOtherOnline ? 'bg-green-400' : 'bg-gray-500'
-              }`}
+              className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#121212] ${isOtherOnline ? 'bg-green-400' : 'bg-gray-500'
+                }`}
             />
           </div>
           <div>
@@ -269,7 +339,7 @@ export default function ConversationPage() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4">
         {orderedMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-400">
             <p>No messages yet. Start the conversation!</p>
@@ -293,6 +363,31 @@ export default function ConversationPage() {
                   >
                     {msg.isDeleted ? (
                       <p className="text-sm italic opacity-60">Message deleted</p>
+                    ) : msg.messageType === 'image' && msg.attachmentUrl ? (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          className="block max-w-[240px] cursor-zoom-in rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-purple-400/60"
+                          onClick={() => setActiveImage({ url: msg.attachmentUrl, name: 'Image' })}
+                          aria-label="Open image preview"
+                        >
+                          <img
+                            src={msg.attachmentUrl}
+                            alt="Message attachment"
+                            className="w-full h-auto max-h-64 object-cover"
+                            draggable={false}
+                            onContextMenu={(event) => event.preventDefault()}
+                          />
+                        </button>
+                        {msg.content?.trim() && (
+                          <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                            {msg.content}
+                          </p>
+                        )}
+                        {msg.isEdited && (
+                          <p className="text-xs opacity-60">Edited</p>
+                        )}
+                      </div>
                     ) : (
                       <>
                         <p className="text-sm whitespace-pre-wrap leading-relaxed">
@@ -328,35 +423,109 @@ export default function ConversationPage() {
       </div>
 
       {/* Message Input - Fixed at bottom */}
-      <div className="border-t border-gray-800 bg-gray-900/95 backdrop-blur-sm p-4">
-        <div className="flex gap-2">
-          <textarea
-            value={messageText}
-            onChange={(e) => handleTyping(e.target.value)}
-            onKeyPress={handleKeyPress}
-            onBlur={() => {
-              typingChannelRef.current?.broadcast('typing', {
-                userId: session.user?.id,
-                isTyping: false,
-              });
-            }}
-            placeholder="Type a message..."
-            rows={1}
-            className="flex-1 px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
-          />
+      <div className="shrink-0 border-t border-gray-800 bg-gray-900/95 backdrop-blur-sm p-4 sticky bottom-0 z-20 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div className="max-w-4xl mx-auto flex items-end gap-2">
+          <div className="flex-1 flex flex-col space-y-2">
+            {imagePreviewUrl && (
+              <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-700">
+                <img
+                  src={imagePreviewUrl}
+                  alt="Selected image"
+                  className="w-full h-full object-cover"
+                  draggable={false}
+                  onContextMenu={(event) => event.preventDefault()}
+                />
+                <button
+                  type="button"
+                  onClick={clearSelectedImage}
+                  className="absolute top-1 right-1 w-6 h-6 rounded-full bg-gray-900/80 text-white flex items-center justify-center hover:bg-gray-800"
+                  aria-label="Remove image"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-end bg-gray-800 border border-gray-700 rounded-xl focus-within:ring-2 focus-within:ring-purple-500 transition-all">
+              <textarea
+                value={messageText}
+                onChange={(e) => handleTyping(e.target.value)}
+                onKeyPress={handleKeyPress}
+                onBlur={() => {
+                  typingChannelRef.current?.broadcast('typing', {
+                    userId: session.user?.id,
+                    isTyping: false,
+                  });
+                }}
+                placeholder="Your message..."
+                rows={1}
+                className="flex-1 px-4 py-3 bg-transparent text-white text-sm placeholder-gray-500 focus:outline-none resize-none"
+              />
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={handleImageSelect}
+              />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                disabled={sendMessageMutation.isPending || isUploadingImage}
+                className="p-3 text-gray-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                aria-label="Add image"
+              >
+                <ImageIcon className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
           <button
             onClick={handleSend}
-            disabled={!messageText.trim() || sendMessageMutation.isPending}
-            className="px-4 py-3 bg-purple-600 hover:bg-purple-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white font-semibold transition-all flex items-center justify-center gap-2"
+            disabled={(!messageText.trim() && !selectedImage) || sendMessageMutation.isPending || isUploadingImage}
+            className="shrink-0 w-11 h-11 bg-purple-600 hover:bg-purple-700 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-white transition-all flex items-center justify-center mb-0.5"
+            aria-label="Send message"
           >
-            {sendMessageMutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+            {sendMessageMutation.isPending || isUploadingImage ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
             ) : (
-              <Send className="w-4 h-4" />
+              <Send className="w-5 h-5" />
             )}
           </button>
         </div>
       </div>
+      {activeImage && typeof window !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[1100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-6"
+          onClick={() => setActiveImage(null)}
+          onWheel={(event) => event.preventDefault()}
+          onTouchMove={(event) => event.preventDefault()}
+          role="dialog"
+          aria-modal="true"
+        >
+          <button
+            type="button"
+            className="absolute top-4 right-4 md:top-6 md:right-6 inline-flex items-center gap-2 rounded-full bg-white/10 text-white border border-white/20 px-3 py-1.5 text-xs uppercase tracking-widest hover:bg-white/20 backdrop-blur"
+            onClick={() => setActiveImage(null)}
+            aria-label="Close image preview"
+          >
+            Close
+          </button>
+          <div
+            className="relative max-w-[96vw] max-h-[92vh]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <img
+              src={activeImage.url}
+              alt={activeImage.name || 'Image preview'}
+              className="max-w-[96vw] max-h-[92vh] object-contain rounded-2xl shadow-2xl"
+              draggable={false}
+              onContextMenu={(event) => event.preventDefault()}
+            />
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

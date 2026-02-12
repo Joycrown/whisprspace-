@@ -235,6 +235,7 @@ export async function POST(request: NextRequest) {
           name: user.user_metadata?.username || user.user_metadata?.full_name || undefined,
         },
         meta: {
+          paymentType: 'thread_purchase',
           threadId,
           userId: user.id,
           creatorId: thread.creator_id,

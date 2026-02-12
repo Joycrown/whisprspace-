@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  FaPaperPlane, FaImage, FaPaperclip, FaTimes
+  FaPaperPlane, FaImage, FaTimes
 } from 'react-icons/fa';
 import { Message } from '@/types';
 
@@ -33,7 +33,6 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Auto-resize textarea
@@ -62,7 +61,9 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files) {
-      setAttachments(prev => [...prev, ...Array.from(files)]);
+      const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'));
+      if (imageFiles.length === 0) return;
+      setAttachments(prev => [...prev, ...imageFiles]);
     }
   };
 
@@ -167,23 +168,6 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
                 disabled={isDisabled}
               >
                 <FaImage className="w-5 h-5" />
-              </button>
-
-              <input
-                type="file"
-                multiple
-                hidden
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                disabled={isDisabled}
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="text-gray-400 hover:text-purple-400 transition-colors p-1"
-                type="button"
-                disabled={isDisabled}
-              >
-                <FaPaperclip className="w-4 h-4" />
               </button>
             </div>
           </div>

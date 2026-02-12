@@ -123,22 +123,24 @@ const ProfilePage = () => {
         <div className="bg-[#1E1E1E] rounded-lg p-6 mb-6">
           <div className="flex items-center gap-4 mb-4">
             <div
-              className="w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center text-white text-xl sm:text-3xl font-bold bg-purple-600 flex-shrink-0"
+              className="w-12 h-12 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-white text-lg sm:text-2xl font-bold bg-purple-600 flex-shrink-0"
             >
               {(currentUser.username || currentUser.anonymousId).charAt(0).toUpperCase()}
             </div>
             <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h2 className="text-2xl font-bold text-white">{currentUser.username || currentUser.anonymousId}</h2>
+              <div className="flex items-center gap-2 min-w-0">
+                <h2 className="text-2xl font-bold text-white flex-1 min-w-0">
+                  {currentUser.username || currentUser.anonymousId}
+                </h2>
                 {currentUser.isPremium && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 text-xs font-semibold">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 text-xs font-semibold flex-shrink-0">
                     <Crown className="w-3 h-3" />
                     Premium
                   </span>
                 )}
                 <button
                   onClick={() => setShowUsernameModal(true)}
-                  className="p-2 hover:bg-gray-700 rounded-full transition-colors group"
+                  className="p-2 hover:bg-gray-700 rounded-full transition-colors group flex-shrink-0"
                   title="Edit username"
                 >
                   <Edit3 className="w-5 h-5 text-gray-400 group-hover:text-purple-400 transition-colors" />

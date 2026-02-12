@@ -7,7 +7,6 @@ import { motion } from 'framer-motion';
 import {
   FaRegHeart,
   FaHeart,
-  FaStar,
   FaShareAlt,
   FaTwitter, FaFacebook, FaWhatsapp, FaLinkedinIn, FaInstagram, FaEnvelope,
   FaBars
@@ -76,12 +75,16 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
 
   if (!thread) return null;
 
-  const threadUrl = typeof window !== 'undefined' ? `${window.location.origin}/threads/${thread.id}` : '';
+  const threadPath = `/threads/${thread.id}`;
+  const threadUrl = typeof window !== 'undefined' ? `${window.location.origin}${threadPath}` : '';
+  const shareUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/auth?redirect=${encodeURIComponent(threadPath)}`
+    : '';
   const shareText = `Check out this thread: ${thread.title}`;
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(threadUrl);
+      await navigator.clipboard.writeText(shareUrl);
       alert('Link copied to clipboard!');
     } catch (err) {
       console.error('Failed to copy: ', err);
@@ -90,12 +93,12 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
   };
 
   const handleTwitterShare = () => {
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(threadUrl)}`, '_blank');
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`, '_blank');
     setShowShareDropdown(false);
   };
 
   const handleFacebookShare = () => {
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(threadUrl)}`, '_blank');
+    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`, '_blank');
     setShowShareDropdown(false);
   };
 
@@ -104,19 +107,19 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
     // A common workaround is to copy the link and instruct the user to paste it.
     // For a more integrated experience, one might need to use their API if available, or a universal share dialog.
     // For now, we'll copy the link and open Threads (if a universal link exists or prompt user).
-    navigator.clipboard.writeText(threadUrl);
+    navigator.clipboard.writeText(shareUrl);
     alert('Link copied to clipboard. Please paste it in Threads.');
     // Optionally open Threads app/web if a universal link is known.
     setShowShareDropdown(false);
   };
 
   const handleWhatsappShare = () => {
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText + " " + threadUrl)}`, '_blank');
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText + " " + shareUrl)}`, '_blank');
     setShowShareDropdown(false);
   };
 
   const handleLinkedInShare = () => {
-    window.open(`https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(threadUrl)}&title=${encodeURIComponent(thread.title)}&summary=${encodeURIComponent(thread.content || '')}`, '_blank');
+    window.open(`https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(shareUrl)}&title=${encodeURIComponent(thread.title)}&summary=${encodeURIComponent(thread.content || '')}`, '_blank');
     setShowShareDropdown(false);
   };
 
@@ -124,13 +127,13 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
     // Instagram sharing is complex, usually done via their app with specific APIs.
     // A direct web intent is not straightforward for posts/stories like other platforms.
     // For now, we'll copy the link and inform the user.
-    navigator.clipboard.writeText(threadUrl);
+    navigator.clipboard.writeText(shareUrl);
     alert('Link copied to clipboard. Please paste it in Instagram.');
     setShowShareDropdown(false);
   };
 
   const handleEmailShare = () => {
-    window.open(`mailto:?subject=${encodeURIComponent(shareText)}&body=${encodeURIComponent(threadUrl)}`, '_blank');
+    window.open(`mailto:?subject=${encodeURIComponent(shareText)}&body=${encodeURIComponent(shareUrl)}`, '_blank');
     setShowShareDropdown(false);
   };
 
@@ -286,17 +289,13 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
                 )}
                 <span className="text-xs md:text-sm text-gray-400">{thread.likes}</span>
               </motion.button>
-
-              <div className="flex items-center gap-1 md:gap-1.5 text-gray-300">
-                <FaStar className="text-yellow-500 w-4 h-4 md:w-5 md:h-5" />
-                <span className="text-xs md:text-sm">{thread.rating.toFixed(1)}</span>
-              </div>
             </div>
 
             <div className="relative share-dropdown-container" ref={shareButtonRef}>
               <button
                 onClick={() => setShowShareDropdown(!showShareDropdown)}
                 className="text-gray-400 hover:text-white transition-colors p-2 rounded-full hover:bg-gray-700"
+                title="Share thread"
               >
                 <FaShareAlt className="w-4 h-4" />
               </button>
