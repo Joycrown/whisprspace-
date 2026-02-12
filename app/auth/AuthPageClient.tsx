@@ -248,10 +248,10 @@ const AuthPage = () => {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center bg-white p-4"
+      className="min-h-[100dvh] flex flex-col items-center justify-center bg-white px-4 py-6 sm:py-10"
     >
       {/* Logo and Tagline */}
-      <div className="mb-8 text-center">
+      <div className="mb-6 sm:mb-8 text-center">
         <h1 className="text-4xl font-bold text-gray-900 mb-1">WhisprSpace</h1>
         <p className="text-gray-600 text-md">Speak freely, stay hidden</p>
       </div>
