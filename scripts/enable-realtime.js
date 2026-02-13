@@ -23,6 +23,16 @@ async function enableRealtime() {
 
   const migrations = [
     'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.messages;',
+    'ALTER TABLE public.direct_messages REPLICA IDENTITY FULL;',
+    'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.direct_messages;',
+    'ALTER TABLE public.conversations REPLICA IDENTITY FULL;',
+    'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.conversations;',
+    'ALTER TABLE public.conversation_participants REPLICA IDENTITY FULL;',
+    'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.conversation_participants;',
+    'ALTER TABLE public.message_read_receipts REPLICA IDENTITY FULL;',
+    'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.message_read_receipts;',
+    'ALTER TABLE public.message_delivery_receipts REPLICA IDENTITY FULL;',
+    'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.message_delivery_receipts;',
     'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.notifications;',
     'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.threads;',
     'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.thread_likes;',
