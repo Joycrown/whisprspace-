@@ -35,7 +35,13 @@ async function enableRealtime() {
     'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.message_delivery_receipts;',
     'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.notifications;',
     'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.threads;',
+    'ALTER TABLE public.thread_participants REPLICA IDENTITY FULL;',
+    'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.thread_participants;',
     'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.thread_likes;',
+    'ALTER TABLE public.message_likes REPLICA IDENTITY FULL;',
+    'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.message_likes;',
+    'ALTER TABLE public.message_reactions REPLICA IDENTITY FULL;',
+    'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.message_reactions;',
     'ALTER PUBLICATION supabase_realtime ADD TABLE IF NOT EXISTS public.poll_votes;',
   ];
 
