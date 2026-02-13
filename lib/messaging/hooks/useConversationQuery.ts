@@ -58,7 +58,6 @@ export function useConversationQuery(
     table: 'direct_messages',
     event: '*',
     queryKey: queryKeys.conversations.detail(conversationId || ''),
-    filter: conversationId ? `conversation_id=eq.${conversationId}` : undefined,
     schema: 'public',
     enabled: realtimeEnabled,
   })

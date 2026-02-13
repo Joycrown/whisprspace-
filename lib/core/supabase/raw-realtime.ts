@@ -45,6 +45,8 @@ class RealtimeSocket {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private channels = new Map<string, RealtimeChannel>();
   private pendingJoins = new Map<number, { resolve: () => void, reject: (err: any) => void, topic: string }>();
+  private channelRejoinTimers = new Map<string, NodeJS.Timeout>();
+  private channelRejoinAttempts = new Map<string, number>();
   private reconnectTimer: NodeJS.Timeout | null = null;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 10;
@@ -75,6 +77,7 @@ class RealtimeSocket {
 
   private disconnect() {
     this.stopHeartbeat();
+    this.clearAllChannelRejoins();
     this.isConnecting = false;
     this.connectPromise = null;
     this.pendingJoins.forEach(({ reject }) => {
@@ -213,14 +216,19 @@ class RealtimeSocket {
       const pending = this.pendingJoins.get(ref);
       if (pending) {
         if (msg.payload?.status === 'ok') {
-
+          this.clearChannelRejoin(pending.topic);
           pending.resolve();
         } else {
-          console.error(`[RawRealtime] ❌ Channel join failed: ${pending.topic}`, msg.payload?.response);
+          console.error(`[RawRealtime] Channel join failed: ${pending.topic}`, msg.payload?.response);
+          this.scheduleChannelRejoin(pending.topic);
           pending.reject(new Error(msg.payload?.response?.reason || 'Join failed'));
         }
         this.pendingJoins.delete(ref);
       }
+    }
+
+    if (msg.event === 'phx_error' || msg.event === 'phx_close') {
+      this.scheduleChannelRejoin(msg.topic);
     }
 
     // Route message to channel
@@ -231,11 +239,59 @@ class RealtimeSocket {
   }
 
   registerChannel(channel: RealtimeChannel) {
+    this.clearChannelRejoin(channel.topic);
     this.channels.set(channel.topic, channel);
   }
 
   unregisterChannel(topic: string) {
+    this.clearChannelRejoin(topic);
     this.channels.delete(topic);
+  }
+
+  private clearChannelRejoin(topic: string) {
+    const timer = this.channelRejoinTimers.get(topic);
+    if (timer) {
+      clearTimeout(timer);
+      this.channelRejoinTimers.delete(topic);
+    }
+    this.channelRejoinAttempts.delete(topic);
+  }
+
+  private clearAllChannelRejoins() {
+    this.channelRejoinTimers.forEach((timer) => clearTimeout(timer));
+    this.channelRejoinTimers.clear();
+    this.channelRejoinAttempts.clear();
+  }
+
+  private scheduleChannelRejoin(topic: string) {
+    if (!topic) return;
+    if (this.channelRejoinTimers.has(topic)) return;
+
+    const channel = this.channels.get(topic);
+    if (!channel) return;
+
+    const attempt = this.channelRejoinAttempts.get(topic) || 0;
+    const delay = Math.min(1000 * Math.pow(2, attempt), 15000);
+
+    const timer = setTimeout(() => {
+      this.channelRejoinTimers.delete(topic);
+      const activeChannel = this.channels.get(topic);
+      if (!activeChannel) {
+        this.channelRejoinAttempts.delete(topic);
+        return;
+      }
+
+      this.joinChannel(activeChannel)
+        .then(() => {
+          this.clearChannelRejoin(topic);
+        })
+        .catch(() => {
+          this.channelRejoinAttempts.set(topic, attempt + 1);
+          this.scheduleChannelRejoin(topic);
+        });
+    }, delay);
+
+    this.channelRejoinTimers.set(topic, timer);
   }
 
   async joinChannel(channel: RealtimeChannel): Promise<void> {
@@ -377,9 +433,13 @@ export function subscribeToTable(
   }
 ): () => void {
   // Ensure each subscriber gets an isolated topic to avoid callback collisions in shared maps.
-  const channelName = `realtime:${options.schema || 'public'}:${table}${
-    options.filter ? `:${options.filter}` : ''
-  }:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
+  // Keep topic characters conservative; raw filter strings can include symbols such as '=' and '.'
+  // which may break topic validation on some Realtime deployments.
+  const schema = options.schema || 'public';
+  const filterHash = options.filter
+    ? Array.from(options.filter).reduce((hash, char) => ((hash * 31) + char.charCodeAt(0)) >>> 0, 0).toString(36)
+    : 'nofilter';
+  const channelName = `realtime:${schema}:${table}:${filterHash}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
 
   const channel = new RealtimeChannel({
     channelName,
@@ -387,7 +447,7 @@ export function subscribeToTable(
       postgres_changes: [
         {
           event: options.event || '*',
-          schema: options.schema || 'public',
+          schema,
           table,
           filter: options.filter,
         },
@@ -496,3 +556,4 @@ export function subscribeToThread(
     unsubscribers.forEach((unsub) => unsub());
   };
 }
+

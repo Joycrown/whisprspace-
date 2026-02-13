@@ -95,6 +95,7 @@ export async function select<T = any>(
     const res = await fetch(url, {
       method: 'GET',
       headers,
+      cache: 'no-store',
     });
 
     if (!res.ok) {
