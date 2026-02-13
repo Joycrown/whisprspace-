@@ -69,6 +69,8 @@ const ThreadPage = () => {
   const hasEverJoinedRef = useRef(false);
   const [showMessageOptions, setShowMessageOptions] = useState(false);
   const [messageTarget, setMessageTarget] = useState<Participant | null>(null);
+  const [isPollCollapsed, setIsPollCollapsed] = useState(false);
+  const lastScrollIntentRef = useRef(0);
 
   // Realtime hooks
   const threadIdParam = Array.isArray(params.threadId) ? params.threadId[0] : params.threadId;
@@ -592,6 +594,30 @@ const ThreadPage = () => {
   const hasAlreadyVoted = useMemo(() =>
     currentThread?.pollOptions?.some(option => option.hasVoted) || false
     , [currentThread?.pollOptions]);
+  const totalPollVotes = useMemo(() => {
+    return currentThread?.pollOptions?.reduce((sum, option) => sum + (option.votes || 0), 0) || 0;
+  }, [currentThread?.pollOptions]);
+
+  useEffect(() => {
+    setIsPollCollapsed(false);
+    lastScrollIntentRef.current = 0;
+  }, [currentThread?.id]);
+
+  const markScrollIntent = () => {
+    lastScrollIntentRef.current = Date.now();
+  };
+
+  const handleMessagesScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    if (currentThread?.type !== 'poll') return;
+    if (isPollCollapsed) return;
+
+    const isLikelyUserScroll = Date.now() - lastScrollIntentRef.current < 800;
+    if (!isLikelyUserScroll) return;
+
+    if (event.currentTarget.scrollTop > 0) {
+      setIsPollCollapsed(true);
+    }
+  };
 
   const handleVote = (optionId: string) => {
     if (isBanned) {
@@ -646,39 +672,87 @@ const ThreadPage = () => {
     <>
       {/* Poll Section */}
       {currentThread.type === 'poll' && currentThread.pollOptions && (
-        <div className="p-3 md:p-4 border-b border-gray-800 bg-gray-900/50 flex-shrink-0">
-          <h2 className="text-lg md:text-xl font-bold text-white mb-3 md:mb-4">Poll: {currentThread.title}</h2>
-          <p className="text-sm md:text-base text-gray-400 mb-3 md:mb-4">{currentThread.content}</p>
-          <div className="space-y-2 md:space-y-3">
-            {currentThread.pollOptions.map(option => (
-              <div
-                key={option.id}
-                className={`relative flex items-center gap-2 md:gap-3 p-2.5 md:p-3 rounded-lg transition-colors overflow-hidden min-h-[48px] ${option.hasVoted
-                  ? 'bg-purple-900/50 border border-purple-500'
-                  : hasAlreadyVoted
-                    ? 'bg-gray-800/50 border border-gray-700 opacity-80 cursor-default'
-                    : 'bg-gray-800 hover:bg-gray-700 active:bg-gray-600 cursor-pointer'
-                  }`}
-                onClick={() => !hasAlreadyVoted && handleVote(option.id)}
-              >
-                <motion.div
-                  className="absolute inset-0 bg-gradient-to-r from-purple-600/30 to-transparent"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${option.percentage || 0}%` }}
-                  transition={{ duration: 0.5 }}
-                />
-                <div className="relative z-10 flex items-center justify-between w-full gap-2">
-                  <span className="text-sm md:text-base font-medium text-white">{option.text}</span>
-                  <span className="text-xs md:text-sm text-gray-400 whitespace-nowrap">{option.votes} ({option.percentage}%)</span>
-                </div>
+        <div className="border-b border-gray-800 bg-gray-900/50 flex-shrink-0">
+          <button
+            type="button"
+            className="w-full px-3 md:px-4 py-3 text-left hover:bg-gray-800/40 transition-colors"
+            onClick={() => setIsPollCollapsed(prev => !prev)}
+            aria-expanded={!isPollCollapsed}
+            aria-label={isPollCollapsed ? 'Expand poll' : 'Collapse poll'}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-lg md:text-xl font-bold text-white">Poll: {currentThread.title}</h2>
+                {isPollCollapsed ? (
+                  <p className="text-xs md:text-sm text-gray-400 mt-1">
+                    {totalPollVotes} vote{totalPollVotes === 1 ? '' : 's'} - Tap to expand
+                  </p>
+                ) : (
+                  <p className="text-sm md:text-base text-gray-400 mt-2">{currentThread.content}</p>
+                )}
               </div>
-            ))}
-          </div>
+              <span
+                className={`mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full border border-gray-600 text-gray-300 transition-transform ${isPollCollapsed ? '' : 'rotate-180'}`}
+                aria-hidden="true"
+              >
+                v
+              </span>
+            </div>
+          </button>
+
+          <AnimatePresence initial={false}>
+            {!isPollCollapsed && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                className="overflow-hidden"
+              >
+                <div className="px-3 md:px-4 pb-3 md:pb-4 space-y-2 md:space-y-3">
+                  {currentThread.pollOptions.map(option => (
+                    <div
+                      key={option.id}
+                      className={`relative flex items-center gap-2 md:gap-3 p-2.5 md:p-3 rounded-lg transition-colors overflow-hidden min-h-[48px] ${option.hasVoted
+                        ? 'bg-purple-900/50 border border-purple-500'
+                        : hasAlreadyVoted
+                          ? 'bg-gray-800/50 border border-gray-700 opacity-80 cursor-default'
+                          : 'bg-gray-800 hover:bg-gray-700 active:bg-gray-600 cursor-pointer'
+                        }`}
+                      onClick={() => !hasAlreadyVoted && handleVote(option.id)}
+                    >
+                      <motion.div
+                        className="absolute inset-0 bg-gradient-to-r from-purple-600/30 to-transparent"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${option.percentage || 0}%` }}
+                        transition={{ duration: 0.5 }}
+                      />
+                      <div className="relative z-10 flex items-center justify-between w-full gap-2">
+                        <span className="text-sm md:text-base font-medium text-white">{option.text}</span>
+                        <span className="text-xs md:text-sm text-gray-400 whitespace-nowrap">{option.votes} ({option.percentage}%)</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
 
       {/* Messages Area - Scrollable */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pb-[calc(8rem+env(safe-area-inset-bottom))] md:pb-20 scrollbar-hide">
+      <div
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pb-[calc(8rem+env(safe-area-inset-bottom))] md:pb-20 scrollbar-hide"
+        onScroll={handleMessagesScroll}
+        onWheel={markScrollIntent}
+        onTouchStart={markScrollIntent}
+        onTouchMove={markScrollIntent}
+        onPointerDown={(event) => {
+          if (event.currentTarget === event.target) {
+            markScrollIntent();
+          }
+        }}
+      >
         <ThreadMessages
           messages={messages}
           currentUserId={currentUserId}

@@ -51,12 +51,19 @@ export interface DirectMessage {
     avatarUrl?: string
   }
   readReceipts?: MessageReadReceipt[]
+  deliveryReceipts?: MessageDeliveryReceipt[]
 }
 
 export interface MessageReadReceipt {
   messageId: string
   userId: string
   readAt: string
+}
+
+export interface MessageDeliveryReceipt {
+  messageId: string
+  userId: string
+  deliveredAt: string
 }
 
 const mapUser = (user: any) => {
@@ -73,6 +80,12 @@ const mapReadReceipt = (receipt: any): MessageReadReceipt => ({
   messageId: receipt.message_id ?? receipt.messageId,
   userId: receipt.user_id ?? receipt.userId,
   readAt: receipt.read_at ?? receipt.readAt,
+})
+
+const mapDeliveryReceipt = (receipt: any): MessageDeliveryReceipt => ({
+  messageId: receipt.message_id ?? receipt.messageId,
+  userId: receipt.user_id ?? receipt.userId,
+  deliveredAt: receipt.delivered_at ?? receipt.deliveredAt,
 })
 
 const mapDirectMessage = (message: any): DirectMessage => ({
@@ -96,6 +109,9 @@ const mapDirectMessage = (message: any): DirectMessage => ({
   readReceipts: message.message_read_receipts
     ? message.message_read_receipts.map(mapReadReceipt)
     : message.readReceipts?.map(mapReadReceipt),
+  deliveryReceipts: message.message_delivery_receipts
+    ? message.message_delivery_receipts.map(mapDeliveryReceipt)
+    : message.deliveryReceipts?.map(mapDeliveryReceipt),
 })
 
 const mapParticipant = (row: any): ConversationParticipant => ({
@@ -471,7 +487,8 @@ export const fetchMessages = async (
       select: `
         *,
         sender:users!direct_messages_sender_id_fkey(id, anonymous_id, avatar_url),
-        message_read_receipts(*)
+        message_read_receipts(*),
+        message_delivery_receipts(*)
       `.replace(/\s+/g, ''),
       filters: { 
         'conversation_id': rawDb.filter.eq(conversationId),
@@ -527,7 +544,9 @@ export const sendMessage = async (
     const { data, error } = await rawDb.select<any>('direct_messages', {
       select: `
         *,
-        sender:users!direct_messages_sender_id_fkey(id, anonymous_id, avatar_url)
+        sender:users!direct_messages_sender_id_fkey(id, anonymous_id, avatar_url),
+        message_read_receipts(*),
+        message_delivery_receipts(*)
       `.replace(/\s+/g, ''),
       filters: { 'id': rawDb.filter.eq(messageId) },
       single: true
@@ -659,6 +678,62 @@ export const createReadReceipt = async (
 }
 
 /**
+ * Create/update delivery receipt for a message
+ */
+export const createDeliveryReceipt = async (
+  messageId: string
+): Promise<{ success: boolean; error: string | null }> => {
+  try {
+    const session = rawAuth.getSession();
+    const user = session?.user;
+
+    if (!user) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    const { error } = await rawDb.rpc('mark_message_delivered', {
+      p_message_id: messageId,
+      p_user_id: user.id,
+    });
+
+    if (error) throw error
+
+    return { success: true, error: null }
+  } catch (error: any) {
+    console.error('Create delivery receipt error:', error)
+    return { success: false, error: error.message || 'Failed to create delivery receipt' }
+  }
+}
+
+/**
+ * Create/update delivery receipts for all messages in a conversation
+ */
+export const markConversationDelivered = async (
+  conversationId: string
+): Promise<{ success: boolean; error: string | null }> => {
+  try {
+    const session = rawAuth.getSession();
+    const user = session?.user;
+
+    if (!user) {
+      return { success: false, error: 'User not authenticated' }
+    }
+
+    const { error } = await rawDb.rpc('mark_conversation_delivered', {
+      p_conversation_id: conversationId,
+      p_user_id: user.id,
+    });
+
+    if (error) throw error
+
+    return { success: true, error: null }
+  } catch (error: any) {
+    console.error('Mark conversation delivered error:', error)
+    return { success: false, error: error.message || 'Failed to mark conversation delivered' }
+  }
+}
+
+/**
  * Mute/unmute conversation
  */
 export const toggleMuteConversation = async (
@@ -740,7 +815,9 @@ export const subscribeToMessages = (
               const { data } = await rawDb.select<any>('direct_messages', {
                   select: `
                     *,
-                    sender:users!direct_messages_sender_id_fkey(id, anonymous_id, avatar_url)
+                    sender:users!direct_messages_sender_id_fkey(id, anonymous_id, avatar_url),
+                    message_read_receipts(*),
+                    message_delivery_receipts(*)
                   `.replace(/\s+/g, ''),
                   filters: { 'id': rawDb.filter.eq(msgId) },
                   single: true

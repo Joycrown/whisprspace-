@@ -5,7 +5,7 @@ import type { ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Send, Loader2, Check, CheckCheck, Clock, Image as ImageIcon, X } from 'lucide-react';
-import { createReadReceipt, markConversationRead, useConversationQuery, useMessagesQuery, useSendMessageMutation } from '@/lib/messaging';
+import { createReadReceipt, markConversationDelivered, markConversationRead, useConversationQuery, useMessagesQuery, useSendMessageMutation } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
 import { uploadService } from '@/lib/utils/upload-service';
 import * as rawRealtime from '@/lib/core/supabase/raw-realtime';
@@ -79,6 +79,15 @@ export default function ConversationPage() {
 
   useEffect(() => {
     if (!session.user || !conversationId) return;
+
+    const hasUndelivered = orderedMessages.some((msg) =>
+      msg.senderId !== session.user?.id &&
+      !msg.deliveryReceipts?.some((receipt) => receipt.userId === session.user?.id)
+    );
+
+    if (hasUndelivered) {
+      markConversationDelivered(conversationId);
+    }
 
     orderedMessages.forEach((msg) => {
       if (msg.senderId === session.user?.id) return;
@@ -287,7 +296,10 @@ export default function ConversationPage() {
     if (otherUserId && msg.readReceipts?.some((receipt: any) => receipt.userId === otherUserId)) {
       return 'Read';
     }
-    return 'Delivered';
+    if (otherUserId && msg.deliveryReceipts?.some((receipt: any) => receipt.userId === otherUserId)) {
+      return 'Delivered';
+    }
+    return 'Sent';
   };
 
   const renderTypingDots = () => (
@@ -408,7 +420,8 @@ export default function ConversationPage() {
                       {status && (
                         <span className="flex items-center gap-1">
                           {status === 'Sending...' && <Clock className="w-3 h-3" />}
-                          {status === 'Delivered' && <Check className="w-3 h-3" />}
+                          {status === 'Sent' && <Check className="w-3 h-3" />}
+                          {status === 'Delivered' && <CheckCheck className="w-3 h-3" />}
                           {status === 'Read' && <CheckCheck className="w-3 h-3 text-green-300" />}
                         </span>
                       )}

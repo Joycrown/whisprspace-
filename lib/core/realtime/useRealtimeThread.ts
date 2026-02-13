@@ -11,7 +11,6 @@ import { transformMessage } from '@/lib/threads/thread-service'
  */
 export const useRealtimeThread = (threadId: string | null, pollId?: string | null) => {
   const { session } = useUserStore()
-  const { updateThread } = useThreadStore()
   const queryClient = useQueryClient()
   const [onlineUsers, setOnlineUsers] = useState<any[]>([])
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set())
@@ -87,6 +86,71 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
     });
   };
 
+  const upsertRealtimeMessage = (payload: any) => {
+    if (!threadId) return
+    const rawIncoming = payload?.new
+    if (!rawIncoming?.id) return
+
+    queryClient.setQueryData(queryKeys.threads.detail(threadId), (oldData: any) => {
+      if (!oldData) return oldData
+
+      const existingMessages = Array.isArray(oldData.messages) ? oldData.messages : []
+      if (existingMessages.some((message: any) => message.id === rawIncoming.id)) {
+        return oldData
+      }
+
+      const senderId = rawIncoming.sender_id
+      const participant = (oldData.participants || []).find((p: any) => p.id === senderId)
+      const senderFallback = senderId
+        ? {
+            id: senderId,
+            username: participant?.name || (session.user?.id === senderId ? session.user?.username : undefined),
+            anonymous_id: participant?.anonymousId || (session.user?.id === senderId ? session.user?.anonymousId : `ANON_${senderId.substring(0, 8)}`),
+            avatar_url: participant?.avatar || '#cccccc',
+            is_premium: participant?.isPremium ?? (session.user?.id === senderId ? session.user?.isPremium : false),
+          }
+        : undefined
+
+      const transformedIncoming = transformMessage(
+        {
+          ...rawIncoming,
+          sender: rawIncoming.sender || senderFallback,
+          message_likes: rawIncoming.message_likes || [],
+          message_reactions: rawIncoming.message_reactions || [],
+        },
+        session.user?.id
+      )
+
+      const optimisticIndex = existingMessages.findIndex(
+        (message: any) =>
+          message.id?.startsWith('optimistic-') &&
+          message.authorId === transformedIncoming.authorId &&
+          message.content === transformedIncoming.content
+      )
+
+      const nextMessages = [...existingMessages]
+      if (optimisticIndex !== -1) {
+        nextMessages[optimisticIndex] = {
+          ...nextMessages[optimisticIndex],
+          ...transformedIncoming,
+          status: 'sent',
+        }
+      } else {
+        nextMessages.push({
+          ...transformedIncoming,
+          status: 'sent',
+        })
+      }
+
+      const currentCount = typeof oldData.messageCount === 'number' ? oldData.messageCount : 0
+      return {
+        ...oldData,
+        messages: nextMessages,
+        messageCount: Math.max(currentCount, nextMessages.length),
+      }
+    })
+  }
+
   useEffect(() => {
 
     if (!threadId) {
@@ -114,12 +178,10 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
       const unsubThreadEvents = realtimeService.subscribeToThreadEvents({
         threadId,
         onMessageInsert: (payload) => {
-          // 🛡️ CRITICAL FILTER: Ignore own messages received via realtime
-
-
-          
-          // For other users, we invalidate to fetch the full rich message (with joins)
-          queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!) });
+          // Apply message immediately, then hydrate richer fields from backend.
+          upsertRealtimeMessage(payload)
+          queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!), refetchType: 'active' });
+          queryClient.invalidateQueries({ queryKey: queryKeys.threads.lists() });
         },
         
         onThreadUpdate: (payload) => {

@@ -6,7 +6,9 @@ import {
   sendMessage,
   editMessage,
   deleteMessage,
+  markConversationDelivered,
   markConversationRead,
+  createDeliveryReceipt,
   createReadReceipt,
   toggleMuteConversation,
   getUnreadCount,
@@ -321,6 +323,18 @@ export const useConversation = (conversationId: string, options?: {
     }
   }, [conversationId, options?.autoMarkRead, messages.length, markRead])
 
+  // Persist delivered receipts for visible messages in this conversation.
+  useEffect(() => {
+    const hasUndelivered = messages.some((message) =>
+      message.senderId !== session.user?.id &&
+      !message.deliveryReceipts?.some((receipt) => receipt.userId === session.user?.id)
+    )
+
+    if (conversationId && hasUndelivered) {
+      markConversationDelivered(conversationId)
+    }
+  }, [conversationId, messages, session.user?.id])
+
   // Subscribe to real-time messages
   useEffect(() => {
     if (!conversationId || !options?.enableRealtime) return
@@ -338,8 +352,11 @@ export const useConversation = (conversationId: string, options?: {
       setTimeout(scrollToBottom, 100)
 
       // Auto-mark as read if not from current user
-      if (newMessage.senderId !== session.user?.id && options.autoMarkRead) {
-        createReadReceipt(newMessage.id)
+      if (newMessage.senderId !== session.user?.id) {
+        createDeliveryReceipt(newMessage.id)
+        if (options.autoMarkRead) {
+          createReadReceipt(newMessage.id)
+        }
       }
     })
 
