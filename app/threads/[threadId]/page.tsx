@@ -775,6 +775,8 @@ const ThreadPage = () => {
       <div className="fixed bottom-0 left-0 right-0 md:left-20 lg:right-80 border-t border-gray-800 bg-[#121212] z-50 pointer-events-auto pb-[env(safe-area-inset-bottom)]">
         <ThreadInput
           onSendMessage={(content, attachments) => handleSendMessage(content, attachments)}
+          onTypingStart={startTyping}
+          onTypingEnd={stopTyping}
           replyTo={replyingTo || null}
           onCancelReply={() => setReplyingTo(undefined)}
           replyPreview={

@@ -49,6 +49,8 @@ export function useThreadsQuery(filters?: ThreadFilters, searchQuery?: string, u
  * @param enabled Enable query (default: true if threadId exists)
  */
 export function useThreadQuery(threadId: string | undefined, enabled = true) {
+  const detailEnabled = enabled && !!threadId
+
   const query = useQuery({
     queryKey: queryKeys.threads.detail(threadId || ''),
     queryFn: async () => {
@@ -68,9 +70,14 @@ export function useThreadQuery(threadId: string | undefined, enabled = true) {
       
       return threadData
     },
-    enabled: enabled && !!threadId,
+    enabled: detailEnabled,
     staleTime: 0, // 0 for Debugging (Always refetch)
     refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    // Reliability fallback for intermittent realtime dropouts.
+    // Keeps active thread timelines fresh without requiring manual reload.
+    refetchInterval: detailEnabled ? 5000 : false,
+    refetchIntervalInBackground: false,
   })
 
   return {
