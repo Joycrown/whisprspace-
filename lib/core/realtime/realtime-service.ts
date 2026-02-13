@@ -133,16 +133,21 @@ export const subscribeToThreadEvents = (config: ThreadEventsConfig): (() => void
   });
 
   // Track user presence if config provided
-  channel.subscribe().then(async () => {
-    if (config.presence) {
-      await channel.track({
-        user_id: config.presence.userId,
-        anonymous_id: config.presence.userInfo.anonymousId,
-        is_premium: config.presence.userInfo.isPremium || false,
-        online_at: new Date().toISOString(),
-      });
-    }
-  });
+  channel
+    .subscribe()
+    .then(async () => {
+      if (config.presence) {
+        await channel.track({
+          user_id: config.presence.userId,
+          anonymous_id: config.presence.userInfo.anonymousId,
+          is_premium: config.presence.userInfo.isPremium || false,
+          online_at: new Date().toISOString(),
+        });
+      }
+    })
+    .catch((error) => {
+      console.error(`[Realtime] Failed to subscribe to thread channel ${threadId}:`, error);
+    });
 
   // Store active channel for broadcasting
   activeThreadChannels.set(threadId, channel);

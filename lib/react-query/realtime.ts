@@ -2,8 +2,7 @@
 
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { supabase } from '@/lib/core/supabase/client'
-import { RealtimeChannel } from '@supabase/supabase-js'
+import { subscribeToTable } from '@/lib/core/supabase/raw-realtime'
 
 /**
  * Real-time Sync Utility
@@ -37,6 +36,9 @@ interface RealtimeSyncOptions {
   
   /** Custom callback for handling payload */
   onPayload?: (payload: any) => void
+
+  /** Invalidate query automatically after each realtime payload (default: true) */
+  invalidateQuery?: boolean
 }
 
 export function useRealtimeSync(options: RealtimeSyncOptions) {
@@ -48,41 +50,40 @@ export function useRealtimeSync(options: RealtimeSyncOptions) {
     filter,
     schema = 'public',
     onPayload,
+    invalidateQuery = true,
   } = options
+  const queryKeyHash = JSON.stringify(queryKey)
 
   useEffect(() => {
-    // Create unique channel name
-    const channelName = `react-query-sync:${table}:${JSON.stringify(queryKey)}`
-    
-    let channel: RealtimeChannel
-    
-    // Set up subscription
-    channel = supabase.channel(channelName)
-    
-    const subscriptionConfig: any = {
+    const unsubscribe = subscribeToTable(table, {
       event,
       schema,
-      table,
-      ...(filter && { filter }),
-    }
-    
-    channel
-      .on('postgres_changes' as any, subscriptionConfig, (payload: any) => {
-        // Custom payload handler
+      filter,
+      onChange: (change) => {
         if (onPayload) {
-          onPayload(payload)
+          onPayload({
+            eventType: change.type,
+            schema: change.schema,
+            table: change.table,
+            new: change.record,
+            old: change.old_record,
+            record: change.record,
+            old_record: change.old_record,
+          })
         }
-        
-        // Invalidate queries to trigger refetch
-        queryClient.invalidateQueries({ queryKey })
-      })
-      .subscribe()
 
-    // Cleanup on unmount
+        if (invalidateQuery) {
+          queryClient.invalidateQueries({ queryKey })
+        }
+      },
+    })
+
     return () => {
-      supabase.removeChannel(channel)
+      unsubscribe()
     }
-  }, [table, event, schema, filter, queryKey, queryClient, onPayload])
+    // NOTE: use JSON hash to avoid resubscribing every render from unstable array identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [table, event, schema, filter, queryKeyHash, queryClient, onPayload, invalidateQuery])
 }
 
 /**

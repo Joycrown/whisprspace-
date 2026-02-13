@@ -107,13 +107,62 @@ export function useSendMessageMutation(conversationId: string) {
       }
     },
     
-    // Refetch on success to get server data
-    onSuccess: () => {
+    // Reconcile optimistic row with server row for instant delivery UX
+    onSuccess: (serverMessage) => {
+      queryClient.setQueryData(
+        queryKeys.conversations.messages(conversationId),
+        (old: any) => {
+          if (!old?.pages) {
+            return { pages: [{ messages: [serverMessage], nextOffset: undefined }], pageParams: [0] }
+          }
+
+          const pages = old.pages.map((page: any) => ({
+            ...page,
+            messages: [...(page.messages || [])],
+          }))
+
+          for (const page of pages) {
+            const existingServerIndex = page.messages.findIndex((message: DirectMessage) => message.id === serverMessage.id)
+            if (existingServerIndex !== -1) {
+              page.messages[existingServerIndex] = {
+                ...page.messages[existingServerIndex],
+                ...serverMessage,
+              }
+              return { ...old, pages }
+            }
+          }
+
+          const firstPage = pages[0]
+          if (!firstPage) {
+            return { ...old, pages: [{ messages: [serverMessage], nextOffset: undefined }], pageParams: old.pageParams || [0] }
+          }
+
+          const optimisticIndex = firstPage.messages.findIndex(
+            (message: DirectMessage) =>
+              message.id.startsWith('temp-') &&
+              message.senderId === serverMessage.senderId &&
+              message.content === serverMessage.content &&
+              message.messageType === serverMessage.messageType
+          )
+
+          if (optimisticIndex !== -1) {
+            firstPage.messages[optimisticIndex] = serverMessage
+          } else {
+            firstPage.messages.unshift(serverMessage)
+          }
+
+          return { ...old, pages }
+        }
+      )
+
       queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.messages(conversationId),
+        queryKey: queryKeys.conversations.detail(conversationId),
       })
       queryClient.invalidateQueries({
         queryKey: queryKeys.conversations.lists(),
+      })
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.conversations.unreadCount(),
       })
     },
   })

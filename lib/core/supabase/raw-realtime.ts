@@ -49,6 +49,8 @@ class RealtimeSocket {
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 10;
   private isConnecting: boolean = false;
+  private connectPromise: Promise<void> | null = null;
+  private shouldRejoinOnConnect: boolean = false;
 
   constructor() {
     this.setupAuthListener();
@@ -64,6 +66,7 @@ class RealtimeSocket {
         // The next join will trigger a reconnect with the new token
         // OR we can trigger it immediately if we have active channels
         if (this.channels.size > 0) {
+          this.shouldRejoinOnConnect = true;
           this.connect().catch(() => {});
         }
       });
@@ -72,6 +75,13 @@ class RealtimeSocket {
 
   private disconnect() {
     this.stopHeartbeat();
+    this.isConnecting = false;
+    this.connectPromise = null;
+    this.pendingJoins.forEach(({ reject }) => {
+      reject(new Error('Realtime socket disconnected'));
+    });
+    this.pendingJoins.clear();
+
     if (this.ws) {
       // Remove handlers before closing to prevent unwanted reconnects/errors
       this.ws.onopen = null;
@@ -100,34 +110,35 @@ class RealtimeSocket {
 
   async connect(): Promise<void> {
     if (this.ws?.readyState === WebSocket.OPEN) return;
-    if (this.isConnecting) return new Promise(resolve => {
-        const check = setInterval(() => {
-            if (this.ws?.readyState === WebSocket.OPEN) {
-                clearInterval(check);
-                resolve();
-            }
-        }, 100);
-    });
+    if (this.connectPromise) return this.connectPromise;
 
     this.isConnecting = true;
-    return new Promise((resolve, reject) => {
+    this.connectPromise = new Promise((resolve, reject) => {
       try {
         const finalUrl = this.getUrl();
+        let settled = false;
 
-        
+        const settle = (fn: (value?: any) => void, value?: any) => {
+          if (settled) return;
+          settled = true;
+          this.isConnecting = false;
+          this.connectPromise = null;
+          fn(value);
+        };
+
         this.ws = new WebSocket(finalUrl);
 
         this.ws.onopen = () => {
-
-          this.isConnecting = false;
           this.reconnectAttempts = 0;
           this.startHeartbeat();
-          resolve();
-          
-          // Re-join all existing channels on reconnect
-          this.channels.forEach(channel => {
-            this.joinChannel(channel);
-          });
+          settle(resolve);
+
+          if (this.shouldRejoinOnConnect) {
+            this.shouldRejoinOnConnect = false;
+            this.channels.forEach(channel => {
+              this.joinChannel(channel).catch(() => {});
+            });
+          }
         };
 
         this.ws.onmessage = (event) => {
@@ -136,22 +147,25 @@ class RealtimeSocket {
         };
 
         this.ws.onerror = (error) => {
-          console.error('[RawRealtime] 💥 Shared WebSocket error:', error);
-          this.isConnecting = false;
-          reject(error);
+          console.error('[RawRealtime] Shared WebSocket error:', error);
+          settle(reject, error);
         };
 
-        this.ws.onclose = (event) => {
-
-          this.isConnecting = false;
+        this.ws.onclose = () => {
           this.stopHeartbeat();
+          if (!settled) {
+            settle(reject, new Error('Realtime socket closed before connection was established'));
+          }
           this.scheduleReconnect();
         };
       } catch (error) {
         this.isConnecting = false;
+        this.connectPromise = null;
         reject(error);
       }
     });
+
+    return this.connectPromise as Promise<void>;
   }
 
   private scheduleReconnect() {
@@ -162,6 +176,7 @@ class RealtimeSocket {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       this.reconnectAttempts++;
+      this.shouldRejoinOnConnect = true;
       this.connect().catch(() => {});
     }, delay);
   }
@@ -191,7 +206,8 @@ class RealtimeSocket {
   private dispatch(msg: any) {
     // Handle joins
     if (msg.event === 'phx_reply') {
-      const pending = this.pendingJoins.get(msg.ref);
+      const ref = Number(msg.ref);
+      const pending = this.pendingJoins.get(ref);
       if (pending) {
         if (msg.payload?.status === 'ok') {
 
@@ -200,7 +216,7 @@ class RealtimeSocket {
           console.error(`[RawRealtime] ❌ Channel join failed: ${pending.topic}`, msg.payload?.response);
           pending.reject(new Error(msg.payload?.response?.reason || 'Join failed'));
         }
-        this.pendingJoins.delete(msg.ref);
+        this.pendingJoins.delete(ref);
       }
     }
 
@@ -225,8 +241,23 @@ class RealtimeSocket {
     return new Promise((resolve, reject) => {
       const ref = this.nextRef();
       const session = getSession();
-      
-      this.pendingJoins.set(ref, { resolve, reject, topic: channel.topic });
+
+      const timeout = setTimeout(() => {
+        this.pendingJoins.delete(ref);
+        reject(new Error(`Channel join timed out: ${channel.topic}`));
+      }, 10000);
+
+      this.pendingJoins.set(ref, {
+        resolve: () => {
+          clearTimeout(timeout);
+          resolve();
+        },
+        reject: (err) => {
+          clearTimeout(timeout);
+          reject(err);
+        },
+        topic: channel.topic
+      });
       
       this.send({
         topic: channel.topic,
@@ -332,9 +363,10 @@ export function subscribeToTable(
     onChange: (change: PostgresChange) => void;
   }
 ): () => void {
+  // Ensure each subscriber gets an isolated topic to avoid callback collisions in shared maps.
   const channelName = `realtime:${options.schema || 'public'}:${table}${
     options.filter ? `:${options.filter}` : ''
-  }`;
+  }:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`;
 
   const channel = new RealtimeChannel({
     channelName,
