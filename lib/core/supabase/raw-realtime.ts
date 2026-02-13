@@ -383,11 +383,37 @@ export function subscribeToTable(
     onPostgresChange: options.onChange,
   });
 
-  channel.subscribe().catch((error) => {
-    console.error('[RawRealtime] Failed to subscribe:', error);
-  });
+  let isActive = true;
+  let retryAttempt = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-  return () => channel.unsubscribe();
+  const subscribeWithRetry = () => {
+    if (!isActive) return;
+
+    channel.subscribe()
+      .then(() => {
+        retryAttempt = 0;
+      })
+      .catch((error) => {
+        if (!isActive) return;
+        console.error('[RawRealtime] Failed to subscribe:', error);
+
+        const retryDelayMs = Math.min(1000 * Math.pow(2, retryAttempt), 15000);
+        retryAttempt++;
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          subscribeWithRetry();
+        }, retryDelayMs);
+      });
+  };
+
+  subscribeWithRetry();
+
+  return () => {
+    isActive = false;
+    if (retryTimer) clearTimeout(retryTimer);
+    channel.unsubscribe();
+  };
 }
 
 /**

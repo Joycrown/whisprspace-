@@ -4,6 +4,7 @@ import { useQuery, UseQueryOptions } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/react-query/queryKeys'
 import { fetchConversations, Conversation } from '@/lib/messaging/messaging-service'
 import { useRealtimeSync } from '@/lib/react-query/realtime'
+import { useUserStore } from '@/store/userStore'
 
 /**
  * React Query hook for fetching conversations list
@@ -28,11 +29,15 @@ interface UseConversationsQueryOptions {
 }
 
 export function useConversationsQuery(options: UseConversationsQueryOptions = {}) {
+  const { session } = useUserStore()
+  const isAuthed = Boolean(session.user)
   const {
     enableRealtime = true,
     autoRefreshInterval,
     queryOptions = {},
   } = options
+  const { enabled: queryOptionsEnabled = true, ...restQueryOptions } = queryOptions
+  const queryEnabled = Boolean(queryOptionsEnabled && isAuthed)
 
   // Fetch conversations using React Query
   const query = useQuery({
@@ -50,28 +55,25 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
     staleTime: 30 * 1000, // 30 seconds
     refetchOnWindowFocus: true,
     refetchInterval: autoRefreshInterval,
-    ...queryOptions,
+    enabled: queryEnabled,
+    ...restQueryOptions,
   })
 
-  // Set up real-time sync if enabled
-  if (enableRealtime) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useRealtimeSync({
-      table: 'direct_messages',
-      event: '*',
-      queryKey: queryKeys.conversations.lists(),
-      schema: 'public',
-    })
-    
-    // Also listen to conversation participant changes
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useRealtimeSync({
-      table: 'conversation_participants',
-      event: '*',
-      queryKey: queryKeys.conversations.lists(),
-      schema: 'public',
-    })
-  }
+  useRealtimeSync({
+    table: 'direct_messages',
+    event: '*',
+    queryKey: queryKeys.conversations.lists(),
+    schema: 'public',
+    enabled: enableRealtime && queryEnabled,
+  })
+
+  useRealtimeSync({
+    table: 'conversation_participants',
+    event: '*',
+    queryKey: queryKeys.conversations.lists(),
+    schema: 'public',
+    enabled: enableRealtime && queryEnabled,
+  })
 
   return {
     conversations: query.data || [],
@@ -87,6 +89,9 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
  * Hook for fetching unread conversation count
  */
 export function useUnreadCountQuery() {
+  const { session } = useUserStore()
+  const isAuthed = Boolean(session.user)
+
   const query = useQuery({
     queryKey: queryKeys.conversations.unreadCount(),
     queryFn: async () => {
@@ -102,6 +107,7 @@ export function useUnreadCountQuery() {
     },
     staleTime: 15 * 1000, // 15 seconds
     refetchInterval: 30 * 1000, // Refetch every 30 seconds
+    enabled: isAuthed,
   })
 
   // Real-time sync for unread count
@@ -110,6 +116,7 @@ export function useUnreadCountQuery() {
     event: 'INSERT',
     queryKey: queryKeys.conversations.unreadCount(),
     schema: 'public',
+    enabled: isAuthed,
   })
 
   // Also refresh unread count when read state changes
@@ -118,6 +125,7 @@ export function useUnreadCountQuery() {
     event: 'UPDATE',
     queryKey: queryKeys.conversations.unreadCount(),
     schema: 'public',
+    enabled: isAuthed,
   })
 
   return {

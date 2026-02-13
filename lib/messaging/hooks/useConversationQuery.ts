@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/react-query/queryKeys'
-import { fetchConversationById, Conversation } from '@/lib/messaging/messaging-service'
+import { fetchConversationById } from '@/lib/messaging/messaging-service'
 import { useRealtimeSync } from '@/lib/react-query/realtime'
 
 /**
@@ -52,17 +52,16 @@ export function useConversationQuery(
     refetchOnWindowFocus: true,
   })
 
-  // Set up real-time sync for this specific conversation
-  if (enableRealtime && conversationId) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useRealtimeSync({
-      table: 'direct_messages',
-      event: '*',
-      queryKey: queryKeys.conversations.detail(conversationId),
-      filter: `conversation_id=eq.${conversationId}`,
-      schema: 'public',
-    })
-  }
+  const realtimeEnabled = Boolean(enableRealtime && enabled && conversationId)
+
+  useRealtimeSync({
+    table: 'direct_messages',
+    event: '*',
+    queryKey: queryKeys.conversations.detail(conversationId || ''),
+    filter: conversationId ? `conversation_id=eq.${conversationId}` : undefined,
+    schema: 'public',
+    enabled: realtimeEnabled,
+  })
 
   return {
     conversation: query.data,

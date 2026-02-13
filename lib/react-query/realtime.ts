@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { subscribeToTable } from '@/lib/core/supabase/raw-realtime'
 
@@ -35,10 +35,13 @@ interface RealtimeSyncOptions {
   schema?: string
   
   /** Custom callback for handling payload */
-  onPayload?: (payload: any) => void
+  onPayload?: (payload: unknown) => void
 
   /** Invalidate query automatically after each realtime payload (default: true) */
   invalidateQuery?: boolean
+
+  /** Enable realtime subscription (default: true) */
+  enabled?: boolean
 }
 
 export function useRealtimeSync(options: RealtimeSyncOptions) {
@@ -51,17 +54,25 @@ export function useRealtimeSync(options: RealtimeSyncOptions) {
     schema = 'public',
     onPayload,
     invalidateQuery = true,
+    enabled = true,
   } = options
   const queryKeyHash = JSON.stringify(queryKey)
+  const onPayloadRef = useRef<typeof onPayload>(onPayload)
 
   useEffect(() => {
+    onPayloadRef.current = onPayload
+  }, [onPayload])
+
+  useEffect(() => {
+    if (!enabled) return
+
     const unsubscribe = subscribeToTable(table, {
       event,
       schema,
       filter,
       onChange: (change) => {
-        if (onPayload) {
-          onPayload({
+        if (onPayloadRef.current) {
+          onPayloadRef.current({
             eventType: change.type,
             schema: change.schema,
             table: change.table,
@@ -83,7 +94,7 @@ export function useRealtimeSync(options: RealtimeSyncOptions) {
     }
     // NOTE: use JSON hash to avoid resubscribing every render from unstable array identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [table, event, schema, filter, queryKeyHash, queryClient, onPayload, invalidateQuery])
+  }, [enabled, table, event, schema, filter, queryKeyHash, queryClient, invalidateQuery])
 }
 
 /**

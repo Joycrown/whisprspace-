@@ -16,6 +16,10 @@ export interface ThreadEventsConfig {
   onMessageInsert?: (payload: RealtimePostgresChangesPayload<any>) => void;
   onMessageUpdate?: (payload: RealtimePostgresChangesPayload<any>) => void;
   onMessageDelete?: (payload: RealtimePostgresChangesPayload<any>) => void;
+  onMessageLikeInsert?: (payload: RealtimePostgresChangesPayload<any>) => void;
+  onMessageLikeDelete?: (payload: RealtimePostgresChangesPayload<any>) => void;
+  onMessageReactionInsert?: (payload: RealtimePostgresChangesPayload<any>) => void;
+  onMessageReactionDelete?: (payload: RealtimePostgresChangesPayload<any>) => void;
   onThreadUpdate?: (payload: RealtimePostgresChangesPayload<any>) => void;
   onLikeInsert?: (payload: RealtimePostgresChangesPayload<any>) => void;
   onLikeDelete?: (payload: RealtimePostgresChangesPayload<any>) => void;
@@ -76,19 +80,31 @@ export const subscribeToThreadEvents = (config: ThreadEventsConfig): (() => void
     channelConfig.postgres_changes.push({ event: 'UPDATE', schema: 'public', table: 'threads', filter: `id=eq.${threadId}` });
   }
 
-  // 3. Thread Likes
+  // 3. Message likes (table has no thread_id, filtered in callback layer)
+  if (config.onMessageLikeInsert || config.onMessageLikeDelete) {
+    if (config.onMessageLikeInsert) channelConfig.postgres_changes.push({ event: 'INSERT', schema: 'public', table: 'message_likes' });
+    if (config.onMessageLikeDelete) channelConfig.postgres_changes.push({ event: 'DELETE', schema: 'public', table: 'message_likes' });
+  }
+
+  // 4. Message reactions (table has no thread_id, filtered in callback layer)
+  if (config.onMessageReactionInsert || config.onMessageReactionDelete) {
+    if (config.onMessageReactionInsert) channelConfig.postgres_changes.push({ event: 'INSERT', schema: 'public', table: 'message_reactions' });
+    if (config.onMessageReactionDelete) channelConfig.postgres_changes.push({ event: 'DELETE', schema: 'public', table: 'message_reactions' });
+  }
+
+  // 5. Thread Likes
   if (config.onLikeInsert || config.onLikeDelete) {
     if (config.onLikeInsert) channelConfig.postgres_changes.push({ event: 'INSERT', schema: 'public', table: 'thread_likes', filter: `thread_id=eq.${threadId}` });
     if (config.onLikeDelete) channelConfig.postgres_changes.push({ event: 'DELETE', schema: 'public', table: 'thread_likes', filter: `thread_id=eq.${threadId}` });
   }
 
-  // 4. Thread Participants
+  // 6. Thread Participants
   if (config.onParticipantInsert || config.onParticipantDelete) {
     if (config.onParticipantInsert) channelConfig.postgres_changes.push({ event: 'INSERT', schema: 'public', table: 'thread_participants', filter: `thread_id=eq.${threadId}` });
     if (config.onParticipantDelete) channelConfig.postgres_changes.push({ event: 'DELETE', schema: 'public', table: 'thread_participants', filter: `thread_id=eq.${threadId}` });
   }
 
-  // 4. Poll Votes
+  // 7. Poll Votes
   if (config.pollId && config.onPollVote) {
     channelConfig.postgres_changes.push({ event: 'INSERT', schema: 'public', table: 'poll_votes', filter: `poll_id=eq.${config.pollId}` });
   }
@@ -104,6 +120,14 @@ export const subscribeToThreadEvents = (config: ThreadEventsConfig): (() => void
         if (change.type === 'INSERT') config.onMessageInsert?.(payload);
         if (change.type === 'UPDATE') config.onMessageUpdate?.(payload);
         if (change.type === 'DELETE') config.onMessageDelete?.(payload);
+      }
+      else if (change.table === 'message_likes') {
+        if (change.type === 'INSERT') config.onMessageLikeInsert?.(payload);
+        if (change.type === 'DELETE') config.onMessageLikeDelete?.(payload);
+      }
+      else if (change.table === 'message_reactions') {
+        if (change.type === 'INSERT') config.onMessageReactionInsert?.(payload);
+        if (change.type === 'DELETE') config.onMessageReactionDelete?.(payload);
       }
       else if (change.table === 'threads') {
         if (change.type === 'UPDATE') config.onThreadUpdate?.(payload);
@@ -132,28 +156,46 @@ export const subscribeToThreadEvents = (config: ThreadEventsConfig): (() => void
     }
   });
 
-  // Track user presence if config provided
-  channel
-    .subscribe()
-    .then(async () => {
-      if (config.presence) {
-        await channel.track({
-          user_id: config.presence.userId,
-          anonymous_id: config.presence.userInfo.anonymousId,
-          is_premium: config.presence.userInfo.isPremium || false,
-          online_at: new Date().toISOString(),
-        });
-      }
-    })
-    .catch((error) => {
-      console.error(`[Realtime] Failed to subscribe to thread channel ${threadId}:`, error);
-    });
-
   // Store active channel for broadcasting
   activeThreadChannels.set(threadId, channel);
 
-  return () => {
+  let isActive = true;
+  let retryAttempt = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+  const subscribeWithRetry = () => {
+    if (!isActive) return;
+
+    channel
+      .subscribe()
+      .then(async () => {
+        retryAttempt = 0;
+        if (config.presence) {
+          await channel.track({
+            user_id: config.presence.userId,
+            anonymous_id: config.presence.userInfo.anonymousId,
+            is_premium: config.presence.userInfo.isPremium || false,
+            online_at: new Date().toISOString(),
+          });
+        }
+      })
+      .catch((error) => {
+        if (!isActive) return;
+        console.error(`[Realtime] Failed to subscribe to thread channel ${threadId}:`, error);
+        const retryDelayMs = Math.min(1000 * Math.pow(2, retryAttempt), 15000);
+        retryAttempt++;
+        retryTimer = setTimeout(() => {
+          retryTimer = null;
+          subscribeWithRetry();
+        }, retryDelayMs);
+      });
+  };
+
+  subscribeWithRetry();
+
+  return () => {
+    isActive = false;
+    if (retryTimer) clearTimeout(retryTimer);
     channel.unsubscribe();
     activeThreadChannels.delete(threadId);
   };
@@ -260,6 +302,7 @@ export const trackThreadPresence = (
 };
 
 export const getThreadPresence = async (threadId: string): Promise<any> => {
+  void threadId;
   // Not easily supported with raw-realtime on-demand without subscribing
   // Returning empty object for now as this is rarely used critical path
   return {};
