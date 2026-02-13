@@ -142,7 +142,10 @@ class RealtimeSocket {
         };
 
         this.ws.onmessage = (event) => {
-          const msg = JSON.parse(event.data);
+          const raw = JSON.parse(event.data);
+          const msg = Array.isArray(raw)
+            ? { join_ref: raw[0], ref: raw[1], topic: raw[2], event: raw[3], payload: raw[4] }
+            : raw;
           this.dispatch(msg);
         };
 
