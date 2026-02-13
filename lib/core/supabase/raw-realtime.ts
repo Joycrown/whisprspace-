@@ -316,14 +316,24 @@ class RealtimeChannel {
 
   onMessage(msg: any) {
     if (msg.event === 'postgres_changes') {
+      const payloadData = msg.payload?.data || msg.payload || {};
+      const eventType = payloadData.type || payloadData.eventType;
+      const record = payloadData.record || payloadData.new;
+      const oldRecord = payloadData.old_record || payloadData.old;
+
       const change: PostgresChange = {
-        type: msg.payload.data?.type || msg.payload.type,
-        table: msg.payload.data?.table || msg.payload.table,
-        schema: msg.payload.data?.schema || msg.payload.schema,
-        record: msg.payload.data?.record || msg.payload.record,
-        old_record: msg.payload.data?.old_record || msg.payload.old_record,
+        type: eventType,
+        table: payloadData.table,
+        schema: payloadData.schema,
+        record,
+        old_record: oldRecord,
       };
-      this.onPostgresChangeCb?.(change);
+
+      if (change.type && change.table && change.schema) {
+        this.onPostgresChangeCb?.(change);
+      } else {
+        console.warn('[RawRealtime] Unrecognized postgres_changes payload shape:', msg.payload);
+      }
     }
     
     if (msg.event === 'presence_state' || msg.event === 'presence_diff') {
