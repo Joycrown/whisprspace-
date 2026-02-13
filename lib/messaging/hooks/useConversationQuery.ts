@@ -53,12 +53,16 @@ export function useConversationQuery(
   })
 
   const realtimeEnabled = Boolean(enableRealtime && enabled && conversationId)
+  const directMessagesFilter = conversationId
+    ? `conversation_id=eq.${conversationId}`
+    : undefined
 
   useRealtimeSync({
     table: 'direct_messages',
     event: '*',
     queryKey: queryKeys.conversations.detail(conversationId || ''),
     schema: 'public',
+    filter: directMessagesFilter,
     enabled: realtimeEnabled,
   })
 

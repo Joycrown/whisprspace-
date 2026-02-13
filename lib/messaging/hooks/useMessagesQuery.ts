@@ -247,6 +247,9 @@ export function useMessagesQuery(
   } = options
   const messagesQueryKey = queryKeys.conversations.messages(conversationId || '')
   const realtimeEnabled = Boolean(enableRealtime && enabled && conversationId)
+  const directMessagesFilter = conversationId
+    ? `conversation_id=eq.${conversationId}`
+    : undefined
 
   const query = useInfiniteQuery({
     queryKey: messagesQueryKey,
@@ -273,6 +276,11 @@ export function useMessagesQuery(
     enabled: enabled && !!conversationId,
     staleTime: 10 * 1000, // 10 seconds (messages change frequently)
     refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+    // Reliability fallback when realtime channel is stale/interrupted.
+    // Keeps active conversations fresh without forcing manual reload.
+    refetchInterval: realtimeEnabled ? 5000 : false,
+    refetchIntervalInBackground: false,
     initialPageParam: 0,
   })
 
@@ -368,6 +376,7 @@ export function useMessagesQuery(
     event: '*',
     queryKey: messagesQueryKey,
     schema: 'public',
+    filter: directMessagesFilter,
     invalidateQuery: false,
     enabled: realtimeEnabled,
     onPayload: handleMessageRealtimePayload,
