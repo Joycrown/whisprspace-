@@ -246,6 +246,7 @@ export function useMessagesQuery(
     enabled = true,
   } = options
   const messagesQueryKey = queryKeys.conversations.messages(conversationId || '')
+  const realtimeEnabled = Boolean(enableRealtime && enabled && conversationId)
 
   const query = useInfiniteQuery({
     queryKey: messagesQueryKey,
@@ -275,10 +276,13 @@ export function useMessagesQuery(
     initialPageParam: 0,
   })
 
-  const realtimeEnabled = Boolean(enableRealtime && enabled && conversationId)
-  const conversationFilter = conversationId
-    ? `conversation_id=eq.${conversationId}`
-    : undefined
+  const belongsToConversation = useCallback(
+    (row: Record<string, unknown> | null | undefined) => {
+      const rowConversationId = readStringField(row, ['conversation_id', 'conversationId'])
+      return Boolean(conversationId && rowConversationId === conversationId)
+    },
+    [conversationId]
+  )
 
   const handleMessageRealtimePayload = useCallback((payload: unknown) => {
     const realtimePayload = payload as RealtimePayload
@@ -286,6 +290,10 @@ export function useMessagesQuery(
     const record = realtimePayload.new || realtimePayload.record
     const oldRecord = realtimePayload.old || realtimePayload.old_record
     const recordId = readStringField(record, ['id'])
+
+    if ((eventType === 'INSERT' || eventType === 'UPDATE') && !belongsToConversation(record)) {
+      return
+    }
 
     if (eventType === 'INSERT' && record && recordId) {
       const currentUserId = getSession()?.user?.id
@@ -308,13 +316,14 @@ export function useMessagesQuery(
     }
 
     if (eventType === 'DELETE') {
+      if (!belongsToConversation(oldRecord) && !belongsToConversation(record)) return
       const messageId = readStringField(oldRecord, ['id']) || recordId
       if (!messageId) return
       queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
         removeMessageFromCache(old, messageId)
       )
     }
-  }, [messagesQueryKey, queryClient])
+  }, [belongsToConversation, messagesQueryKey, queryClient])
 
   const handleDeliveryReceiptPayload = useCallback((payload: unknown) => {
     const realtimePayload = payload as RealtimePayload
@@ -358,7 +367,6 @@ export function useMessagesQuery(
     table: 'direct_messages',
     event: '*',
     queryKey: messagesQueryKey,
-    filter: conversationFilter,
     schema: 'public',
     invalidateQuery: false,
     enabled: realtimeEnabled,
