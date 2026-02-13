@@ -1,5 +1,6 @@
 'use client'
 
+import { useCallback } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/react-query/queryKeys'
 import { fetchMessages, DirectMessage, createDeliveryReceipt } from '@/lib/messaging/messaging-service'
@@ -29,32 +30,73 @@ type InfiniteMessagesCache = {
   pageParams: unknown[]
 }
 
-const mapRealtimeMessage = (row: any): DirectMessage => ({
-  id: row.id,
-  conversationId: row.conversation_id ?? row.conversationId,
-  senderId: row.sender_id ?? row.senderId,
-  content: row.content ?? '',
-  messageType: row.message_type ?? row.messageType ?? 'text',
-  attachmentUrl: row.attachment_url ?? row.attachmentUrl,
-  isEdited: row.is_edited ?? row.isEdited ?? false,
-  isDeleted: row.is_deleted ?? row.isDeleted ?? false,
-  createdAt: row.created_at ?? row.createdAt ?? new Date().toISOString(),
-  updatedAt: row.updated_at ?? row.updatedAt ?? row.created_at ?? new Date().toISOString(),
-  readReceipts: Array.isArray(row.message_read_receipts)
-    ? row.message_read_receipts.map((receipt: any) => ({
-        messageId: receipt.message_id ?? receipt.messageId,
-        userId: receipt.user_id ?? receipt.userId,
-        readAt: receipt.read_at ?? receipt.readAt,
-      }))
-    : undefined,
-  deliveryReceipts: Array.isArray(row.message_delivery_receipts)
-    ? row.message_delivery_receipts.map((receipt: any) => ({
-        messageId: receipt.message_id ?? receipt.messageId,
-        userId: receipt.user_id ?? receipt.userId,
-        deliveredAt: receipt.delivered_at ?? receipt.deliveredAt,
-      }))
-    : undefined,
-})
+type RealtimePayload = {
+  eventType?: 'INSERT' | 'UPDATE' | 'DELETE' | string
+  new?: Record<string, unknown> | null
+  record?: Record<string, unknown> | null
+  old?: Record<string, unknown> | null
+  old_record?: Record<string, unknown> | null
+}
+
+const readStringField = (
+  row: Record<string, unknown> | null | undefined,
+  keys: string[]
+): string | undefined => {
+  for (const key of keys) {
+    const value = row?.[key]
+    if (typeof value === 'string') return value
+  }
+  return undefined
+}
+
+const mapRealtimeMessage = (row: Record<string, unknown>): DirectMessage => {
+  const now = new Date().toISOString()
+  const messageType = readStringField(row, ['message_type', 'messageType'])
+
+  const mapped: DirectMessage = {
+    id: readStringField(row, ['id']) || '',
+    conversationId: readStringField(row, ['conversation_id', 'conversationId']) || '',
+    senderId: readStringField(row, ['sender_id', 'senderId']) || '',
+    content: readStringField(row, ['content']) || '',
+    messageType: (
+      messageType === 'text' ||
+      messageType === 'image' ||
+      messageType === 'file' ||
+      messageType === 'system'
+    ) ? messageType : 'text',
+    attachmentUrl: readStringField(row, ['attachment_url', 'attachmentUrl']),
+    isEdited: row['is_edited'] === true || row['isEdited'] === true,
+    isDeleted: row['is_deleted'] === true || row['isDeleted'] === true,
+    createdAt: readStringField(row, ['created_at', 'createdAt']) || now,
+    updatedAt: readStringField(row, ['updated_at', 'updatedAt', 'created_at']) || now,
+  }
+
+  const readReceipts = row['message_read_receipts']
+  if (Array.isArray(readReceipts)) {
+    mapped.readReceipts = readReceipts.map((receipt) => {
+      const receiptRow = receipt as Record<string, unknown>
+      return {
+        messageId: readStringField(receiptRow, ['message_id', 'messageId']) || '',
+        userId: readStringField(receiptRow, ['user_id', 'userId']) || '',
+        readAt: readStringField(receiptRow, ['read_at', 'readAt']) || now,
+      }
+    })
+  }
+
+  const deliveryReceipts = row['message_delivery_receipts']
+  if (Array.isArray(deliveryReceipts)) {
+    mapped.deliveryReceipts = deliveryReceipts.map((receipt) => {
+      const receiptRow = receipt as Record<string, unknown>
+      return {
+        messageId: readStringField(receiptRow, ['message_id', 'messageId']) || '',
+        userId: readStringField(receiptRow, ['user_id', 'userId']) || '',
+        deliveredAt: readStringField(receiptRow, ['delivered_at', 'deliveredAt']) || now,
+      }
+    })
+  }
+
+  return mapped
+}
 
 const upsertMessageInCache = (
   old: InfiniteMessagesCache | undefined,
@@ -233,100 +275,115 @@ export function useMessagesQuery(
     initialPageParam: 0,
   })
 
-  // Set up real-time sync for messages
-  if (enableRealtime && conversationId) {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useRealtimeSync({
-      table: 'direct_messages',
-      event: '*',
-      queryKey: messagesQueryKey,
-      filter: `conversation_id=eq.${conversationId}`,
-      schema: 'public',
-      invalidateQuery: false,
-      onPayload: (payload) => {
-        const eventType = payload?.eventType
-        const record = payload?.new || payload?.record
-        const oldRecord = payload?.old || payload?.old_record
+  const realtimeEnabled = Boolean(enableRealtime && enabled && conversationId)
+  const conversationFilter = conversationId
+    ? `conversation_id=eq.${conversationId}`
+    : undefined
 
-        if (eventType === 'INSERT' && record?.id) {
-          const currentUserId = getSession()?.user?.id
-          if (currentUserId && record.sender_id !== currentUserId) {
-            void createDeliveryReceipt(record.id)
-          }
+  const handleMessageRealtimePayload = useCallback((payload: unknown) => {
+    const realtimePayload = payload as RealtimePayload
+    const eventType = realtimePayload.eventType
+    const record = realtimePayload.new || realtimePayload.record
+    const oldRecord = realtimePayload.old || realtimePayload.old_record
+    const recordId = readStringField(record, ['id'])
 
-          queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
-            upsertMessageInCache(old, mapRealtimeMessage(record), true)
-          )
-          return
-        }
+    if (eventType === 'INSERT' && record && recordId) {
+      const currentUserId = getSession()?.user?.id
+      const senderId = readStringField(record, ['sender_id', 'senderId'])
+      if (currentUserId && senderId !== currentUserId) {
+        void createDeliveryReceipt(recordId)
+      }
 
-        if (eventType === 'UPDATE' && record?.id) {
-          queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
-            upsertMessageInCache(old, mapRealtimeMessage(record), false)
-          )
-          return
-        }
+      queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
+        upsertMessageInCache(old, mapRealtimeMessage(record), true)
+      )
+      return
+    }
 
-        if (eventType === 'DELETE') {
-          const messageId = oldRecord?.id || record?.id
-          if (!messageId) return
-          queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
-            removeMessageFromCache(old, messageId)
-          )
-        }
-      },
-    })
+    if (eventType === 'UPDATE' && record && recordId) {
+      queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
+        upsertMessageInCache(old, mapRealtimeMessage(record), false)
+      )
+      return
+    }
 
-    // Listen for delivery receipt updates
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useRealtimeSync({
-      table: 'message_delivery_receipts',
-      event: '*',
-      queryKey: messagesQueryKey,
-      schema: 'public',
-      invalidateQuery: false,
-      onPayload: (payload) => {
-        const eventType = payload?.eventType
-        if (eventType !== 'INSERT' && eventType !== 'UPDATE') return
+    if (eventType === 'DELETE') {
+      const messageId = readStringField(oldRecord, ['id']) || recordId
+      if (!messageId) return
+      queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
+        removeMessageFromCache(old, messageId)
+      )
+    }
+  }, [messagesQueryKey, queryClient])
 
-        const record = payload?.new || payload?.record
-        if (!record?.message_id || !record?.user_id) return
+  const handleDeliveryReceiptPayload = useCallback((payload: unknown) => {
+    const realtimePayload = payload as RealtimePayload
+    const eventType = realtimePayload.eventType
+    if (eventType !== 'INSERT' && eventType !== 'UPDATE') return
 
-        queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
-          addDeliveryReceiptToCache(old, {
-            messageId: record.message_id,
-            userId: record.user_id,
-            deliveredAt: record.delivered_at || new Date().toISOString(),
-          })
-        )
-      },
-    })
+    const record = realtimePayload.new || realtimePayload.record
+    const messageId = readStringField(record, ['message_id', 'messageId'])
+    const userId = readStringField(record, ['user_id', 'userId'])
+    if (!messageId || !userId) return
 
-    // Also listen for read receipt updates
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useRealtimeSync({
-      table: 'message_read_receipts',
-      event: '*',
-      queryKey: messagesQueryKey,
-      schema: 'public',
-      invalidateQuery: false,
-      onPayload: (payload) => {
-        const eventType = payload?.eventType
-        if (eventType !== 'INSERT' && eventType !== 'UPDATE') return
+    queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
+      addDeliveryReceiptToCache(old, {
+        messageId,
+        userId,
+        deliveredAt: readStringField(record, ['delivered_at', 'deliveredAt']) || new Date().toISOString(),
+      })
+    )
+  }, [messagesQueryKey, queryClient])
 
-        const record = payload?.new || payload?.record
-        if (!record?.message_id || !record?.user_id) return
+  const handleReadReceiptPayload = useCallback((payload: unknown) => {
+    const realtimePayload = payload as RealtimePayload
+    const eventType = realtimePayload.eventType
+    if (eventType !== 'INSERT' && eventType !== 'UPDATE') return
 
-        queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
-          addReadReceiptToCache(old, {
-            messageId: record.message_id,
-            userId: record.user_id,
-            readAt: record.read_at || new Date().toISOString(),
-          })
-        )
-      },
-    })
-  }
+    const record = realtimePayload.new || realtimePayload.record
+    const messageId = readStringField(record, ['message_id', 'messageId'])
+    const userId = readStringField(record, ['user_id', 'userId'])
+    if (!messageId || !userId) return
+
+    queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
+      addReadReceiptToCache(old, {
+        messageId,
+        userId,
+        readAt: readStringField(record, ['read_at', 'readAt']) || new Date().toISOString(),
+      })
+    )
+  }, [messagesQueryKey, queryClient])
+
+  useRealtimeSync({
+    table: 'direct_messages',
+    event: '*',
+    queryKey: messagesQueryKey,
+    filter: conversationFilter,
+    schema: 'public',
+    invalidateQuery: false,
+    enabled: realtimeEnabled,
+    onPayload: handleMessageRealtimePayload,
+  })
+
+  useRealtimeSync({
+    table: 'message_delivery_receipts',
+    event: '*',
+    queryKey: messagesQueryKey,
+    schema: 'public',
+    invalidateQuery: false,
+    enabled: realtimeEnabled,
+    onPayload: handleDeliveryReceiptPayload,
+  })
+
+  useRealtimeSync({
+    table: 'message_read_receipts',
+    event: '*',
+    queryKey: messagesQueryKey,
+    schema: 'public',
+    invalidateQuery: false,
+    enabled: realtimeEnabled,
+    onPayload: handleReadReceiptPayload,
+  })
 
   // Flatten all pages into single array
   const allMessages = query.data?.pages.flatMap((page) => page.messages) || []

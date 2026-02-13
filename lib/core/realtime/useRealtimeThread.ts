@@ -5,6 +5,12 @@ import * as realtimeService from './realtime-service'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/react-query/queryKeys'
 import { transformMessage } from '@/lib/threads/thread-service'
+import { ReactionType } from '@/types'
+
+const VALID_REACTION_TYPES: ReactionType[] = ['like', 'love', 'laugh', 'angry', 'sad', 'wow']
+
+const isReactionType = (value: string): value is ReactionType =>
+  VALID_REACTION_TYPES.includes(value as ReactionType)
 
 /**
  * Hook to subscribe to real-time updates for a single thread
@@ -151,6 +157,166 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
     })
   }
 
+  const patchRealtimeMessage = (payload: any) => {
+    if (!threadId) return
+    const record = payload?.new
+    if (!record?.id) return
+
+    queryClient.setQueryData(queryKeys.threads.detail(threadId), (oldData: any) => {
+      if (!oldData) return oldData
+      const existingMessages = Array.isArray(oldData.messages) ? oldData.messages : []
+      const messageIndex = existingMessages.findIndex((message: any) => message.id === record.id)
+      if (messageIndex === -1) return oldData
+
+      const currentMessage = existingMessages[messageIndex]
+      const nextMessage = {
+        ...currentMessage,
+        content: typeof record.content === 'string' ? record.content : currentMessage.content,
+        attachments: record.attachments ?? currentMessage.attachments,
+        isEdited: record.is_edited ?? currentMessage.isEdited,
+        editedAt: record.updated_at ?? currentMessage.editedAt,
+        replyToId: record.parent_message_id ?? currentMessage.replyToId,
+      }
+
+      const nextMessages = [...existingMessages]
+      nextMessages[messageIndex] = nextMessage
+
+      return {
+        ...oldData,
+        messages: nextMessages,
+      }
+    })
+  }
+
+  const removeRealtimeMessage = (payload: any) => {
+    if (!threadId) return
+    const removedMessageId = payload?.old?.id || payload?.new?.id
+    if (!removedMessageId) return
+
+    queryClient.setQueryData(queryKeys.threads.detail(threadId), (oldData: any) => {
+      if (!oldData) return oldData
+      const existingMessages = Array.isArray(oldData.messages) ? oldData.messages : []
+      const nextMessages = existingMessages.filter((message: any) => message.id !== removedMessageId)
+      if (nextMessages.length === existingMessages.length) return oldData
+
+      return {
+        ...oldData,
+        messages: nextMessages,
+        messageCount: Math.max(0, (oldData.messageCount || 0) - 1),
+      }
+    })
+  }
+
+  const applyThreadLikeCache = (payload: any, action: 'insert' | 'delete') => {
+    if (!threadId) return
+    const actorId = payload?.new?.user_id || payload?.old?.user_id
+    const currentUserId = session.user?.id
+
+    queryClient.setQueryData(queryKeys.threads.detail(threadId), (oldData: any) => {
+      if (!oldData) return oldData
+      const delta = action === 'insert' ? 1 : -1
+      const nextLikes = Math.max(0, (oldData.likes || 0) + delta)
+
+      return {
+        ...oldData,
+        likes: nextLikes,
+        hasLiked: actorId && currentUserId === actorId ? action === 'insert' : oldData.hasLiked,
+      }
+    })
+
+    queryClient.setQueriesData({ queryKey: queryKeys.threads.lists() }, (old: any) => {
+      if (!old || !old.pages) return old
+      const delta = action === 'insert' ? 1 : -1
+      return {
+        ...old,
+        pages: old.pages.map((page: any) => ({
+          ...page,
+          threads: page.threads.map((thread: any) => {
+            if (thread.id !== threadId) return thread
+            return {
+              ...thread,
+              likes: Math.max(0, (thread.likes || 0) + delta),
+            }
+          }),
+        })),
+      }
+    })
+  }
+
+  const applyMessageLikeCache = (payload: any, action: 'insert' | 'delete') => {
+    if (!threadId) return
+    const messageId = payload?.new?.message_id || payload?.old?.message_id
+    const actorId = payload?.new?.user_id || payload?.old?.user_id
+    if (!messageId) return
+
+    queryClient.setQueryData(queryKeys.threads.detail(threadId), (oldData: any) => {
+      if (!oldData) return oldData
+      const existingMessages = Array.isArray(oldData.messages) ? oldData.messages : []
+      const messageIndex = existingMessages.findIndex((message: any) => message.id === messageId)
+      if (messageIndex === -1) return oldData
+
+      const currentMessage = existingMessages[messageIndex]
+      const delta = action === 'insert' ? 1 : -1
+      const nextMessage = {
+        ...currentMessage,
+        likes: Math.max(0, (currentMessage.likes || 0) + delta),
+        hasLiked: actorId && actorId === session.user?.id ? action === 'insert' : currentMessage.hasLiked,
+      }
+
+      const nextMessages = [...existingMessages]
+      nextMessages[messageIndex] = nextMessage
+
+      return {
+        ...oldData,
+        messages: nextMessages,
+      }
+    })
+  }
+
+  const applyMessageReactionCache = (payload: any, action: 'insert' | 'delete') => {
+    if (!threadId) return
+    const messageId = payload?.new?.message_id || payload?.old?.message_id
+    const actorId = payload?.new?.user_id || payload?.old?.user_id
+    const reaction = payload?.new?.reaction_type || payload?.old?.reaction_type
+    if (!messageId || !actorId || typeof reaction !== 'string' || !isReactionType(reaction)) return
+
+    queryClient.setQueryData(queryKeys.threads.detail(threadId), (oldData: any) => {
+      if (!oldData) return oldData
+      const existingMessages = Array.isArray(oldData.messages) ? oldData.messages : []
+      const messageIndex = existingMessages.findIndex((message: any) => message.id === messageId)
+      if (messageIndex === -1) return oldData
+
+      const currentMessage = existingMessages[messageIndex]
+      const currentReactions = { ...(currentMessage.reactions || {}) }
+      const existingReaction = currentReactions[reaction] || { count: 0, users: [] }
+      const users = Array.isArray(existingReaction.users) ? [...existingReaction.users] : []
+
+      if (action === 'insert') {
+        if (!users.includes(actorId)) users.push(actorId)
+      } else {
+        const userIndex = users.indexOf(actorId)
+        if (userIndex !== -1) users.splice(userIndex, 1)
+      }
+
+      if (users.length > 0) {
+        currentReactions[reaction] = { count: users.length, users }
+      } else {
+        delete currentReactions[reaction]
+      }
+
+      const nextMessages = [...existingMessages]
+      nextMessages[messageIndex] = {
+        ...currentMessage,
+        reactions: currentReactions,
+      }
+
+      return {
+        ...oldData,
+        messages: nextMessages,
+      }
+    })
+  }
+
   useEffect(() => {
 
     if (!threadId) {
@@ -183,16 +349,37 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
           queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!), refetchType: 'active' });
           queryClient.invalidateQueries({ queryKey: queryKeys.threads.lists() });
         },
+        onMessageUpdate: (payload) => {
+          patchRealtimeMessage(payload)
+        },
+        onMessageDelete: (payload) => {
+          removeRealtimeMessage(payload)
+          queryClient.invalidateQueries({ queryKey: queryKeys.threads.lists() });
+        },
         
-        onThreadUpdate: (payload) => {
+        onThreadUpdate: () => {
           queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!) });
         },
 
-        onLikeInsert: () => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!) });
+        onMessageLikeInsert: (payload) => {
+          applyMessageLikeCache(payload, 'insert')
         },
-        onLikeDelete: () => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!) });
+        onMessageLikeDelete: (payload) => {
+          applyMessageLikeCache(payload, 'delete')
+        },
+
+        onMessageReactionInsert: (payload) => {
+          applyMessageReactionCache(payload, 'insert')
+        },
+        onMessageReactionDelete: (payload) => {
+          applyMessageReactionCache(payload, 'delete')
+        },
+
+        onLikeInsert: (payload) => {
+          applyThreadLikeCache(payload, 'insert')
+        },
+        onLikeDelete: (payload) => {
+          applyThreadLikeCache(payload, 'delete')
         },
 
         onParticipantInsert: (payload) => {
@@ -249,7 +436,7 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
         } : undefined,
 
         pollId: pollId || undefined,
-        onPollVote: (payload) => {
+        onPollVote: () => {
           queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!) });
         }
       });
@@ -261,6 +448,8 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
     return () => {
       unsubscribers.forEach((unsub) => unsub());
     }
+    // Subscription should only rebuild when thread identity or current user changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId, pollId, session.user?.id])
 
   return {
@@ -280,7 +469,7 @@ export const useRealtimeFeed = () => {
   useEffect(() => {
     // Subscribe to new threads
     const unsubThreads = realtimeService.subscribeToAllThreads(
-      (payload) => {
+      () => {
         // New thread created - refresh feed
 
         fetchThreads()
@@ -300,7 +489,7 @@ export const useRealtimeFeed = () => {
       unsubThreads()
       unsubParticipants()
     }
-  }, [queryClient])
+  }, [fetchThreads, queryClient])
 }
 
 /**
@@ -315,7 +504,7 @@ export const useRealtimeNotifications = () => {
 
     const unsubscribe = realtimeService.subscribeToUserNotifications(
       session.user.id,
-      (payload) => {
+      () => {
         // New notification received
 
         setNewNotificationCount((prev) => prev + 1)
