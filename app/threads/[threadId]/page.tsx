@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import ThreadMessages from '@/components/features/threads/ThreadMessages';
 import ThreadInput from '@/components/features/threads/ThreadInput';
@@ -25,7 +25,6 @@ import { DualGatewayPremiumGate } from '@/components/features/premium/DualGatewa
 const ThreadPage = () => {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { session, sessionInfo, sessionValidated } = useUserStore();
 
   // Get thread ID
@@ -107,15 +106,26 @@ const ThreadPage = () => {
     if (!threadId) return;
 
     if (typeof window === 'undefined') return;
+    const txRefStorageKey = `whispr_thread_tx_ref_${threadId}`;
     const params = new URLSearchParams(window.location.search);
     const purchased = params.get('purchased') === 'true';
     const gateway = params.get('gateway');
-    const status = params.get('status');
-    const txRef = params.get('tx_ref');
+    const status = String(params.get('status') || '').toLowerCase();
+    const txRefFromQuery = params.get('tx_ref');
     const transactionId = params.get('transaction_id');
+    const storedTxRef = localStorage.getItem(txRefStorageKey);
+    const txRef = txRefFromQuery || storedTxRef;
 
-    if (!purchased || gateway !== 'flutterwave' || status !== 'successful') return;
-    if (!transactionId) return;
+    if ((!purchased || gateway !== 'flutterwave') && !storedTxRef) return;
+
+    const successStatuses = ['successful', 'success', 'succeeded', 'completed'];
+    if (status && !successStatuses.includes(status)) {
+      localStorage.removeItem(txRefStorageKey);
+      router.replace(`/threads/${threadId}`);
+      return;
+    }
+
+    if (!transactionId && !txRef) return;
 
     let isActive = true;
 
@@ -127,6 +137,7 @@ const ThreadPage = () => {
       });
 
       if (result.success) {
+        localStorage.removeItem(txRefStorageKey);
         await refetch();
         showToast({
           type: 'success',
@@ -135,6 +146,7 @@ const ThreadPage = () => {
           duration: 4000,
         });
       } else {
+        localStorage.removeItem(txRefStorageKey);
         showToast({
           type: 'error',
           title: 'Payment Pending',
@@ -490,10 +502,6 @@ const ThreadPage = () => {
     return currentThread?.privacy === 'private' || currentThread?.privacy === 'invite_only';
   }, [currentThread?.privacy]);
 
-  const isShareEntry = useMemo(() => {
-    return searchParams?.get('from') === 'share';
-  }, [searchParams]);
-
   useEffect(() => {
     if (!threadId) return;
     if (!sessionValidated) return;
@@ -817,8 +825,12 @@ const ThreadPage = () => {
               </button>
             </div>
           </div>
-        ) : currentThread.isPremium && !isCreator && isShareEntry ? (
-          <DualGatewayPremiumGate threadId={threadId ?? ''} price={currentThread.price ?? 0}>
+        ) : currentThread.isPremium && !isCreator && !currentThread.hasAccess ? (
+          <DualGatewayPremiumGate
+            key={`premium-gate-${currentThread.id}-${currentThread.hasAccess ? 'open' : 'locked'}`}
+            threadId={threadId ?? ''}
+            price={currentThread.price ?? 0}
+          >
             {contentBlock}
           </DualGatewayPremiumGate>
         ) : (
@@ -958,8 +970,8 @@ const ThreadPage = () => {
       />
 
       {isBanned && showRemovedModal && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-[#1E1E1E] border border-red-800 rounded-xl p-6 text-white shadow-2xl">
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm modal-safe-overlay">
+          <div className="w-full max-w-md modal-safe-panel bg-[#1E1E1E] border border-red-800 rounded-xl p-6 text-white shadow-2xl overflow-y-auto">
             <h2 className="text-lg font-semibold mb-2">Removed from Thread</h2>
             <p className="text-sm text-gray-300 mb-4">
               You have been removed from this thread by the creator. You can no longer send or receive messages here.

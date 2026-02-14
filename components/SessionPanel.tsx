@@ -23,12 +23,12 @@ const SessionPanel: React.FC<SessionPanelProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:justify-end pointer-events-none p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:justify-end pointer-events-none p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-[calc(env(safe-area-inset-top)+1rem)]">
       <div
         className="absolute inset-0 bg-black/50 pointer-events-auto"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-sm bg-gray-900 border border-gray-800 rounded-xl shadow-xl pointer-events-auto p-4 z-50">
+      <div className="relative w-full max-w-sm bg-gray-900 border border-gray-800 rounded-xl shadow-xl pointer-events-auto p-4 z-50 max-h-[calc(var(--app-viewport-height)-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-white font-semibold flex items-center gap-2">
             <User size={18} />

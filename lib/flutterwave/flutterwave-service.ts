@@ -117,11 +117,11 @@ export const createThreadPurchaseSession = async (
   threadId: string,
   country?: string,
   currency?: string
-): Promise<{ url: string | null; error: string | null; alreadyPurchased?: boolean }> => {
+): Promise<{ url: string | null; error: string | null; txRef?: string | null; alreadyPurchased?: boolean }> => {
   try {
     const token = resolveAccessToken();
     if (!token) {
-      return { url: null, error: 'Authentication required' };
+      return { url: null, error: 'Authentication required', txRef: null };
     }
 
     const response = await fetch('/api/flutterwave/initialize', {
@@ -139,16 +139,16 @@ export const createThreadPurchaseSession = async (
       const error = await response.json().catch(() => ({}))
       const message = error?.error || error?.message || 'Failed to create checkout session'
       if (response.status === 409 || error?.alreadyPurchased) {
-        return { url: null, error: message || 'Thread already purchased', alreadyPurchased: true }
+        return { url: null, error: message || 'Thread already purchased', txRef: null, alreadyPurchased: true }
       }
-      return { url: null, error: message }
+      return { url: null, error: message, txRef: null }
     }
 
-    const { url } = await response.json()
-    return { url, error: null }
+    const { url, txRef } = await response.json()
+    return { url, txRef: txRef || null, error: null }
   } catch (error) {
     console.error('Create Flutterwave checkout error:', error)
-    return { url: null, error: 'An unexpected error occurred' }
+    return { url: null, error: 'An unexpected error occurred', txRef: null }
   }
 }
 

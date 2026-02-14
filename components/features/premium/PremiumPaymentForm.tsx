@@ -87,8 +87,8 @@ export default function PremiumPaymentForm({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 pb-20 sm:pb-4">
-      <div className="relative w-full max-w-md max-h-[85vh] sm:max-h-[90vh] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-4 sm:p-6 overflow-y-auto mb-4 sm:mb-0">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-safe-overlay">
+      <div className="relative w-full max-w-md modal-safe-panel bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-4 sm:p-6 overflow-y-auto">
         {/* Back Button */}
         <button
           onClick={onCancel}

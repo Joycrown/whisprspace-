@@ -31,14 +31,14 @@ const SignupPromptModal: React.FC<SignupPromptModalProps> = ({ isOpen, onClose }
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center modal-safe-overlay"
         onClick={onClose}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden"
+          className="bg-white rounded-xl shadow-2xl w-full max-w-md modal-safe-panel overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}

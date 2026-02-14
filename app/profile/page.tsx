@@ -102,7 +102,7 @@ const ProfilePage = () => {
 
   if (!sessionValidated || !currentUser) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-[#121212]">
+      <div className="flex flex-col items-center justify-center app-full-height bg-[#121212]">
         <WhisprSpinner size={40} />
         <p className="text-gray-400 mt-4 animate-pulse">Checking access...</p>
       </div>
@@ -110,7 +110,7 @@ const ProfilePage = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#121212]">
+    <div className="flex flex-col app-full-height bg-[#121212]">
       <div className="flex items-center justify-between p-4 border-b border-gray-800">
         <button onClick={() => router.back()} className="text-gray-400 hover:text-white"><ArrowLeft className="w-5 h-5" /></button>
         <h1 className="text-xl font-bold text-white">My Profile</h1>
@@ -241,8 +241,8 @@ const ProfilePage = () => {
 
       {/* Upgrade to Premium Modal */}
       {showUpgradeModal && !showPaymentForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 pb-20 sm:pb-4">
-          <div className="relative w-full max-w-2xl max-h-[85vh] sm:max-h-[90vh] bg-gradient-to-br from-purple-900 to-blue-900 rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 text-white overflow-y-auto mb-4 sm:mb-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-safe-overlay">
+          <div className="relative w-full max-w-2xl modal-safe-panel bg-gradient-to-br from-purple-900 to-blue-900 rounded-2xl shadow-2xl p-4 sm:p-6 md:p-8 text-white overflow-y-auto">
             <button
               onClick={() => setShowUpgradeModal(false)}
               className="absolute top-4 right-4 text-white/60 hover:text-white transition-colors"
@@ -341,12 +341,12 @@ const ProfilePage = () => {
 
       {/* Username Edit Modal */}
       {showUsernameModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm modal-safe-overlay">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-[#1E1E1E] rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
+            className="bg-[#1E1E1E] rounded-xl shadow-2xl max-w-lg w-full modal-safe-panel overflow-y-auto"
           >
             <div className="sticky top-0 bg-[#1E1E1E] border-b border-gray-700 p-4 flex items-center justify-between z-10">
               <h2 className="text-xl font-bold text-white">Edit Username</h2>

@@ -214,7 +214,24 @@ export const fetchThreadById = async (
     if (error) throw error
     if (!data) return null
 
-    return transformThreadData(data, userId)
+    let purchasedThreadIds: Set<string> | undefined;
+    if (userId) {
+      const { data: purchases, error: purchaseError } = await rawDb.select<any[]>('thread_purchases', {
+        select: 'thread_id',
+        filters: {
+          'thread_id': rawDb.filter.eq(threadId),
+          'user_id': rawDb.filter.eq(userId),
+        },
+      });
+
+      if (purchaseError) {
+        console.warn('Failed to fetch thread purchase access for detail view:', purchaseError);
+      } else {
+        purchasedThreadIds = new Set((purchases || []).map((row: any) => row.thread_id));
+      }
+    }
+
+    return transformThreadData(data, userId, purchasedThreadIds)
   } catch (error) {
     console.error('fetchThreadById error:', error)
     return null
@@ -1416,8 +1433,12 @@ function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Se
 /**
  * Helper: Transform database thread to ThreadData type (with full details)
  */
-function transformThreadData(dbThread: any, userId?: string): ThreadData {
-  const baseThread = transformThread(dbThread, userId)
+function transformThreadData(
+  dbThread: any,
+  userId?: string,
+  purchasedThreadIds?: Set<string>
+): ThreadData {
+  const baseThread = transformThread(dbThread, userId, purchasedThreadIds)
 
   // Build participants map - ONLY from users who explicitly joined the thread
   const participantsMap = new Map<string, Participant>();

@@ -75,8 +75,8 @@ export function DualGatewayPremiumGate({
   const displayPrice = formatCurrency(localPrice, currency)
 
   const modal = (
-    <div className="fixed inset-0 z-[1200] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-2xl border border-gray-800 bg-[#121212] shadow-2xl p-6">
+    <div className="fixed inset-0 z-[1200] bg-black/75 backdrop-blur-sm flex items-center justify-center modal-safe-overlay">
+      <div className="w-full max-w-md modal-safe-panel rounded-2xl border border-gray-800 bg-[#121212] shadow-2xl p-6 overflow-y-auto">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-orange-500 flex items-center justify-center">
             <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -311,7 +311,7 @@ export default function ConversationPage() {
   );
 
   return (
-    <div className="flex flex-col bg-[#121212] h-[calc(100vh-4rem)] md:h-screen overflow-hidden">
+    <div className="flex flex-col bg-[#121212] h-[calc(100dvh-4rem)] md:h-screen overflow-hidden">
       {/* Header */}
       <div className="shrink-0 flex items-center gap-3 p-4 border-b border-gray-800 bg-gray-900/50 backdrop-blur-sm sticky top-0 z-20">
         <button
@@ -509,7 +509,7 @@ export default function ConversationPage() {
       </div>
       {activeImage && typeof window !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[1100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-6"
+          className="fixed inset-0 z-[1100] bg-black/80 backdrop-blur-sm flex items-center justify-center modal-safe-overlay"
           onClick={() => setActiveImage(null)}
           onWheel={(event) => event.preventDefault()}
           onTouchMove={(event) => event.preventDefault()}
@@ -525,13 +525,13 @@ export default function ConversationPage() {
             Close
           </button>
           <div
-            className="relative max-w-[96vw] max-h-[92vh]"
+            className="relative max-w-[96vw] max-h-[calc(var(--app-viewport-height)-2rem)]"
             onClick={(event) => event.stopPropagation()}
           >
             <img
               src={activeImage.url}
               alt={activeImage.name || 'Image preview'}
-              className="max-w-[96vw] max-h-[92vh] object-contain rounded-2xl shadow-2xl"
+              className="max-w-[96vw] max-h-[calc(var(--app-viewport-height)-2rem)] object-contain rounded-2xl shadow-2xl"
               draggable={false}
               onContextMenu={(event) => event.preventDefault()}
             />
