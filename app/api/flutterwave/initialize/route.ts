@@ -20,6 +20,12 @@ type PurchasableThread = {
   expires_at: string | null
 }
 
+type ResolvedRequestUser = {
+  id: string
+  email?: string | null
+  user_metadata?: Record<string, unknown>
+}
+
 const getThreadForPurchase = async (threadId: string) => {
   const { data, error } = await supabaseAdmin
     .from('threads')
@@ -66,20 +72,20 @@ const getBaseUrl = (request: NextRequest) => {
   return raw ? normalizeBaseUrl(raw) : ''
 }
 
-const decodeJwtPayload = (token: string) => {
+const decodeJwtPayload = (token: string): Record<string, unknown> | null => {
   try {
     const payload = token.split('.')[1]
     if (!payload) return null
     const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
     const padded = normalized.padEnd(normalized.length + (4 - (normalized.length % 4)) % 4, '=')
-    return JSON.parse(Buffer.from(padded, 'base64').toString('utf-8'))
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf-8')) as Record<string, unknown>
   } catch {
     return null
   }
 }
 
 const resolveUserFromRequest = async (request: NextRequest) => {
-  let user: any = null
+  let user: ResolvedRequestUser | null = null
   const authHeader = request.headers.get('authorization')
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice('Bearer '.length)
@@ -87,14 +93,17 @@ const resolveUserFromRequest = async (request: NextRequest) => {
       try {
         const { data, error } = await supabaseAdmin.auth.getUser(token)
         if (!error && data?.user) {
-          return data.user
+          return data.user as unknown as ResolvedRequestUser
         }
       } catch (error) {
         console.error('Supabase auth getUser failed:', error)
       }
     } else {
       const payload = decodeJwtPayload(token)
-      const userId = payload?.sub || payload?.user_id
+      const userId =
+        (typeof payload?.sub === 'string' && payload.sub) ||
+        (typeof payload?.user_id === 'string' && payload.user_id) ||
+        null
       if (userId) {
         const { data: userRow } = await supabaseAdmin
           .from('users')
@@ -102,10 +111,16 @@ const resolveUserFromRequest = async (request: NextRequest) => {
           .eq('id', userId)
           .maybeSingle()
         if (userRow) {
+          const payloadEmail = typeof payload?.email === 'string' ? payload.email : undefined
+          const payloadMetadata =
+            payload && typeof payload.user_metadata === 'object' && payload.user_metadata !== null
+              ? (payload.user_metadata as Record<string, unknown>)
+              : {}
+
           user = {
             id: userRow.id,
-            email: userRow.email || payload?.email,
-            user_metadata: payload?.user_metadata || {},
+            email: userRow.email || payloadEmail,
+            user_metadata: payloadMetadata,
           }
         }
       }
@@ -116,7 +131,7 @@ const resolveUserFromRequest = async (request: NextRequest) => {
     const supabase = await createSupabaseServerClient()
     const { data } = await supabase.auth.getUser()
     if (data?.user) {
-      user = data.user
+      user = data.user as unknown as ResolvedRequestUser
     }
   }
 
@@ -210,6 +225,11 @@ export async function POST(request: NextRequest) {
 
     const txRef = `whispr_${threadId}_${crypto.randomUUID()}`
     const email = user.email || `${user.id}@anonymous.whisprspace.com`
+    const metadata = user.user_metadata || {}
+    const metadataUsername =
+      typeof metadata.username === 'string' ? metadata.username : undefined
+    const metadataFullName =
+      typeof metadata.full_name === 'string' ? metadata.full_name : undefined
 
     // Determine final currency and amount
     const currency = (requestedCurrency && Object.values(SUPPORTED_CURRENCIES).includes(requestedCurrency)) 
@@ -232,7 +252,7 @@ export async function POST(request: NextRequest) {
         payment_options: 'card, mobilemoney, ussd, banktransfer, account, credit, nqr',
         customer: {
           email,
-          name: user.user_metadata?.username || user.user_metadata?.full_name || undefined,
+          name: metadataUsername || metadataFullName,
         },
         meta: {
           paymentType: 'thread_purchase',
@@ -296,7 +316,7 @@ export async function POST(request: NextRequest) {
         { onConflict: 'payment_provider,tx_ref' }
       )
 
-    return NextResponse.json({ url })
+    return NextResponse.json({ url, txRef })
   } catch (error) {
     console.error('Flutterwave initialize error:', error)
     return NextResponse.json(

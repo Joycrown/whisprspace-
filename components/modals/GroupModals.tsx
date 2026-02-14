@@ -22,9 +22,9 @@ export const BaseModal: React.FC<BaseModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center modal-safe-overlay"
          onClick={onClose}>
-      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md mx-auto p-6"
+      <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-md mx-auto p-6 modal-safe-panel overflow-y-auto"
            onClick={(e) => e.stopPropagation()}>
         <button
           onClick={onClose}
@@ -34,7 +34,7 @@ export const BaseModal: React.FC<BaseModalProps> = ({
         </button>
         <h3 className="text-xl font-semibold text-gray-900 mb-2">{title}</h3>
         <p className="text-gray-600 mb-6">{description}</p>
-        <div className="flex justify-end gap-3">
+        <div className="flex flex-wrap justify-end gap-3">
           {children}
         </div>
       </div>

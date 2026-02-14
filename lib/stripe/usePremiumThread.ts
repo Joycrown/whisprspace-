@@ -40,12 +40,15 @@ export const usePremiumThread = (threadId: string | null) => {
     setIsPurchasing(true)
     setError(null)
 
-    const { url, error, alreadyPurchased } = await createThreadPurchaseSession(threadId, country, currency)
+    const { url, txRef, error, alreadyPurchased } = await createThreadPurchaseSession(threadId, country, currency)
 
     setIsPurchasing(false)
 
     if (alreadyPurchased) {
       setHasAccess(true)
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem(`whispr_thread_tx_ref_${threadId}`)
+      }
       return true
     }
 
@@ -55,6 +58,9 @@ export const usePremiumThread = (threadId: string | null) => {
     }
 
     if (url) {
+      if (txRef && typeof window !== 'undefined') {
+        localStorage.setItem(`whispr_thread_tx_ref_${threadId}`, txRef)
+      }
       // Redirect to Flutterwave Checkout
       window.location.href = url
       return true

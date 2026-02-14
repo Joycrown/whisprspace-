@@ -17,6 +17,14 @@ type PurchasableThread = {
   expires_at: string | null
 }
 
+type ResolvedRequestUser = {
+  id: string
+  email?: string | null
+  user_metadata?: Record<string, unknown>
+}
+
+type MetaRecord = Record<string, unknown>
+
 const getThreadForPurchase = async (threadId: string) => {
   const { data, error } = await supabaseAdmin
     .from('threads')
@@ -31,20 +39,20 @@ const getThreadForPurchase = async (threadId: string) => {
   return { thread: data as PurchasableThread, error: null }
 }
 
-const decodeJwtPayload = (token: string) => {
+const decodeJwtPayload = (token: string): Record<string, unknown> | null => {
   try {
     const payload = token.split('.')[1]
     if (!payload) return null
     const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
     const padded = normalized.padEnd(normalized.length + (4 - (normalized.length % 4)) % 4, '=')
-    return JSON.parse(Buffer.from(padded, 'base64').toString('utf-8'))
+    return JSON.parse(Buffer.from(padded, 'base64').toString('utf-8')) as Record<string, unknown>
   } catch {
     return null
   }
 }
 
 const resolveUserFromRequest = async (request: NextRequest) => {
-  let user: any = null
+  let user: ResolvedRequestUser | null = null
   const authHeader = request.headers.get('authorization')
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice('Bearer '.length)
@@ -52,14 +60,17 @@ const resolveUserFromRequest = async (request: NextRequest) => {
       try {
         const { data, error } = await supabaseAdmin.auth.getUser(token)
         if (!error && data?.user) {
-          return data.user
+          return data.user as unknown as ResolvedRequestUser
         }
       } catch (error) {
         console.error('Supabase auth getUser failed:', error)
       }
     } else {
       const payload = decodeJwtPayload(token)
-      const userId = payload?.sub || payload?.user_id
+      const userId =
+        (typeof payload?.sub === 'string' && payload.sub) ||
+        (typeof payload?.user_id === 'string' && payload.user_id) ||
+        null
       if (userId) {
         const { data: userRow } = await supabaseAdmin
           .from('users')
@@ -67,10 +78,16 @@ const resolveUserFromRequest = async (request: NextRequest) => {
           .eq('id', userId)
           .maybeSingle()
         if (userRow) {
+          const payloadEmail = typeof payload?.email === 'string' ? payload.email : undefined
+          const payloadMetadata =
+            payload && typeof payload.user_metadata === 'object' && payload.user_metadata !== null
+              ? (payload.user_metadata as Record<string, unknown>)
+              : {}
+
           user = {
             id: userRow.id,
-            email: userRow.email || payload?.email,
-            user_metadata: payload?.user_metadata || {},
+            email: userRow.email || payloadEmail,
+            user_metadata: payloadMetadata,
           }
         }
       }
@@ -81,7 +98,7 @@ const resolveUserFromRequest = async (request: NextRequest) => {
     const supabase = await createSupabaseServerClient()
     const { data } = await supabase.auth.getUser()
     if (data?.user) {
-      user = data.user
+      user = data.user as unknown as ResolvedRequestUser
     }
   }
 
@@ -100,7 +117,7 @@ export async function POST(request: NextRequest) {
 
     const { threadId, transactionId, txRef } = await request.json().catch(() => ({}))
 
-    if (!threadId || !transactionId) {
+    if (!threadId || (!transactionId && !txRef)) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
         { status: 400 }
@@ -115,14 +132,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const verifyResponse = await fetch(
-      `https://api.flutterwave.com/v3/transactions/${transactionId}/verify`,
-      {
-        headers: {
-          Authorization: `Bearer ${flutterwaveSecretKey}`,
-        },
-      }
-    )
+    const verifyUrl = transactionId
+      ? `https://api.flutterwave.com/v3/transactions/${transactionId}/verify`
+      : `https://api.flutterwave.com/v3/transactions/verify_by_reference?tx_ref=${encodeURIComponent(
+        String(txRef)
+      )}`
+
+    const verifyResponse = await fetch(verifyUrl, {
+      headers: {
+        Authorization: `Bearer ${flutterwaveSecretKey}`,
+      },
+    })
 
     if (!verifyResponse.ok) {
       return NextResponse.json(
@@ -148,32 +168,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const normalizeMeta = (raw: any) => {
+    const normalizeMeta = (raw: unknown): MetaRecord => {
       if (!raw) return {}
       if (Array.isArray(raw)) {
-        return raw.reduce<Record<string, any>>((acc, item) => {
+        return raw.reduce<MetaRecord>((acc, item) => {
           if (!item || typeof item !== 'object') return acc
+          const metaItem = item as MetaRecord
           const key =
-            item.metaname ||
-            item.meta_name ||
-            item.name ||
-            item.key
+            metaItem.metaname ||
+            metaItem.meta_name ||
+            metaItem.name ||
+            metaItem.key
           const value =
-            item.metavalue ||
-            item.meta_value ||
-            item.value
+            metaItem.metavalue ||
+            metaItem.meta_value ||
+            metaItem.value
           if (key !== undefined) {
             acc[String(key)] = value
           }
           return acc
         }, {})
       }
-      if (typeof raw === 'object') return raw
+      if (typeof raw === 'object') return raw as MetaRecord
       return {}
     }
 
     const meta = normalizeMeta(verified?.meta || verified?.meta_data)
-    const paymentType = String(meta?.paymentType || meta?.payment_type || '').toLowerCase()
+    const paymentType = String(meta.paymentType || meta.payment_type || '').toLowerCase()
     if (paymentType === 'premium_upgrade') {
       return NextResponse.json(
         { error: 'Invalid payment type' },
@@ -181,21 +202,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!meta?.threadId || !meta?.userId || !meta?.amountUsd) {
+    const metaThreadId = String(meta.threadId || meta.thread_id || '').trim()
+    const metaUserId = String(meta.userId || meta.user_id || '').trim()
+    const metaAmountUsd = meta.amountUsd ?? meta.amount_usd
+
+    if (!metaThreadId || !metaUserId || metaAmountUsd === undefined || metaAmountUsd === null) {
       return NextResponse.json(
         { error: 'Missing payment metadata' },
         { status: 400 }
       )
     }
 
-    if (meta.threadId !== threadId) {
+    if (metaThreadId !== threadId) {
       return NextResponse.json(
         { error: 'Thread mismatch in payment metadata' },
         { status: 400 }
       )
     }
 
-    if (meta.userId !== user.id) {
+    if (metaUserId !== user.id) {
       return NextResponse.json(
         { error: 'Payment does not belong to this user' },
         { status: 403 }
@@ -235,9 +260,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const amountUsd = Number(meta?.amountUsd ?? meta?.amount_usd)
-    const expectedCurrency = String(meta?.currency || 'USD').toUpperCase()
-    const expectedAmount = Number(meta?.amount ?? meta?.amount_local ?? meta?.amountUsd ?? meta?.amount_usd)
+    const amountUsd = Number(metaAmountUsd)
+    const expectedCurrency = String(meta.currency || 'USD').toUpperCase()
+    const expectedAmount = Number(meta.amount ?? meta.amount_local ?? metaAmountUsd)
     const verifiedAmount = Number(verified?.amount)
     const verifiedCurrency = String(verified?.currency || '').toUpperCase()
 
@@ -267,9 +292,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const transactionRef = String(verified?.id || transactionId)
+    const transactionRef = String(verified?.id || transactionId || '')
     const resolvedTxRef = String(verified?.tx_ref || txRef || '')
     const paymentMethod = verified?.payment_type || verified?.payment_method
+
+    if (!transactionRef) {
+      return NextResponse.json(
+        { error: 'Missing provider transaction reference' },
+        { status: 400 }
+      )
+    }
+
+    if (txRef && resolvedTxRef && txRef !== resolvedTxRef) {
+      return NextResponse.json(
+        { error: 'Payment reference mismatch' },
+        { status: 400 }
+      )
+    }
 
     const { data: existingPurchase } = await supabaseAdmin
       .from('thread_purchases')
@@ -368,7 +407,7 @@ export async function POST(request: NextRequest) {
           .insert({
             creator_id: thread.creator_id,
             thread_id: threadId,
-            amount: expectedAmount,
+            amount: amountUsd,
             platform_fee: platformFee,
             net_amount: creatorEarnings,
             status: 'pending',

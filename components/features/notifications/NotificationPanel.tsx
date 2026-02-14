@@ -102,7 +102,7 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 300 }}
         transition={{ duration: 0.3 }}
-        className="fixed top-0 right-0 h-full w-full max-w-sm bg-[#1A1A1A] shadow-lg flex flex-col z-50 border-l border-gray-800"
+        className="fixed top-0 right-0 app-full-height w-full max-w-sm bg-[#1A1A1A] shadow-lg flex flex-col z-50 border-l border-gray-800 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
       >
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <h2 className="text-xl font-bold text-white">Notifications ({visibleUnreadCount > 0 ? visibleUnreadCount : ''})</h2>

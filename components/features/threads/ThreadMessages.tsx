@@ -448,7 +448,7 @@ const MessageItem: React.FC<{
           )}
           {activeImage && typeof window !== 'undefined' && createPortal(
             <div
-              className="fixed inset-0 z-[1100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 md:p-6 overscroll-contain"
+              className="fixed inset-0 z-[1100] bg-black/80 backdrop-blur-sm flex items-center justify-center modal-safe-overlay overscroll-contain"
               onClick={() => setActiveImage(null)}
               onWheel={(event) => event.preventDefault()}
               onTouchMove={(event) => event.preventDefault()}
@@ -464,13 +464,13 @@ const MessageItem: React.FC<{
                 Close
               </button>
               <div
-                className="relative max-w-[96vw] max-h-[92vh]"
+                className="relative max-w-[96vw] max-h-[calc(var(--app-viewport-height)-2rem)]"
                 onClick={(event) => event.stopPropagation()}
               >
                 <img
                   src={activeImage.url}
                   alt={activeImage.name || 'Image preview'}
-                  className="max-w-[96vw] max-h-[92vh] object-contain rounded-2xl shadow-2xl"
+                  className="max-w-[96vw] max-h-[calc(var(--app-viewport-height)-2rem)] object-contain rounded-2xl shadow-2xl"
                   draggable={false}
                   onContextMenu={(event) => event.preventDefault()}
                 />

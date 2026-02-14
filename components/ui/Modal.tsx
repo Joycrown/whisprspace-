@@ -70,7 +70,7 @@ export function Modal({
           />
 
           {/* Modal */}
-          <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[1050] flex items-center justify-center modal-safe-overlay">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -78,8 +78,7 @@ export function Modal({
               transition={{ duration: 0.2 }}
               className={`
                 bg-gray-800 rounded-xl shadow-2xl
-                w-full ${sizeStyles[size]}
-                max-h-[90vh] overflow-y-auto
+                w-full ${sizeStyles[size]} modal-safe-panel overflow-y-auto
                 ${className}
               `}
               onClick={(e) => e.stopPropagation()}

@@ -38,13 +38,13 @@ const ReportModal: React.FC<ReportModalProps> = ({
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 bg-gray-950 bg-opacity-75 z-50 flex justify-center items-center"
+          className="fixed inset-0 bg-gray-950 bg-opacity-75 z-50 flex justify-center items-center modal-safe-overlay"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
           <motion.div
-            className="bg-[#1a1a1a] p-6 rounded-lg shadow-xl w-full max-w-sm border border-gray-800"
+            className="bg-[#1a1a1a] p-6 rounded-lg shadow-xl w-full max-w-sm border border-gray-800 modal-safe-panel overflow-y-auto"
             initial={{ y: -50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -50, opacity: 0 }}

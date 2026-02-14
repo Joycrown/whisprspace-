@@ -1,10 +1,12 @@
 'use client'
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CreditCard, CheckCircle, AlertCircle, Gift } from 'lucide-react';
 import { getSession as getRawSession } from '@/lib/core/supabase/raw-auth';
 import { createThreadPurchaseSession } from '@/lib/flutterwave/flutterwave-service';
+import { getUserCountry } from '@/lib/payments/geo';
+import { convertPrice, formatCurrency, getCurrencyForCountry } from '@/lib/payments/currency';
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -25,16 +27,42 @@ export default function PaymentModal({
   threadId,
   threadTitle,
   price,
-  creatorId,
   onSuccess,
   onValidateCode,
 }: PaymentModalProps) {
   const [step, setStep] = useState<PaymentStep>('method');
   const [accessCode, setAccessCode] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [userCountry, setUserCountry] = useState('US');
+  const currency = getCurrencyForCountry(userCountry);
+  const threadPurchaseTxRefKey = `whispr_thread_tx_ref_${threadId}`;
+  const localPrice = convertPrice(price, currency);
   // Calculate platform fee (30%) and creator earnings (70%)
   const platformFee = price * 0.30;
   const creatorEarnings = price * 0.70;
+  const localPlatformFee = convertPrice(platformFee, currency);
+  const localCreatorEarnings = convertPrice(creatorEarnings, currency);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let isActive = true;
+
+    getUserCountry()
+      .then((country) => {
+        if (isActive && country) {
+          setUserCountry(country);
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setUserCountry('US');
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [isOpen]);
 
   const handlePayment = async () => {
     setErrorMessage('');
@@ -46,9 +74,14 @@ export default function PaymentModal({
     }
 
     setStep('processing');
-    let { url, error, alreadyPurchased } = await createThreadPurchaseSession(threadId);
+    const { url, txRef, error, alreadyPurchased } = await createThreadPurchaseSession(
+      threadId,
+      userCountry,
+      currency
+    );
 
     if (alreadyPurchased) {
+      localStorage.removeItem(threadPurchaseTxRefKey);
       setStep('success');
       setTimeout(() => {
         onSuccess();
@@ -61,6 +94,10 @@ export default function PaymentModal({
       setErrorMessage(error || 'Payment link unavailable. Please try again.');
       setStep('error');
       return;
+    }
+
+    if (txRef) {
+      localStorage.setItem(threadPurchaseTxRefKey, txRef);
     }
 
     window.location.href = url;
@@ -89,7 +126,7 @@ export default function PaymentModal({
           setStep('code');
         }
       }
-    } catch (error) {
+    } catch {
       setErrorMessage('Failed to validate code. Please try again.');
       setStep('code');
     }
@@ -110,14 +147,14 @@ export default function PaymentModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] overflow-y-auto">
-        <div className="flex min-h-full items-start sm:items-center justify-center p-3 sm:p-4">
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60]">
+        <div className="flex min-h-full items-center justify-center modal-safe-overlay">
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
-          className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
+            className="bg-white rounded-xl shadow-2xl w-full max-w-md modal-safe-panel overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
           >
           {/* Header */}
           <div className="flex justify-between items-center p-4 sm:p-6 border-b border-gray-200">
@@ -137,16 +174,23 @@ export default function PaymentModal({
               <h3 className="font-semibold text-gray-900 mb-2">{threadTitle}</h3>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Price:</span>
-                <span className="text-2xl font-bold text-purple-600">${price.toFixed(2)}</span>
+                <div className="text-right">
+                  <span className="block text-2xl font-bold text-purple-600">
+                    {formatCurrency(localPrice, currency)}
+                  </span>
+                  {currency !== 'USD' && (
+                    <span className="text-xs text-gray-500">USD {price.toFixed(2)}</span>
+                  )}
+                </div>
               </div>
               <div className="mt-2 pt-2 border-t border-purple-200 text-xs text-gray-600">
                 <div className="flex justify-between">
                   <span>Creator earnings (70%):</span>
-                  <span className="font-medium text-green-600">${creatorEarnings.toFixed(2)}</span>
+                  <span className="font-medium text-green-600">{formatCurrency(localCreatorEarnings, currency)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Platform fee (30%):</span>
-                  <span className="font-medium">${platformFee.toFixed(2)}</span>
+                  <span className="font-medium">{formatCurrency(localPlatformFee, currency)}</span>
                 </div>
               </div>
             </div>
