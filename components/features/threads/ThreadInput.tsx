@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  FaPaperPlane, FaImage, FaTimes
+  FaPaperPlane, FaImage, FaTimes, FaAt, FaPaperclip
 } from 'react-icons/fa';
 import { Message } from '@/types';
 
@@ -12,7 +12,6 @@ interface ThreadInputProps {
   replyTo: Message | null;
   onTypingStart?: () => void; // Added prop
   onTypingEnd?: () => void;   // Added prop
-  onTypingCard?: () => void;
   isLoading?: boolean;
   isDisabled?: boolean;
   disabledMessage?: string;
@@ -22,10 +21,8 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
   onSendMessage,
   replyPreview,
   onCancelReply,
-  replyTo,
   onTypingStart,
   onTypingEnd,
-  onTypingCard,
   isLoading,
   isDisabled = false,
   disabledMessage
@@ -182,6 +179,11 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
           >
             <FaPaperPlane className="w-4 h-4 md:w-5 md:h-5" />
           </button>
+        </div>
+
+        <div className="mt-2 flex items-center gap-1.5 px-1 text-[11px] md:text-xs text-gray-400">
+          <FaAt className="w-3 h-3 text-indigo-300" />
+          <span>Use @username or @ANON_12345678 to mention and notify someone.</span>
         </div>
       </div>
     </div>

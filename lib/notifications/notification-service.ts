@@ -9,6 +9,7 @@ import * as rawRealtime from '@/lib/core/supabase/raw-realtime'
 
 export type NotificationType = 
   | 'thread_like'
+  | 'thread_message'
   | 'message_reply'
   | 'mention'
   | 'group_invite'
@@ -424,23 +425,25 @@ export const subscribeToNotifications = (
 export const getNotificationIcon = (type: NotificationType): string => {
   switch (type) {
     case 'thread_like':
-      return '❤️'
+      return '\u{2764}\u{FE0F}'
+    case 'thread_message':
+      return '\u{1F4E8}'
     case 'message_reply':
-      return '💬'
+      return '\u{1F4AC}'
     case 'mention':
-      return '👋'
+      return '\u{1F44B}'
     case 'group_invite':
-      return '🎫'
+      return '\u{1F3AB}'
     case 'thread_invite':
-      return '🎫'
+      return '\u{1F3AB}'
     case 'achievement_unlocked':
       return '\u{1F3C6}'
     case 'poll_ending_soon':
-      return '⏰'
+      return '\u{23F0}'
     case 'thread_expiring_soon':
-      return '⌛'
+      return '\u{231B}'
     default:
-      return '🔔'
+      return '\u{1F514}'
   }
 }
 
@@ -451,6 +454,8 @@ export const getNotificationColor = (type: NotificationType): string => {
   switch (type) {
     case 'thread_like':
       return 'text-red-500'
+    case 'thread_message':
+      return 'text-blue-500'
     case 'message_reply':
       return 'text-blue-500'
     case 'mention':
@@ -488,6 +493,8 @@ export const formatNotificationTime = (createdAt: string): string => {
   
   return created.toLocaleDateString()
 }
+
+
 
 
 

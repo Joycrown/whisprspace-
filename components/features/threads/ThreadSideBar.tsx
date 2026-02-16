@@ -51,7 +51,6 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
   onMessageParticipant,
   onLeaveThread,
   onDeleteThread,
-  onReportThread,
   onUpdateThreadPrivacy,
   onSetMessageFilter,
   currentMessageFilter,
@@ -79,13 +78,14 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const { showToast } = useToast(); // Initialize toast
-
-  if (!thread) return null;
+  const threadId = thread?.id;
+  const threadPrivacy = thread?.privacy;
 
   useEffect(() => {
+    if (!threadId) return;
     setInviteLink(null);
     setIsLinkVisible(false);
-  }, [thread.id, thread.privacy]);
+  }, [threadId, threadPrivacy]);
 
   const handleMessageClick = (participant: Participant) => {
     setSelectedParticipant(participant);
@@ -145,7 +145,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
         duration: 3000,
       });
       return true;
-    } catch (error) {
+    } catch {
       showToast({
         type: 'error',
         title: 'Copy Failed',
@@ -167,7 +167,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
       return null;
     }
 
-    if (thread.privacy === 'invite_only') {
+    if (thread.privacy !== 'public') {
       setIsGeneratingLink(true);
       const { code, error } = await createThreadInvite(thread.id, null, 7, forceNew);
       setIsGeneratingLink(false);
@@ -336,6 +336,8 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
       </button>
     </div>
   );
+
+  if (!thread) return null;
 
   return (
     <div className={`flex flex-col w-full h-full ${isMobileDrawer ? '' : 'hidden lg:flex border-l border-gray-800'}`}>

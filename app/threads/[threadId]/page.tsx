@@ -35,7 +35,7 @@ const ThreadPage = () => {
 
   // React Query hooks for data fetching and mutations
   const hasSession = Boolean(session.user || sessionInfo);
-  const { thread: currentThread, isLoading, error, refetch } = useThreadQuery(
+  const { thread: currentThread, isLoading, isFetching, isFetchedAfterMount, error, refetch } = useThreadQuery(
     threadId,
     Boolean(threadId && sessionValidated && hasSession)
   );
@@ -658,7 +658,10 @@ const ThreadPage = () => {
     );
   }
 
-  if (isLoading) {
+  // Prevent rendering cached thread content before the first post-mount fetch completes.
+  // This avoids brief unauthorized content peeks on access-restricted threads.
+  const waitingForFreshFetch = isFetching && !isFetchedAfterMount;
+  if (isLoading || waitingForFreshFetch) {
     return (
       <div className="flex items-center justify-center h-screen bg-[#121212]">
         <WhisprSpinner size={60} />
@@ -808,6 +811,7 @@ const ThreadPage = () => {
             thread={currentThread}
             onLike={handleLike}
             onToggleSidebar={() => setIsSidebarOpen(true)}
+            currentUserId={currentUserId}
           />
         </div>
         {isPrivateBlocked ? (

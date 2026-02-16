@@ -2,7 +2,7 @@
 
 import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/react-query/queryKeys'
-import { Thread, ThreadFilters } from '@/types'
+import { ThreadFilters } from '@/types'
 import { fetchThreads } from '../thread-service'
 
 /**
@@ -83,6 +83,8 @@ export function useThreadQuery(threadId: string | undefined, enabled = true) {
   return {
     thread: query.data,
     isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    isFetchedAfterMount: query.isFetchedAfterMount,
     isError: query.isError,
     error: query.error,
     refetch: query.refetch,

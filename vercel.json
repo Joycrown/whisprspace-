@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/push-dispatch",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/premium-expiry",
       "schedule": "0 2 * * *"
     }

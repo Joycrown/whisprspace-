@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
@@ -13,22 +12,29 @@ import {
 } from 'react-icons/fa';
 import { formatTimeRemaining } from '@/lib/utils/utils/helpers/threadHelpers';
 import { ThreadData } from '@/types';
+import { createThreadInvite } from '@/lib/threads';
+import { useToast } from '@/components/ui/Toast';
 
 interface ThreadHeaderProps {
   thread: ThreadData | null;
   onLike: () => void;
   onToggleSidebar?: () => void;
+  currentUserId?: string;
 }
 
 const ThreadHeader: React.FC<ThreadHeaderProps> = ({
   thread,
   onLike,
-  onToggleSidebar
+  onToggleSidebar,
+  currentUserId
 }) => {
   const [timeRemaining, setTimeRemaining] = useState('');
   const [showShareDropdown, setShowShareDropdown] = useState(false);
   const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
+  const [resolvedShareUrl, setResolvedShareUrl] = useState('');
+  const [isResolvingShareLink, setIsResolvingShareLink] = useState(false);
   const shareButtonRef = useRef<HTMLDivElement>(null);
+  const { showToast } = useToast();
   const maxAvatars = 5;
 
   useEffect(() => {
@@ -73,66 +79,169 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showShareDropdown]);
 
+  const threadPath = thread ? `/threads/${thread.id}` : '';
+  const buildThreadShareUrl = useCallback(() =>
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/auth?redirect=${encodeURIComponent(`${threadPath}?from=share`)}`
+      : '', [threadPath]);
+  const requiresInviteLink = thread?.privacy !== 'public';
+  const isCreator = Boolean(
+    thread && currentUserId && (thread.createdBy?.id === currentUserId || thread.authorId === currentUserId)
+  );
+  const defaultShareUrl = buildThreadShareUrl();
+  const shareText = thread ? `Check out this thread: ${thread.title}` : 'Check out this thread';
+
+  const resolveShareUrl = useCallback(async (forceNew: boolean = false) => {
+    if (!thread) {
+      return defaultShareUrl;
+    }
+
+    if (!requiresInviteLink) {
+      return defaultShareUrl;
+    }
+
+    if (!isCreator) {
+      return '';
+    }
+
+    if (!forceNew && resolvedShareUrl) {
+      return resolvedShareUrl;
+    }
+
+    setIsResolvingShareLink(true);
+    const { code, error } = await createThreadInvite(thread.id, null, 7, forceNew);
+    setIsResolvingShareLink(false);
+
+    if (error || !code) {
+      showToast({
+        type: 'error',
+        title: 'Invite Link Failed',
+        message: error || 'Unable to generate invite link.',
+        duration: 4000,
+      });
+      return defaultShareUrl;
+    }
+
+    const inviteUrl = `${window.location.origin}/invite/${code}`;
+    setResolvedShareUrl(inviteUrl);
+    return inviteUrl;
+  }, [thread, requiresInviteLink, isCreator, resolvedShareUrl, showToast, defaultShareUrl]);
+
+  useEffect(() => {
+    if (!thread || !showShareDropdown || !requiresInviteLink || !isCreator) return;
+    void resolveShareUrl();
+  }, [thread, showShareDropdown, requiresInviteLink, isCreator, resolveShareUrl]);
+
+  useEffect(() => {
+    setResolvedShareUrl('');
+  }, [thread?.id, thread?.privacy, currentUserId]);
+
   if (!thread) return null;
 
-  const threadPath = `/threads/${thread.id}`;
-  const threadUrl = typeof window !== 'undefined' ? `${window.location.origin}${threadPath}` : '';
-  const shareUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/auth?redirect=${encodeURIComponent(`${threadPath}?from=share`)}`
-    : '';
-  const shareText = `Check out this thread: ${thread.title}`;
+  const getShareUrlOrNotify = async () => {
+    const shareUrl = await resolveShareUrl();
+    if (shareUrl) {
+      return shareUrl;
+    }
+
+    showToast({
+      type: 'error',
+      title: 'Invite Link Restricted',
+      message: 'Only the thread creator can share private-thread invite links.',
+      duration: 4000,
+    });
+    setShowShareDropdown(false);
+    return null;
+  };
 
   const handleCopyLink = async () => {
     try {
+      const shareUrl = await getShareUrlOrNotify();
+      if (!shareUrl) return;
       await navigator.clipboard.writeText(shareUrl);
-      alert('Link copied to clipboard!');
+      showToast({
+        type: 'success',
+        title: 'Link Copied',
+        message: 'Share link copied to clipboard.',
+        duration: 3000,
+      });
     } catch (err) {
       console.error('Failed to copy: ', err);
+      showToast({
+        type: 'error',
+        title: 'Copy Failed',
+        message: 'Unable to copy share link.',
+        duration: 4000,
+      });
     }
     setShowShareDropdown(false);
   };
 
-  const handleTwitterShare = () => {
+  const handleTwitterShare = async () => {
+    const shareUrl = await getShareUrlOrNotify();
+    if (!shareUrl) return;
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`, '_blank');
     setShowShareDropdown(false);
   };
 
-  const handleFacebookShare = () => {
+  const handleFacebookShare = async () => {
+    const shareUrl = await getShareUrlOrNotify();
+    if (!shareUrl) return;
     window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`, '_blank');
     setShowShareDropdown(false);
   };
 
-  const handleThreadsShare = () => {
+  const handleThreadsShare = async () => {
+    const shareUrl = await getShareUrlOrNotify();
+    if (!shareUrl) return;
     // Threads does not have a direct sharing intent URL like Twitter or Facebook.
     // A common workaround is to copy the link and instruct the user to paste it.
     // For a more integrated experience, one might need to use their API if available, or a universal share dialog.
     // For now, we'll copy the link and open Threads (if a universal link exists or prompt user).
     navigator.clipboard.writeText(shareUrl);
-    alert('Link copied to clipboard. Please paste it in Threads.');
+    showToast({
+      type: 'success',
+      title: 'Link Copied',
+      message: 'Share link copied. Paste it in Threads.',
+      duration: 3000,
+    });
     // Optionally open Threads app/web if a universal link is known.
     setShowShareDropdown(false);
   };
 
-  const handleWhatsappShare = () => {
+  const handleWhatsappShare = async () => {
+    const shareUrl = await getShareUrlOrNotify();
+    if (!shareUrl) return;
     window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText + " " + shareUrl)}`, '_blank');
     setShowShareDropdown(false);
   };
 
-  const handleLinkedInShare = () => {
+  const handleLinkedInShare = async () => {
+    const shareUrl = await getShareUrlOrNotify();
+    if (!shareUrl) return;
     window.open(`https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(shareUrl)}&title=${encodeURIComponent(thread.title)}&summary=${encodeURIComponent(thread.content || '')}`, '_blank');
     setShowShareDropdown(false);
   };
 
-  const handleInstagramShare = () => {
+  const handleInstagramShare = async () => {
+    const shareUrl = await getShareUrlOrNotify();
+    if (!shareUrl) return;
     // Instagram sharing is complex, usually done via their app with specific APIs.
     // A direct web intent is not straightforward for posts/stories like other platforms.
     // For now, we'll copy the link and inform the user.
     navigator.clipboard.writeText(shareUrl);
-    alert('Link copied to clipboard. Please paste it in Instagram.');
+    showToast({
+      type: 'success',
+      title: 'Link Copied',
+      message: 'Share link copied. Paste it in Instagram.',
+      duration: 3000,
+    });
     setShowShareDropdown(false);
   };
 
-  const handleEmailShare = () => {
+  const handleEmailShare = async () => {
+    const shareUrl = await getShareUrlOrNotify();
+    if (!shareUrl) return;
     window.open(`mailto:?subject=${encodeURIComponent(shareText)}&body=${encodeURIComponent(shareUrl)}`, '_blank');
     setShowShareDropdown(false);
   };
@@ -160,10 +269,11 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
         >
           <button
             onClick={handleCopyLink}
+            disabled={isResolvingShareLink}
             className="flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-gray-600 w-full text-left"
           >
             <FaShareAlt className="w-4 h-4" />
-            Copy Link
+            {isResolvingShareLink ? 'Preparing link...' : 'Copy Link'}
           </button>
           <button
             onClick={handleTwitterShare}

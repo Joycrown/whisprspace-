@@ -84,6 +84,16 @@ const NotificationPreferencesModal: React.FC<NotificationPreferencesModalProps> 
           </div>
 
           <div className="space-y-6">
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4">
+              <h3 className="text-base font-semibold text-indigo-900">Why enable notifications?</h3>
+              <p className="mt-1 text-sm text-indigo-800">
+                Get alerts for replies, mentions, invites, and thread activity before they are buried.
+              </p>
+              <p className="mt-2 text-xs text-indigo-700">
+                Mention tip: type <span className="font-semibold">@username</span> or <span className="font-semibold">@ANON_12345678</span> in a thread message to tag someone.
+              </p>
+            </div>
+
             {/* General Notification Types */}
             <div>
               <h3 className="text-xl font-semibold mb-3">Delivery Methods</h3>
