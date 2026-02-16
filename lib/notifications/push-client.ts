@@ -1,8 +1,11 @@
 import { supabase } from '@/lib/core/supabase/client'
+import * as rawAuth from '@/lib/core/supabase/raw-auth'
 
 const getAuthHeaders = async () => {
   const { data } = await supabase.auth.getSession()
-  const token = data?.session?.access_token
+  const tokenFromSupabase = data?.session?.access_token
+  const tokenFromRawAuth = rawAuth.getSession()?.access_token
+  const token = tokenFromSupabase || tokenFromRawAuth
 
   if (!token) {
     return {}
@@ -57,7 +60,9 @@ export const getCurrentPushSubscription = async () => {
 }
 
 const fetchPublicVapidKey = async () => {
-  const response = await fetch('/api/push/public-key')
+  const response = await fetch('/api/push/public-key', {
+    credentials: 'include',
+  })
   const payload = await response.json().catch(() => ({}))
 
   if (!response.ok || !payload?.publicKey) {
@@ -72,6 +77,7 @@ const syncSubscriptionWithBackend = async (subscription: PushSubscription) => {
 
   const response = await fetch('/api/push/subscribe', {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...authHeaders,
@@ -130,6 +136,7 @@ export const unsubscribeDeviceFromPush = async () => {
 
   await fetch('/api/push/unsubscribe', {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...authHeaders,
@@ -147,6 +154,7 @@ export const sendPushTestNotification = async () => {
 
   const response = await fetch('/api/push/test', {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...authHeaders,
@@ -162,4 +170,3 @@ export const sendPushTestNotification = async () => {
 
   return payload
 }
-
