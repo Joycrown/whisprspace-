@@ -91,6 +91,16 @@ const syncSubscriptionWithBackend = async (subscription: PushSubscription) => {
   }
 }
 
+export const ensureCurrentSubscriptionSynced = async () => {
+  const subscription = await getCurrentPushSubscription()
+  if (!subscription) {
+    return null
+  }
+
+  await syncSubscriptionWithBackend(subscription)
+  return subscription
+}
+
 export const subscribeDeviceToPush = async () => {
   if (!isPushSupported()) {
     throw new Error('Push notifications are not supported on this device')
@@ -150,6 +160,11 @@ export const unsubscribeDeviceFromPush = async () => {
 }
 
 export const sendPushTestNotification = async () => {
+  const subscription = await ensureCurrentSubscriptionSynced()
+  if (!subscription) {
+    throw new Error('No active browser subscription found. Turn push off and on for this device, then retry.')
+  }
+
   const authHeaders = await getAuthHeaders()
 
   const response = await fetch('/api/push/test', {

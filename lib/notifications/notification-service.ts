@@ -10,6 +10,7 @@ import * as rawRealtime from '@/lib/core/supabase/raw-realtime'
 export type NotificationType = 
   | 'thread_like'
   | 'thread_message'
+  | 'direct_message'
   | 'message_reply'
   | 'mention'
   | 'group_invite'
@@ -428,6 +429,8 @@ export const getNotificationIcon = (type: NotificationType): string => {
       return '\u{2764}\u{FE0F}'
     case 'thread_message':
       return '\u{1F4E8}'
+    case 'direct_message':
+      return '\u{1F4E8}'
     case 'message_reply':
       return '\u{1F4AC}'
     case 'mention':
@@ -455,6 +458,8 @@ export const getNotificationColor = (type: NotificationType): string => {
     case 'thread_like':
       return 'text-red-500'
     case 'thread_message':
+      return 'text-blue-500'
+    case 'direct_message':
       return 'text-blue-500'
     case 'message_reply':
       return 'text-blue-500'

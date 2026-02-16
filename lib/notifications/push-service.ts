@@ -81,9 +81,17 @@ const buildNotificationUrl = (notification: NotificationDispatchRecord) => {
     (typeof data.thread_id === 'string' && data.thread_id) ||
     (typeof data.threadId === 'string' && data.threadId) ||
     null
+  const conversationId =
+    (typeof data.conversation_id === 'string' && data.conversation_id) ||
+    (typeof data.conversationId === 'string' && data.conversationId) ||
+    null
 
   if (threadId) {
     return `/threads/${threadId}`
+  }
+
+  if (conversationId) {
+    return `/inbox/${conversationId}`
   }
 
   return '/notifications'

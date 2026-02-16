@@ -69,6 +69,9 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
     if (notification.type === 'thread_message') {
       return notificationPrefs?.replies !== false;
     }
+    if (notification.type === 'direct_message') {
+      return notificationPrefs?.replies !== false;
+    }
     if (notification.type === 'mention') {
       return notificationPrefs?.mentions !== false;
     }

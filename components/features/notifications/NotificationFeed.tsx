@@ -33,6 +33,9 @@ const NotificationFeed: React.FC = () => {
     if (notification.type === 'thread_message') {
       return notificationPrefs?.replies !== false;
     }
+    if (notification.type === 'direct_message') {
+      return notificationPrefs?.replies !== false;
+    }
     if (notification.type === 'mention') {
       return notificationPrefs?.mentions !== false;
     }
@@ -52,6 +55,7 @@ const NotificationFeed: React.FC = () => {
   const notificationIcons: Partial<Record<NotificationType, React.ReactNode>> = {
     thread_like: <FaHeart className="text-red-400" />,
     thread_message: <FaEnvelopeOpenText className="text-blue-400" />,
+    direct_message: <FaEnvelopeOpenText className="text-blue-400" />,
     message_reply: <FaReply className="text-teal-400" />,
     mention: <FaAt className="text-indigo-400" />,
     group_invite: <FaUsers className="text-purple-400" />,
@@ -71,6 +75,7 @@ const NotificationFeed: React.FC = () => {
   const getActionUrl = (notification: { data?: Record<string, unknown> }) => {
     const data = notification.data || {};
     if (typeof data.thread_id === 'string') return `/threads/${data.thread_id}`;
+    if (typeof data.conversation_id === 'string') return `/inbox/${data.conversation_id}`;
     if (typeof data.group_id === 'string') return `/groups/${data.group_id}`;
     return null;
   };
