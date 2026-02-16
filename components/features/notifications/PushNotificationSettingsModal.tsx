@@ -23,6 +23,19 @@ type Notice = {
   message: string
 } | null
 
+type PushDispatchResult = {
+  attempted: number
+  delivered: number
+  removed: number
+  skipped: boolean
+  reason?: string
+}
+
+type PushTestResponse = {
+  success?: boolean
+  result?: PushDispatchResult
+}
+
 const getErrorMessage = (error: unknown) => {
   if (error instanceof Error && error.message) {
     return error.message
@@ -128,10 +141,40 @@ const PushNotificationSettingsModal: React.FC<PushNotificationSettingsModalProps
     setIsSendingTest(true)
 
     try {
-      await sendPushTestNotification()
+      const payload = (await sendPushTestNotification()) as PushTestResponse
+      const result = payload?.result
+
+      if (!result) {
+        setNotice({
+          tone: 'info',
+          message: 'Test request completed, but no dispatch details were returned.',
+        })
+        return
+      }
+
+      if (result.skipped) {
+        const reason = result.reason || 'Push dispatch was skipped.'
+        const tone: Notice['tone'] =
+          reason.toLowerCase().includes('no active subscriptions') ? 'error' : 'info'
+
+        setNotice({
+          tone,
+          message: `Test skipped: ${reason}`,
+        })
+        return
+      }
+
+      if (result.delivered > 0) {
+        setNotice({
+          tone: 'success',
+          message: `Test notification delivered (${result.delivered}/${result.attempted}). Check your device notification tray.`,
+        })
+        return
+      }
+
       setNotice({
-        tone: 'success',
-        message: 'Test notification sent. Check your device notification tray.',
+        tone: 'info',
+        message: `Push attempted (${result.attempted}) but none delivered. Removed stale subscriptions: ${result.removed}.`,
       })
     } catch (error: unknown) {
       setNotice({

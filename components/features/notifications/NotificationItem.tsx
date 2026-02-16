@@ -27,6 +27,8 @@ export default function NotificationItem({
 
     if (data.thread_id) {
       router.push(`/threads/${data.thread_id}`)
+    } else if (data.conversation_id) {
+      router.push(`/inbox/${data.conversation_id}`)
     } else if (data.group_id) {
       router.push(`/groups/${data.group_id}`)
     }

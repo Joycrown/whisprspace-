@@ -27,11 +27,13 @@ Apply the migration that adds:
 - `public.push_subscriptions`
 - `notifications.push_sent_at`
 - `thread_message` notifications for thread participants
+- `direct_message` notifications for DM recipients
 
 Migration file:
 
 - `supabase/migrations/20260216190000_add_web_push_notifications.sql`
 - `supabase/migrations/20260216213000_add_thread_participant_message_notifications.sql`
+- `supabase/migrations/20260216224500_add_direct_message_notifications.sql`
 
 ## 4) Deploy
 `vercel.json` includes minute cron dispatch:
@@ -93,5 +95,6 @@ Push dispatch is notification-row driven. Current notification sources include:
 - `poll_ending_soon`
 - `thread_expiring_soon`
 - `thread_message` (new messages for users in `thread_participants`)
+- `direct_message` (new messages for users in `conversation_participants`)
 
 `mention` supports tagging by `@username` and `@ANON_12345678`.
