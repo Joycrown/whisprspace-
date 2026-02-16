@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/push-dispatch",
-      "schedule": "* * * * *"
+      "schedule": "15 2 * * *"
     },
     {
       "path": "/api/cron/premium-expiry",
