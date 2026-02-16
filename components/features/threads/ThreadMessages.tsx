@@ -138,8 +138,10 @@ const ThreadMessages: React.FC<ThreadMessagesProps> = ({
               </div>
               <span>
                 {typingUsers.length === 1
-                  ? 'Someone is typing...'
-                  : `${typingUsers.length} people are typing...`}
+                  ? `${typingUsers[0]} is typing...`
+                  : typingUsers.length === 2
+                    ? `${typingUsers[0]} and ${typingUsers[1]} are typing...`
+                    : `${typingUsers[0]}, ${typingUsers[1]} and ${typingUsers.length - 2} others are typing...`}
               </span>
             </div>
           </motion.div>

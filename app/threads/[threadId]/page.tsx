@@ -502,6 +502,20 @@ const ThreadPage = () => {
     return currentThread?.privacy === 'private' || currentThread?.privacy === 'invite_only';
   }, [currentThread?.privacy]);
 
+  const typingDisplayNames = useMemo(() => {
+    if (!typingUsers?.length) return [];
+
+    const participantById = new Map(
+      participants.map((participant) => [participant.id, participant])
+    );
+
+    return typingUsers.map((typingUserId) => {
+      const participant = participantById.get(typingUserId);
+      const candidateName = participant?.name || participant?.anonymousId || 'Someone';
+      return candidateName.trim() || 'Someone';
+    });
+  }, [typingUsers, participants]);
+
   useEffect(() => {
     if (!threadId) return;
     if (!sessionValidated) return;
@@ -779,6 +793,7 @@ const ThreadPage = () => {
             const retryAttachments = msg.attachments?.map(a => a.file).filter(Boolean) as File[];
             handleSendMessage(msg.content, retryAttachments);
           }}
+          typingUsers={typingDisplayNames}
         />
       </div>
 
@@ -789,6 +804,8 @@ const ThreadPage = () => {
           onTypingStart={startTyping}
           onTypingEnd={stopTyping}
           replyTo={replyingTo || null}
+          participants={participants}
+          currentUserId={currentUserId}
           onCancelReply={() => setReplyingTo(undefined)}
           replyPreview={
             replyingTo ? `Replying to ${messagesMap[replyingTo.id]?.sender.name || 'User'}: ${messagesMap[replyingTo.id]?.content.substring(0, 30) || 'Attachment'}...` : undefined

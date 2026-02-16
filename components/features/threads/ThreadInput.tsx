@@ -1,17 +1,27 @@
 'use client'
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   FaPaperPlane, FaImage, FaTimes, FaAt, FaPaperclip
 } from 'react-icons/fa';
-import { Message } from '@/types';
+import { Message, Participant } from '@/types';
+
+type MentionSuggestion = {
+  id: string;
+  handle: string;
+  displayName: string;
+  secondaryLabel?: string;
+  messageCount: number;
+};
 
 interface ThreadInputProps {
   onSendMessage: (message: string, attachments?: File[]) => void;
   replyPreview?: string;
   onCancelReply?: () => void;
   replyTo: Message | null;
-  onTypingStart?: () => void; // Added prop
-  onTypingEnd?: () => void;   // Added prop
+  onTypingStart?: () => void;
+  onTypingEnd?: () => void;
+  participants?: Participant[];
+  currentUserId?: string;
   isLoading?: boolean;
   isDisabled?: boolean;
   disabledMessage?: string;
@@ -23,16 +33,175 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
   onCancelReply,
   onTypingStart,
   onTypingEnd,
+  participants = [],
+  currentUserId,
   isLoading,
   isDisabled = false,
   disabledMessage
 }) => {
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [isMentionMenuOpen, setIsMentionMenuOpen] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [mentionStartIndex, setMentionStartIndex] = useState<number | null>(null);
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
+
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-resize textarea
+  const mentionCandidates = useMemo<MentionSuggestion[]>(() => {
+    const isMentionSafe = (value?: string) => {
+      if (!value) return false;
+      return /^[a-zA-Z0-9_]+$/.test(value);
+    };
+
+    const isAnonymousId = (value?: string) => {
+      if (!value) return false;
+      return /^ANON_\d{8}$/i.test(value);
+    };
+
+    const seenHandles = new Set<string>();
+
+    return participants
+      .filter((participant) => participant.id && participant.id !== currentUserId)
+      .map((participant) => {
+        const name = (participant.name || '').trim();
+        const anonymousId = (participant.anonymousId || '').trim();
+
+        const nameHandle = isMentionSafe(name) ? name : null;
+        const anonHandle = isMentionSafe(anonymousId) ? anonymousId : null;
+        const hasCustomName = Boolean(nameHandle && !isAnonymousId(nameHandle));
+
+        const handle = hasCustomName ? nameHandle : (anonHandle || nameHandle);
+        if (!handle) return null;
+
+        const lowerHandle = handle.toLowerCase();
+        if (seenHandles.has(lowerHandle)) return null;
+        seenHandles.add(lowerHandle);
+
+        const displayName = hasCustomName ? name : (anonymousId || name || handle);
+        const secondaryLabel =
+          hasCustomName && anonHandle && anonHandle.toLowerCase() !== lowerHandle
+            ? `@${anonHandle}`
+            : undefined;
+
+        return {
+          id: participant.id,
+          handle,
+          displayName,
+          secondaryLabel,
+          messageCount: participant.messageCount || 0,
+        };
+      })
+      .filter((entry): entry is MentionSuggestion => Boolean(entry))
+      .sort((a, b) => {
+        if (b.messageCount !== a.messageCount) {
+          return b.messageCount - a.messageCount;
+        }
+        return a.displayName.localeCompare(b.displayName);
+      });
+  }, [participants, currentUserId]);
+
+  const filteredMentionSuggestions = useMemo(() => {
+    const normalizedQuery = mentionQuery.toLowerCase();
+
+    return mentionCandidates
+      .filter((candidate) => {
+        if (!normalizedQuery) return true;
+        if (candidate.handle.toLowerCase().includes(normalizedQuery)) return true;
+        if (candidate.displayName.toLowerCase().includes(normalizedQuery)) return true;
+        if (candidate.secondaryLabel?.toLowerCase().includes(normalizedQuery)) return true;
+        return false;
+      })
+      .slice(0, 8);
+  }, [mentionCandidates, mentionQuery]);
+
+  const closeMentionMenu = useCallback(() => {
+    setIsMentionMenuOpen(false);
+    setMentionQuery('');
+    setMentionStartIndex(null);
+    setActiveMentionIndex(0);
+  }, []);
+
+  const updateMentionContext = useCallback(
+    (nextValue: string, cursorPosition: number | null) => {
+      if (cursorPosition === null || mentionCandidates.length === 0) {
+        closeMentionMenu();
+        return;
+      }
+
+      const textBeforeCursor = nextValue.slice(0, cursorPosition);
+      const atIndex = textBeforeCursor.lastIndexOf('@');
+
+      if (atIndex < 0) {
+        closeMentionMenu();
+        return;
+      }
+
+      if (atIndex > 0) {
+        const charBeforeAt = textBeforeCursor.charAt(atIndex - 1);
+        if (/[a-zA-Z0-9_]/.test(charBeforeAt)) {
+          closeMentionMenu();
+          return;
+        }
+      }
+
+      const tokenAfterAt = textBeforeCursor.slice(atIndex + 1);
+
+      if (tokenAfterAt.length > 32 || /[^a-zA-Z0-9_]/.test(tokenAfterAt)) {
+        closeMentionMenu();
+        return;
+      }
+
+      setMentionStartIndex(atIndex);
+      setMentionQuery(tokenAfterAt);
+      setActiveMentionIndex(0);
+      setIsMentionMenuOpen(true);
+    },
+    [mentionCandidates.length, closeMentionMenu]
+  );
+
+  const syncMentionContextFromTextarea = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      closeMentionMenu();
+      return;
+    }
+
+    updateMentionContext(textarea.value, textarea.selectionStart);
+  }, [updateMentionContext, closeMentionMenu]);
+
+  const applyMentionSelection = useCallback(
+    (candidate: MentionSuggestion) => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const cursorPosition = textarea.selectionStart ?? message.length;
+      const safeMentionStart =
+        mentionStartIndex !== null && mentionStartIndex <= cursorPosition
+          ? mentionStartIndex
+          : message.slice(0, cursorPosition).lastIndexOf('@');
+
+      if (safeMentionStart < 0) return;
+
+      const replacement = `@${candidate.handle} `;
+      const nextMessage =
+        message.slice(0, safeMentionStart) +
+        replacement +
+        message.slice(cursorPosition);
+
+      setMessage(nextMessage);
+      closeMentionMenu();
+
+      window.requestAnimationFrame(() => {
+        const nextCursorPosition = safeMentionStart + replacement.length;
+        textarea.focus();
+        textarea.setSelectionRange(nextCursorPosition, nextCursorPosition);
+      });
+    },
+    [message, mentionStartIndex, closeMentionMenu]
+  );
+
   useEffect(() => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -41,17 +210,27 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
     }
   }, [message]);
 
+  useEffect(() => {
+    if (!isMentionMenuOpen) return;
+    if (filteredMentionSuggestions.length > 0) return;
+    closeMentionMenu();
+  }, [isMentionMenuOpen, filteredMentionSuggestions.length, closeMentionMenu]);
+
+  useEffect(() => {
+    if (!isMentionMenuOpen) return;
+    if (activeMentionIndex < filteredMentionSuggestions.length) return;
+    setActiveMentionIndex(0);
+  }, [activeMentionIndex, filteredMentionSuggestions.length, isMentionMenuOpen]);
+
   const handleSend = () => {
     if (isDisabled) return;
-    console.log('🔵 ThreadInput handleSend called', { message, attachmentsCount: attachments.length });
     if (message.trim() || attachments.length > 0) {
-      console.log('🟢 Calling onSendMessage');
       onSendMessage(message, attachments);
       setMessage('');
       setAttachments([]);
+      closeMentionMenu();
+      onTypingEnd?.();
       onCancelReply?.();
-    } else {
-      console.log('🔴 Message empty, not sending');
     }
   };
 
@@ -84,7 +263,6 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
           </div>
         )}
 
-        {/* Attachment Previews */}
         {attachments.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-2 mb-2 px-1 scrollbar-hide">
             {attachments.map((file, i) => (
@@ -116,23 +294,97 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
         )}
 
         <div className="flex items-end gap-2">
-          <div className="flex items-end bg-gray-800 rounded-2xl flex-1 min-h-[44px]">
+          <div className="relative flex items-end bg-gray-800 rounded-2xl flex-1 min-h-[44px]">
+            {isMentionMenuOpen && filteredMentionSuggestions.length > 0 && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 max-h-56 overflow-y-auto rounded-xl border border-gray-700 bg-[#111827] shadow-2xl z-30">
+                {filteredMentionSuggestions.map((candidate, index) => {
+                  const isActive = index === activeMentionIndex;
+                  return (
+                    <button
+                      key={`${candidate.id}-${candidate.handle}`}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        applyMentionSelection(candidate);
+                      }}
+                      className={`w-full px-3 py-2 text-left flex items-center gap-3 transition-colors ${isActive ? 'bg-indigo-600/30' : 'hover:bg-gray-700/60'}`}
+                    >
+                      <div className="h-8 w-8 rounded-full bg-indigo-500/30 border border-indigo-400/40 flex items-center justify-center text-xs font-semibold text-indigo-200 flex-shrink-0">
+                        {(candidate.displayName || candidate.handle).charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-white truncate">
+                          {candidate.displayName}
+                        </p>
+                        <p className="text-xs text-gray-300 truncate">
+                          @{candidate.handle}
+                          {candidate.secondaryLabel ? ` · ${candidate.secondaryLabel}` : ''}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             <textarea
               ref={textareaRef}
               placeholder="Type your message..."
               value={message}
               onChange={(e) => {
-                setMessage(e.target.value);
+                const nextValue = e.target.value;
+                setMessage(nextValue);
                 onTypingStart?.();
+                updateMentionContext(nextValue, e.target.selectionStart);
               }}
-              onBlur={() => onTypingEnd?.()} // Optional: clear typing on blur
+              onBlur={() => {
+                onTypingEnd?.();
+                window.setTimeout(() => {
+                  closeMentionMenu();
+                }, 100);
+              }}
               className="w-full bg-transparent p-2 md:p-3 rounded-2xl focus:outline-none text-sm md:text-base resize-none overflow-y-auto"
-              onKeyPress={(e) => {
+              onKeyDown={(e) => {
+                if (isMentionMenuOpen && filteredMentionSuggestions.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setActiveMentionIndex((prev) =>
+                      prev + 1 >= filteredMentionSuggestions.length ? 0 : prev + 1
+                    );
+                    return;
+                  }
+
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setActiveMentionIndex((prev) =>
+                      prev - 1 < 0 ? filteredMentionSuggestions.length - 1 : prev - 1
+                    );
+                    return;
+                  }
+
+                  if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+                    e.preventDefault();
+                    const selected = filteredMentionSuggestions[activeMentionIndex];
+                    if (selected) {
+                      applyMentionSelection(selected);
+                    }
+                    return;
+                  }
+
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    closeMentionMenu();
+                    return;
+                  }
+                }
+
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   handleSend();
                 }
               }}
+              onKeyUp={syncMentionContextFromTextarea}
+              onClick={syncMentionContextFromTextarea}
               rows={1}
               inputMode="text"
               autoComplete="off"
@@ -183,7 +435,7 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
 
         <div className="mt-2 flex items-center gap-1.5 px-1 text-[11px] md:text-xs text-gray-400">
           <FaAt className="w-3 h-3 text-indigo-300" />
-          <span>Use @username or @ANON_12345678 to mention and notify someone.</span>
+          <span>Type @ to pick a participant. Use @username or @ANON_12345678.</span>
         </div>
       </div>
     </div>

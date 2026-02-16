@@ -6,6 +6,7 @@ import Sidebar from "./Sidebar"
 import BottomNav from "./BottomNav"
 import PWAInstallPrompt from "@/components/pwa/PWAInstallPrompt"
 import NotificationEducationPrompt from "@/components/features/notifications/NotificationEducationPrompt"
+import FirstTimeEducationModal from "@/components/features/onboarding/FirstTimeEducationModal"
 
 // components/layout/MainLayout.tsx
 export default function MainLayout({
@@ -26,6 +27,7 @@ export default function MainLayout({
         <div className="w-full">
           {children}
         </div>
+        <FirstTimeEducationModal />
         <NotificationEducationPrompt />
         <PWAInstallPrompt />
       </main>
@@ -46,6 +48,7 @@ export default function MainLayout({
 
       {/* Mobile Bottom Navigation */}
       <BottomNav />
+      <FirstTimeEducationModal />
       <NotificationEducationPrompt />
       <PWAInstallPrompt />
     </div>
