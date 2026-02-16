@@ -36,6 +36,11 @@ export interface UserPreferences {
     showOnlineStatus: boolean;
     allowDirectMessages: boolean;
   };
+  education?: {
+    onboardingVersion?: string;
+    onboardingCompletedAt?: string;
+    onboardingSkipped?: boolean;
+  };
 }
 
 export interface UserSession {

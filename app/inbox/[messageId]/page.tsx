@@ -123,6 +123,12 @@ export default function ConversationPage() {
     channel.subscribe();
 
     return () => {
+      if (channel && session.user?.id) {
+        channel.broadcast('typing', {
+          userId: session.user.id,
+          isTyping: false,
+        });
+      }
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
@@ -220,6 +226,17 @@ export default function ConversationPage() {
   const handleTyping = (value: string) => {
     setMessageText(value);
     if (!session.user || !typingChannelRef.current) return;
+
+    if (!value.trim()) {
+      typingChannelRef.current.broadcast('typing', {
+        userId: session.user.id,
+        isTyping: false,
+      });
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      return;
+    }
 
     typingChannelRef.current.broadcast('typing', {
       userId: session.user.id,

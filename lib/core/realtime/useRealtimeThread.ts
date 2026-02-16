@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useUserStore } from '@/store/userStore'
 import { useThreadStore } from '@/store/threadStore'
 import * as realtimeService from './realtime-service'
@@ -533,31 +533,46 @@ export const useRealtimeNotifications = () => {
 export const useTypingIndicator = (threadId: string | null) => {
   const { session } = useUserStore()
   const [isTyping, setIsTyping] = useState(false)
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (!threadId || !session.user?.id || !isTyping) return
-
-    // Broadcast typing status
-    realtimeService.broadcastTyping(threadId, session.user.id, true)
-
-    // Auto-clear typing after 3 seconds of inactivity
-    const timeout = setTimeout(() => {
-      setIsTyping(false)
-      if (session.user?.id) {
-        realtimeService.broadcastTyping(threadId, session.user.id, false)
-      }
-    }, 3000)
-
     return () => {
-      clearTimeout(timeout)
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+        typingTimeoutRef.current = null
+      }
       if (threadId && session.user?.id) {
         realtimeService.broadcastTyping(threadId, session.user.id, false)
       }
     }
-  }, [threadId, session.user?.id, isTyping])
+  }, [threadId, session.user?.id])
 
-  const startTyping = () => setIsTyping(true)
+  const startTyping = () => {
+    if (!threadId || !session.user?.id) return
+
+    if (!isTyping) {
+      realtimeService.broadcastTyping(threadId, session.user.id, true)
+      setIsTyping(true)
+    }
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false)
+      if (threadId && session.user?.id) {
+        realtimeService.broadcastTyping(threadId, session.user.id, false)
+      }
+      typingTimeoutRef.current = null
+    }, 1500)
+  }
+
   const stopTyping = () => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+      typingTimeoutRef.current = null
+    }
     setIsTyping(false)
     if (threadId && session.user?.id) {
       realtimeService.broadcastTyping(threadId, session.user.id, false)
