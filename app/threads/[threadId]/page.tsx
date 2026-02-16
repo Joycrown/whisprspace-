@@ -836,11 +836,23 @@ const ThreadPage = () => {
             <div className="max-w-md space-y-3">
               <h2 className="text-xl font-semibold text-white">This thread is private</h2>
               <p className="text-sm text-gray-400">
-                You need an invite link from the creator to join this thread.
+                This thread requires an invite from the creator before you can join.
               </p>
+              {joinErrorMessage && (
+                <div className="text-xs text-red-400 bg-red-900/30 border border-red-800 rounded px-3 py-2">
+                  {joinErrorMessage}
+                </div>
+              )}
+              <button
+                onClick={handleJoinThread}
+                disabled={joinThreadMutation.isPending}
+                className="w-full px-4 py-2 rounded-md bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              >
+                {joinThreadMutation.isPending ? 'Joining...' : 'Join Thread'}
+              </button>
               <button
                 onClick={() => router.push('/threads')}
-                className="px-4 py-2 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition-colors"
+                className="w-full px-4 py-2 rounded-md bg-gray-800 text-white hover:bg-gray-700 transition-colors"
               >
                 Back to Threads
               </button>

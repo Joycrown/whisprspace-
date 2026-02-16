@@ -959,6 +959,13 @@ function parseRpcErrorMessage(error: unknown): string | null {
     return 'You have been removed from this thread.';
   }
 
+  if (
+    msg.includes('Access denied') ||
+    msg.includes('row-level security policy for table "thread_participants"')
+  ) {
+    return 'You need an invite from the creator to join this private thread.';
+  }
+
   return null;
 }
 
