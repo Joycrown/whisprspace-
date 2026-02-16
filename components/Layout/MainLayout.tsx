@@ -4,6 +4,8 @@ import { usePathname } from "next/navigation"
 import { publicRoutes } from "@/lib/utils/utils/routes"
 import Sidebar from "./Sidebar"
 import BottomNav from "./BottomNav"
+import PWAInstallPrompt from "@/components/pwa/PWAInstallPrompt"
+import NotificationEducationPrompt from "@/components/features/notifications/NotificationEducationPrompt"
 
 // components/layout/MainLayout.tsx
 export default function MainLayout({
@@ -24,6 +26,8 @@ export default function MainLayout({
         <div className="w-full">
           {children}
         </div>
+        <NotificationEducationPrompt />
+        <PWAInstallPrompt />
       </main>
     )
   }
@@ -42,6 +46,8 @@ export default function MainLayout({
 
       {/* Mobile Bottom Navigation */}
       <BottomNav />
+      <NotificationEducationPrompt />
+      <PWAInstallPrompt />
     </div>
   )
 }

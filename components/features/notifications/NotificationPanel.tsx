@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Mail, MessageSquare, Users, ThumbsUp, X, Filter } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useNotifications, NotificationCategory } from '@/lib/notifications';
 import { useUserStore } from '@/store/userStore';
 import NotificationItem from './NotificationItem';
@@ -66,6 +66,9 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
     if (notification.type === 'message_reply') {
       return notificationPrefs?.replies !== false;
     }
+    if (notification.type === 'thread_message') {
+      return notificationPrefs?.replies !== false;
+    }
     if (notification.type === 'mention') {
       return notificationPrefs?.mentions !== false;
     }
@@ -82,15 +85,6 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
   });
 
   const visibleUnreadCount = filteredNotifications.filter((n) => !n.isRead).length;
-
-  const getCategoryIcon = (category: NotificationCategory) => {
-    switch (category) {
-      case 'interactions': return <MessageSquare className="w-4 h-4" />;
-      case 'social': return <Users className="w-4 h-4" />;
-      case 'system': return <Bell className="w-4 h-4" />;
-      default: return <Bell className="w-4 h-4" />;
-    }
-  };
 
   if (!isOpen) return null;
 

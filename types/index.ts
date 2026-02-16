@@ -309,7 +309,7 @@ export const THREAD_TYPES: { value: ThreadType; label: string; description: stri
 ];
 
 export type NotificationCategory = 'all' | 'message' | 'group_invite' | 'reaction' | 'system' | 'mention' | 'reply' | 'like' | 'thread_invite';
-export type NotificationType = 'message' | 'group_invite' | 'reaction' | 'system' | 'mention' | 'reply' | 'like' | 'thread_invite';
+export type NotificationType = 'message' | 'group_invite' | 'reaction' | 'system' | 'mention' | 'reply' | 'like' | 'thread_invite' | 'thread_message';
 
 export type ThreadPrivacy = 'public' | 'private' | 'invite_only';
 export type GroupPrivacy = 'public' | 'private' | 'invite_only';

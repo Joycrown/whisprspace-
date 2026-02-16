@@ -3,13 +3,12 @@ import { useUserStore } from '@/store/userStore';
 import { useNotifications, NotificationCategory, NotificationType } from '@/lib/notifications';
 import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
-import { FaCheckCircle, FaHeart, FaUsers, FaBell, FaAt, FaReply, FaClock, FaTrophy, FaTrash } from 'react-icons/fa';
+import { FaCheckCircle, FaHeart, FaUsers, FaBell, FaAt, FaReply, FaClock, FaTrophy, FaTrash, FaEnvelopeOpenText } from 'react-icons/fa';
 
 const NotificationFeed: React.FC = () => {
   const { session } = useUserStore();
   const {
     notifications,
-    unreadCount,
     isLoading,
     error,
     loadNotifications,
@@ -31,6 +30,9 @@ const NotificationFeed: React.FC = () => {
     if (notification.type === 'message_reply') {
       return notificationPrefs?.replies !== false;
     }
+    if (notification.type === 'thread_message') {
+      return notificationPrefs?.replies !== false;
+    }
     if (notification.type === 'mention') {
       return notificationPrefs?.mentions !== false;
     }
@@ -49,6 +51,7 @@ const NotificationFeed: React.FC = () => {
 
   const notificationIcons: Partial<Record<NotificationType, React.ReactNode>> = {
     thread_like: <FaHeart className="text-red-400" />,
+    thread_message: <FaEnvelopeOpenText className="text-blue-400" />,
     message_reply: <FaReply className="text-teal-400" />,
     mention: <FaAt className="text-indigo-400" />,
     group_invite: <FaUsers className="text-purple-400" />,
@@ -65,10 +68,10 @@ const NotificationFeed: React.FC = () => {
     { value: 'system', label: 'System' },
   ];
 
-  const getActionUrl = (notification: { data?: Record<string, any> }) => {
+  const getActionUrl = (notification: { data?: Record<string, unknown> }) => {
     const data = notification.data || {};
-    if (data.thread_id) return `/threads/${data.thread_id}`;
-    if (data.group_id) return `/groups/${data.group_id}`;
+    if (typeof data.thread_id === 'string') return `/threads/${data.thread_id}`;
+    if (typeof data.group_id === 'string') return `/groups/${data.group_id}`;
     return null;
   };
 
@@ -160,7 +163,7 @@ const NotificationFeed: React.FC = () => {
                     </>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
-                    {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })} ago
+                    {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
                   </p>
                 </div>
                 {!notification.isRead && (
