@@ -22,6 +22,8 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
+const ICON_VERSION = '20260217';
+
 // Viewport configuration for mobile optimization
 export const viewport: Viewport = {
   width: 'device-width',
@@ -47,11 +49,11 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: '/favicon.ico' },
-      { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' },
-      { url: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png' },
+      { url: `/icons/icon-192x192.png?v=${ICON_VERSION}`, sizes: '192x192', type: 'image/png' },
+      { url: `/icons/icon-512x512.png?v=${ICON_VERSION}`, sizes: '512x512', type: 'image/png' },
     ],
     apple: [
-      { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+      { url: `/icons/apple-touch-icon.png?v=${ICON_VERSION}`, sizes: '180x180', type: 'image/png' },
     ],
     shortcut: ['/favicon.ico'],
   },

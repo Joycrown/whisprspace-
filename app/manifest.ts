@@ -1,6 +1,8 @@
 import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
+  const iconVersion = '20260217';
+
   return {
     name: 'WhisprSpace',
     short_name: 'WhisprSpace',
@@ -16,29 +18,29 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ['social', 'communication'],
     icons: [
       {
-        src: '/icons/icon-192x192.png',
+        src: `/icons/icon-192x192.png?v=${iconVersion}`,
         sizes: '192x192',
         type: 'image/png',
       },
       {
-        src: '/icons/icon-512x512.png',
+        src: `/icons/icon-512x512.png?v=${iconVersion}`,
         sizes: '512x512',
         type: 'image/png',
       },
       {
-        src: '/icons/icon-192x192-maskable.png',
+        src: `/icons/icon-192x192-maskable.png?v=${iconVersion}`,
         sizes: '192x192',
         type: 'image/png',
         purpose: 'any maskable',
       },
       {
-        src: '/icons/icon-512x512-maskable.png',
+        src: `/icons/icon-512x512-maskable.png?v=${iconVersion}`,
         sizes: '512x512',
         type: 'image/png',
         purpose: 'any maskable',
       },
       {
-        src: '/icons/apple-touch-icon.png',
+        src: `/icons/apple-touch-icon.png?v=${iconVersion}`,
         sizes: '180x180',
         type: 'image/png',
       },
@@ -49,14 +51,14 @@ export default function manifest(): MetadataRoute.Manifest {
         short_name: 'Threads',
         description: 'Open the latest threads',
         url: '/threads',
-        icons: [{ src: '/icons/icon-192x192.png', sizes: '192x192' }],
+        icons: [{ src: `/icons/icon-192x192.png?v=${iconVersion}`, sizes: '192x192' }],
       },
       {
         name: 'Inbox',
         short_name: 'Inbox',
         description: 'Open your inbox',
         url: '/inbox',
-        icons: [{ src: '/icons/icon-192x192.png', sizes: '192x192' }],
+        icons: [{ src: `/icons/icon-192x192.png?v=${iconVersion}`, sizes: '192x192' }],
       },
     ],
   };

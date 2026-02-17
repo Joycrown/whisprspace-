@@ -7,10 +7,12 @@ import { useThreadStore } from '@/store/threadStore';
 import { useUserStore } from '@/store/userStore';
 import { Thread } from '@/types';
 import Link from 'next/link';
-import { fetchInvitedThreads } from '@/lib/threads';
+import { fetchInvitedThreads, joinThread } from '@/lib/threads';
 import { useToast } from '@/components/ui/Toast';
+import * as rawDb from '@/lib/core/supabase/raw-db';
 
 type TabType = 'joined' | 'created' | 'invited';
+type ThreadMessageCountRow = { thread_id: string; message_count: number | null };
 
 export default function MyThreadsPage() {
   const router = useRouter();
@@ -20,6 +22,8 @@ export default function MyThreadsPage() {
   const [activeTab, setActiveTab] = useState<TabType>('joined');
   const [isLoading, setIsLoading] = useState(true);
   const [invitedThreads, setInvitedThreads] = useState<Thread[]>([]);
+  const [joiningThreadId, setJoiningThreadId] = useState<string | null>(null);
+  const [messageCountsByThread, setMessageCountsByThread] = useState<Record<string, number>>({});
 
   // Check if user is allowed to create threads
   const canCreate = canCreateThread();
@@ -55,6 +59,48 @@ export default function MyThreadsPage() {
     loadThreads();
   }, [fetchThreads, session?.user?.id, showToast]);
 
+  useEffect(() => {
+    const threadIds = Array.from(
+      new Set(
+        [...threads, ...invitedThreads]
+          .map((thread) => thread.id)
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+
+    if (threadIds.length === 0) {
+      setMessageCountsByThread({});
+      return;
+    }
+
+    let isMounted = true;
+
+    const loadMessageCounts = async () => {
+      const { data, error } = await rawDb.rpc<ThreadMessageCountRow[]>('get_thread_message_counts', {
+        p_thread_ids: threadIds,
+      });
+
+      if (!isMounted) return;
+
+      // Keep UI usable if migration has not been applied yet.
+      if (error || !Array.isArray(data)) return;
+
+      const nextCounts: Record<string, number> = {};
+      data.forEach((row) => {
+        if (!row?.thread_id) return;
+        nextCounts[row.thread_id] = typeof row.message_count === 'number' ? row.message_count : 0;
+      });
+
+      setMessageCountsByThread(nextCounts);
+    };
+
+    loadMessageCounts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [threads, invitedThreads]);
+
   // Filter threads based on active tab
   const currentUserId = session?.user?.id || 'user_anon';
 
@@ -84,10 +130,41 @@ export default function MyThreadsPage() {
 
   const getThreadStats = (thread: Thread) => {
     return {
-      messages: thread.messageCount,
+      messages: messageCountsByThread[thread.id] ?? thread.messageCount ?? 0,
       participants: thread.participantCount,
       likes: thread.likes,
     };
+  };
+
+  const handleThreadAction = async (thread: Thread, isJoinAction: boolean) => {
+    if (!isJoinAction) {
+      router.push(`/threads/${thread.id}`);
+      return;
+    }
+
+    const userId = session?.user?.id;
+    if (!userId) {
+      router.push(`/auth?redirect=${encodeURIComponent(`/threads/${thread.id}`)}`);
+      return;
+    }
+
+    setJoiningThreadId(thread.id);
+    try {
+      await joinThread(thread.id, userId);
+      setInvitedThreads((prev) => prev.filter((invitedThread) => invitedThread.id !== thread.id));
+      fetchThreads(false, { privacy: 'all' }).catch(() => null);
+      router.push(`/threads/${thread.id}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Could not join this thread. Ask the creator to re-send your invite.';
+      showToast({
+        type: 'error',
+        title: 'Unable to Join Thread',
+        message,
+        duration: 5000,
+      });
+    } finally {
+      setJoiningThreadId((current) => (current === thread.id ? null : current));
+    }
   };
 
   if (isLoading) {
@@ -233,6 +310,10 @@ export default function MyThreadsPage() {
             displayThreads.map((thread) => {
               const stats = getThreadStats(thread);
               const isCreator = thread.author.id === currentUserId;
+              const isJoinAction =
+                activeTab === 'invited' && !isCreator && !thread.hasJoined;
+              const isJoining = joiningThreadId === thread.id;
+              const actionLabel = isJoinAction ? (isJoining ? 'Joining...' : 'Join') : 'View';
 
               return (
                 <div
@@ -342,12 +423,14 @@ export default function MyThreadsPage() {
                         </p>
                       </div>
 
-                      <Link
-                        href={`/threads/${thread.id}`}
-                        className="px-3 md:px-4 py-1.5 md:py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white text-xs md:text-sm font-medium transition-colors whitespace-nowrap"
+                      <button
+                        type="button"
+                        onClick={() => handleThreadAction(thread, isJoinAction)}
+                        disabled={isJoining}
+                        className="px-3 md:px-4 py-1.5 md:py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-60 disabled:cursor-not-allowed rounded-lg text-white text-xs md:text-sm font-medium transition-colors whitespace-nowrap"
                       >
-                        View
-                      </Link>
+                        {actionLabel}
+                      </button>
                     </div>
                   </div>
                 </div>
