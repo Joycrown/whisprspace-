@@ -683,20 +683,20 @@ export default function CreatorEarningsDashboard({
                 )}
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col-reverse sm:flex-row gap-3">
                 <button
                   onClick={() => setShowPayoutModal(false)}
-                  className="flex-1 py-3 px-4 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  className="w-full sm:flex-1 py-3 px-4 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handlePayoutRequest}
                   disabled={payoutLoading || payoutOptionsLoading}
-                  className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-600 to-orange-500 text-white rounded-lg font-medium hover:from-purple-700 hover:to-orange-600 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
+                  className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-purple-600 to-orange-500 text-white rounded-lg font-medium hover:from-purple-700 hover:to-orange-600 transition-all flex items-center justify-center gap-2 disabled:opacity-60 whitespace-nowrap"
                 >
-                  <Download size={18} />
-                  {payoutLoading ? 'Processing...' : 'Confirm Payout'}
+                  <Download size={18} className="shrink-0" />
+                  <span className="whitespace-nowrap">{payoutLoading ? 'Processing...' : 'Confirm Payout'}</span>
                 </button>
               </div>
             </div>
