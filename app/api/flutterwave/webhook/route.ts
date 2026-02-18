@@ -762,6 +762,13 @@ async function handleTransferEvent(data: any, eventType: string) {
       : Array.isArray(metadata?.earning_ids)
         ? metadata.earning_ids
         : []
+    const metadataAmountUsd = Number(metadata?.amountUsd ?? metadata?.amount_usd)
+    const amountUsd =
+      !Number.isNaN(metadataAmountUsd) && metadataAmountUsd > 0
+        ? -Math.abs(metadataAmountUsd)
+        : currency === 'USD'
+          ? -Math.abs(amount)
+          : null
 
     await supabase
       .from('transaction_ledger')
@@ -778,7 +785,7 @@ async function handleTransferEvent(data: any, eventType: string) {
           payment_method: data?.type || data?.payment_type || null,
           amount: -Math.abs(amount),
           currency,
-          amount_usd: currency === 'USD' ? -Math.abs(amount) : null,
+          amount_usd: amountUsd,
           status,
           description: 'Creator payout',
           metadata,

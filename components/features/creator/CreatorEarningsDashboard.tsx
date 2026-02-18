@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   DollarSign,
   TrendingUp,
@@ -18,6 +18,8 @@ import {
   CreatorEarningsTransaction,
   ThreadEarnings,
 } from '@/types';
+import * as rawAuth from '@/lib/core/supabase/raw-auth';
+import { supabase } from '@/lib/core/supabase/client';
 
 interface CreatorEarningsDashboardProps {
   earnings: CreatorEarnings;
@@ -29,6 +31,28 @@ interface CreatorEarningsDashboardProps {
   isLoading?: boolean;
   onPayoutRequested?: () => void;
 }
+
+type PayoutBankOption = {
+  code: string;
+  name: string;
+};
+
+type PayoutOptionsResponse = {
+  currency: string;
+  supportedCurrencies: string[];
+  banks: PayoutBankOption[];
+};
+
+const USD_TO_PAYOUT_RATE: Record<string, number> = {
+  USD: 1,
+  NGN: 1500,
+  GHS: 15.5,
+  KES: 160,
+  ZAR: 19,
+  UGX: 3800,
+  TZS: 2550,
+  RWF: 1280,
+};
 
 export default function CreatorEarningsDashboard({
   earnings,
@@ -48,10 +72,79 @@ export default function CreatorEarningsDashboard({
   const [accountNumber, setAccountNumber] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [narration, setNarration] = useState('');
+  const [supportedCurrencies, setSupportedCurrencies] = useState<string[]>(['USD']);
+  const [bankOptions, setBankOptions] = useState<PayoutBankOption[]>([]);
+  const [payoutOptionsLoading, setPayoutOptionsLoading] = useState(false);
+  const [payoutOptionsError, setPayoutOptionsError] = useState<string | null>(null);
   const chartData: CreatorEarningsSeries = earningsSeries || {
     week: [0, 0, 0, 0, 0, 0, 0],
     month: [0, 0, 0, 0, 0, 0, 0, 0],
     all: Array.from({ length: 12 }, () => 0),
+  };
+  const payoutRate = USD_TO_PAYOUT_RATE[currency] || 1;
+  const payoutAmountInCurrency = Number((earnings.pendingEarnings * payoutRate).toFixed(2));
+
+  const formatMoney = (amount: number, currencyCode: string) => {
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currencyCode,
+      }).format(amount);
+    } catch {
+      return `$${amount.toFixed(2)}`;
+    }
+  };
+
+  const loadPayoutOptions = async (targetCurrency?: string) => {
+    setPayoutOptionsLoading(true);
+    setPayoutOptionsError(null);
+
+    try {
+      const query = targetCurrency ? `?currency=${encodeURIComponent(targetCurrency)}` : '';
+      const response = await fetch(`/api/flutterwave/transfer${query}`, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.error || 'Failed to load payout options.');
+      }
+
+      const payload = (await response.json()) as PayoutOptionsResponse;
+      const options = Array.isArray(payload.banks) ? payload.banks : [];
+      const currencies = Array.isArray(payload.supportedCurrencies)
+        ? payload.supportedCurrencies
+        : ['USD'];
+
+      setSupportedCurrencies(currencies);
+      setCurrency(payload.currency || targetCurrency || 'USD');
+      setBankOptions(options);
+      setBankCode((current) => {
+        if (options.some((option) => option.code === current)) return current;
+        return options[0]?.code || current;
+      });
+    } catch (error) {
+      console.error('Failed to load payout options:', error);
+      setPayoutOptionsError(
+        error instanceof Error ? error.message : 'Failed to load payout options.'
+      );
+      setBankOptions([]);
+    } finally {
+      setPayoutOptionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!showPayoutModal) return;
+    void loadPayoutOptions(currency);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPayoutModal]);
+
+  const handleCurrencyChange = async (nextCurrency: string) => {
+    setCurrency(nextCurrency);
+    setBankCode('');
+    await loadPayoutOptions(nextCurrency);
   };
 
   const handlePayoutRequest = async () => {
@@ -74,9 +167,21 @@ export default function CreatorEarningsDashboard({
     setPayoutError(null);
 
     try {
+      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      const rawSession = rawAuth.getSession();
+      if (rawSession?.access_token) {
+        headers.Authorization = `Bearer ${rawSession.access_token}`;
+      } else {
+        const { data: { session: authSession } } = await supabase.auth.getSession();
+        if (authSession?.access_token) {
+          headers.Authorization = `Bearer ${authSession.access_token}`;
+        }
+      }
+
       const response = await fetch('/api/flutterwave/transfer', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
+        credentials: 'include',
         body: JSON.stringify({
           creatorId,
           accountBank: bankCode,
@@ -97,6 +202,7 @@ export default function CreatorEarningsDashboard({
       setBankCode('');
       setAccountNumber('');
       setNarration('');
+      setPayoutOptionsError(null);
       onPayoutRequested?.();
     } catch {
       setPayoutError('Failed to request payout.');
@@ -363,6 +469,7 @@ export default function CreatorEarningsDashboard({
               const absoluteAmount = Math.abs(transaction.netAmount);
               const amountPrefix = transaction.netAmount >= 0 ? '+' : '-';
               const status = transaction.status || 'pending';
+              const formattedAmount = formatMoney(absoluteAmount, String(transaction.currency || 'USD'));
 
               return (
                 <div
@@ -380,7 +487,7 @@ export default function CreatorEarningsDashboard({
 
                   <div className="text-right">
                     <p className={`font-semibold ${isPayout ? 'text-purple-600 dark:text-purple-400' : 'text-green-600 dark:text-green-400'}`}>
-                      {amountPrefix}${absoluteAmount.toFixed(2)}
+                      {amountPrefix}{formattedAmount}
                     </p>
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -422,6 +529,7 @@ export default function CreatorEarningsDashboard({
             <button
               onClick={() => {
                 setPayoutError(null);
+                setPayoutOptionsError(null);
                 setShowPayoutModal(true);
               }}
               className="mt-4 w-full py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors"
@@ -458,21 +566,26 @@ export default function CreatorEarningsDashboard({
 
               <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
                 <div className="flex justify-between items-center mb-3">
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Pending Balance:</span>
+                  <span className="text-sm text-gray-600 dark:text-gray-400">Pending Balance (USD):</span>
                   <span className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                    ${earnings.pendingEarnings.toFixed(2)}
+                    {formatMoney(earnings.pendingEarnings, 'USD')}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-gray-600 dark:text-gray-400">Processing Fee:</span>
-                  <span className="text-gray-900 dark:text-white font-medium">$0.00</span>
+                  <span className="text-gray-900 dark:text-white font-medium">{formatMoney(0, currency)}</span>
                 </div>
                 <div className="border-t border-gray-200 dark:border-gray-700 mt-3 pt-3 flex justify-between items-center">
                   <span className="font-medium text-gray-900 dark:text-white">You&apos;ll Receive:</span>
                   <span className="text-xl font-bold text-gray-900 dark:text-white">
-                    ${earnings.pendingEarnings.toFixed(2)}
+                    {formatMoney(payoutAmountInCurrency, currency)}
                   </span>
                 </div>
+                {currency !== 'USD' && (
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-right">
+                    Approx. {formatMoney(earnings.pendingEarnings, 'USD')} equivalent
+                  </p>
+                )}
               </div>
 
               <div className="mb-6 p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
@@ -487,17 +600,35 @@ export default function CreatorEarningsDashboard({
                 <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3 text-xs text-gray-600 dark:text-gray-300">
                   Bank details are used only to process this payout and are not stored by WhisprSpace.
                 </div>
+                {payoutOptionsError && (
+                  <p className="text-sm text-red-500">{payoutOptionsError}</p>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Bank Code
                   </label>
-                  <input
-                    type="text"
-                    value={bankCode}
-                    onChange={(e) => setBankCode(e.target.value)}
-                    placeholder="e.g. 044"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                  />
+                  {bankOptions.length > 0 ? (
+                    <select
+                      value={bankCode}
+                      onChange={(e) => setBankCode(e.target.value)}
+                      disabled={payoutOptionsLoading}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 disabled:opacity-60"
+                    >
+                      {bankOptions.map((bank) => (
+                        <option key={bank.code} value={bank.code}>
+                          {bank.name} ({bank.code})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={bankCode}
+                      onChange={(e) => setBankCode(e.target.value)}
+                      placeholder={payoutOptionsLoading ? 'Loading bank options...' : 'Enter bank code'}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -518,13 +649,20 @@ export default function CreatorEarningsDashboard({
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Currency
                     </label>
-                    <input
-                      type="text"
+                    <select
                       value={currency}
-                      onChange={(e) => setCurrency(e.target.value.toUpperCase())}
-                      placeholder="USD"
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                    />
+                      onChange={(e) => {
+                        void handleCurrencyChange(e.target.value);
+                      }}
+                      disabled={payoutOptionsLoading}
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 disabled:opacity-60"
+                    >
+                      {supportedCurrencies.map((supportedCurrency) => (
+                        <option key={supportedCurrency} value={supportedCurrency}>
+                          {supportedCurrency}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -554,7 +692,7 @@ export default function CreatorEarningsDashboard({
                 </button>
                 <button
                   onClick={handlePayoutRequest}
-                  disabled={payoutLoading}
+                  disabled={payoutLoading || payoutOptionsLoading}
                   className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-600 to-orange-500 text-white rounded-lg font-medium hover:from-purple-700 hover:to-orange-600 transition-all flex items-center justify-center gap-2 disabled:opacity-60"
                 >
                   <Download size={18} />
