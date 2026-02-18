@@ -12,18 +12,20 @@ import {
   Users,
   Sparkles
 } from 'lucide-react';
-import { CreatorEarnings, ThreadEarnings } from '@/types';
+import {
+  CreatorEarnings,
+  CreatorEarningsSeries,
+  CreatorEarningsTransaction,
+  ThreadEarnings,
+} from '@/types';
 
 interface CreatorEarningsDashboardProps {
   earnings: CreatorEarnings;
   threadEarnings: ThreadEarnings[];
+  recentTransactions?: CreatorEarningsTransaction[];
   isPremium: boolean;
   creatorId?: string;
-  earningsSeries?: {
-    week: number[];
-    month: number[];
-    all: number[];
-  };
+  earningsSeries?: CreatorEarningsSeries;
   isLoading?: boolean;
   onPayoutRequested?: () => void;
 }
@@ -31,6 +33,7 @@ interface CreatorEarningsDashboardProps {
 export default function CreatorEarningsDashboard({
   earnings,
   threadEarnings,
+  recentTransactions = [],
   isPremium,
   creatorId,
   earningsSeries,
@@ -45,15 +48,11 @@ export default function CreatorEarningsDashboard({
   const [accountNumber, setAccountNumber] = useState('');
   const [currency, setCurrency] = useState('USD');
   const [narration, setNarration] = useState('');
-
-  // Mock data for earnings chart (would come from backend)
-  const earningsData = {
-    week: [12, 18, 15, 22, 28, 35, 42],
-    month: [120, 150, 180, 210, 240, 280, 320, 360],
-    all: [500, 750, 1200, 1800, 2200, 2800, 3200]
+  const chartData: CreatorEarningsSeries = earningsSeries || {
+    week: [0, 0, 0, 0, 0, 0, 0],
+    month: [0, 0, 0, 0, 0, 0, 0, 0],
+    all: Array.from({ length: 12 }, () => 0),
   };
-
-  const chartData = earningsSeries || earningsData;
 
   const handlePayoutRequest = async () => {
     if (!creatorId) {
@@ -99,7 +98,7 @@ export default function CreatorEarningsDashboard({
       setAccountNumber('');
       setNarration('');
       onPayoutRequested?.();
-    } catch (error) {
+    } catch {
       setPayoutError('Failed to request payout.');
     } finally {
       setPayoutLoading(false);
@@ -125,7 +124,7 @@ export default function CreatorEarningsDashboard({
         {!isPremium && (
           <div className="bg-orange-100 dark:bg-orange-900/20 border border-orange-500 rounded-lg px-4 py-2">
             <p className="text-sm font-medium text-orange-800 dark:text-orange-200">
-              Earning at 50% rate • Upgrade for 70%
+              Earning at 50% rate - Upgrade for 70%
             </p>
           </div>
         )}
@@ -347,7 +346,64 @@ export default function CreatorEarningsDashboard({
             </tbody>
           </table>
         </div>
-      </div >
+      </div>
+
+      {/* Recent Activity */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border-2 border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+            Recent Activity
+          </h2>
+        </div>
+
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          {recentTransactions.length > 0 ? (
+            recentTransactions.map((transaction) => {
+              const isPayout = transaction.type === 'payout';
+              const absoluteAmount = Math.abs(transaction.netAmount);
+              const amountPrefix = transaction.netAmount >= 0 ? '+' : '-';
+              const status = transaction.status || 'pending';
+
+              return (
+                <div
+                  key={transaction.id}
+                  className="flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
+                >
+                  <div>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {isPayout ? 'Payout Request' : transaction.threadTitle || 'Thread Sale'}
+                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {new Date(transaction.occurredAt).toLocaleDateString()}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className={`font-semibold ${isPayout ? 'text-purple-600 dark:text-purple-400' : 'text-green-600 dark:text-green-400'}`}>
+                      {amountPrefix}${absoluteAmount.toFixed(2)}
+                    </p>
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                        status === 'paid' || status === 'completed'
+                          ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                          : status === 'failed' || status === 'refunded'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+                            : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+                      }`}
+                    >
+                      {status}
+                    </span>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="px-6 py-12 text-center text-gray-600 dark:text-gray-400">
+              No recent transactions yet.
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Payout Information */}
       <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-6 border-2 border-purple-200 dark:border-purple-800">
@@ -356,10 +412,10 @@ export default function CreatorEarningsDashboard({
           Payout Information
         </h3>
         <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
-          <p>• Payouts are processed <strong>monthly</strong> on the 1st of each month</p>
-          <p>• Minimum payout threshold: <strong>$10.00</strong></p>
-          <p>• Earnings are held for <strong>7 days</strong> after sale (refund protection)</p>
-          <p>• Payment method: Flutterwave transfer</p>
+          <p>- Payouts are processed <strong>monthly</strong> on the 1st of each month</p>
+          <p>- Minimum payout threshold: <strong>$10.00</strong></p>
+          <p>- Earnings are held for <strong>7 days</strong> after sale (refund protection)</p>
+          <p>- Payment method: Flutterwave transfer</p>
         </div>
         {
           earnings.pendingEarnings >= 10 && (
@@ -385,7 +441,7 @@ export default function CreatorEarningsDashboard({
                 onClick={() => setShowPayoutModal(false)}
                 className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
               >
-                ✕
+                x
               </button>
 
               <div className="mb-6">
@@ -412,7 +468,7 @@ export default function CreatorEarningsDashboard({
                   <span className="text-gray-900 dark:text-white font-medium">$0.00</span>
                 </div>
                 <div className="border-t border-gray-200 dark:border-gray-700 mt-3 pt-3 flex justify-between items-center">
-                  <span className="font-medium text-gray-900 dark:text-white">You'll Receive:</span>
+                  <span className="font-medium text-gray-900 dark:text-white">You&apos;ll Receive:</span>
                   <span className="text-xl font-bold text-gray-900 dark:text-white">
                     ${earnings.pendingEarnings.toFixed(2)}
                   </span>

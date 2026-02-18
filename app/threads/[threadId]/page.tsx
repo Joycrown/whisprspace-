@@ -218,6 +218,15 @@ const ThreadPage = () => {
 
   const handleMessageParticipant = async (participantId: string) => {
     if (!participantId) return;
+    if (participantId === currentUserId) {
+      showToast({
+        type: 'error',
+        title: 'Unable to message',
+        message: 'You cannot message yourself.',
+        duration: 3500,
+      });
+      return;
+    }
 
     // If a direct conversation already exists, go straight to it.
     const existing = await findDirectConversationWithUser(participantId);
