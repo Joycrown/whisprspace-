@@ -4,6 +4,7 @@ import { useNotifications, NotificationCategory, NotificationType } from '@/lib/
 import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
 import { FaCheckCircle, FaHeart, FaUsers, FaBell, FaAt, FaReply, FaClock, FaTrophy, FaTrash, FaEnvelopeOpenText } from 'react-icons/fa';
+import AppLoadingState from '@/components/ui/AppLoadingState';
 
 const NotificationFeed: React.FC = () => {
   const { session } = useUserStore();
@@ -108,7 +109,15 @@ const NotificationFeed: React.FC = () => {
     );
   }
 
-  if (isLoading) return <div className="p-4 text-white">Loading notifications...</div>;
+  if (isLoading) {
+    return (
+      <AppLoadingState
+        fullScreen={false}
+        className="bg-transparent py-12"
+        title="Pulling your latest alerts..."
+      />
+    );
+  }
   if (error) return <div className="p-4 text-red-500">Error: {error}</div>;
 
   const visibleNotifications = notifications.filter(isAllowedByPrefs);

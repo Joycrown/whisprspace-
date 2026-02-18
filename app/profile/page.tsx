@@ -11,7 +11,7 @@ import PremiumPaymentForm from '@/components/features/premium/PremiumPaymentForm
 import UsernameChanger from '@/components/features/profile/UsernameChanger';
 import { getUserPollStats } from '@/lib/threads/thread-service';
 import { confirmPremiumUpgrade } from '@/lib/flutterwave/flutterwave-service';
-import WhisprSpinner from '@/components/ui/WhisprSpinner';
+import AppLoadingState from '@/components/ui/AppLoadingState';
 
 const ProfilePage = () => {
   const router = useRouter();
@@ -101,12 +101,7 @@ const ProfilePage = () => {
 
 
   if (!sessionValidated || !currentUser) {
-    return (
-      <div className="flex flex-col items-center justify-center app-full-height bg-[#121212]">
-        <WhisprSpinner size={40} />
-        <p className="text-gray-400 mt-4 animate-pulse">Checking access...</p>
-      </div>
-    );
+    return <AppLoadingState title="Gathering your details..." />;
   }
 
   return (

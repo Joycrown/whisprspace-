@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/store/userStore';
 import { ArrowLeft } from 'lucide-react';
 import CreatorEarningsDashboard from '@/components/features/creator/CreatorEarningsDashboard';
+import AppLoadingState from '@/components/ui/AppLoadingState';
 import {
   CreatorEarnings,
   CreatorEarningsResponse,
@@ -137,6 +138,14 @@ export default function CreatorEarningsPage() {
       isMounted = false;
     };
   }, [userId, refreshToken]);
+
+  if (!sessionValidated) {
+    return <AppLoadingState title="Gathering your details..." />;
+  }
+
+  if (!session.user) {
+    return <AppLoadingState title="Taking you to sign in..." />;
+  }
 
   return (
     <div className="min-h-screen bg-[#121212]">

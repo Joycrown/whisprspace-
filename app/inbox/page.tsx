@@ -1,18 +1,20 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MessageCircle, Mail, MailOpen, Lock, Copy, Check, Zap } from 'lucide-react';
-import { useConversationsQuery, useUnreadCountQuery, Conversation, DirectMessage, markConversationRead } from '@/lib/messaging';
+import { useConversationsQuery, Conversation, DirectMessage, markConversationRead } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
-import WhisprSpinner from '@/components/ui/WhisprSpinner';
+import AppLoadingState from '@/components/ui/AppLoadingState';
 import MessageModal from '@/components/features/inbox/MessageModal';
 
 type TabType = 'all' | 'unread';
 
-export default function InboxPage() {
+function InboxPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { session, sessionValidated } = useUserStore();
+  const isSessionReady = Boolean(sessionValidated && session.user);
 
   // Use React Query hooks for data fetching
   const {
@@ -21,12 +23,11 @@ export default function InboxPage() {
     refetch: refetchConversations,
   } = useConversationsQuery({
     enableRealtime: true,
-    autoRefreshInterval: 30000, // 30 seconds
+    queryOptions: {
+      enabled: isSessionReady,
+    },
   });
 
-  const { unreadCount, refetch: refetchUnread } = useUnreadCountQuery();
-
-  const { session } = useUserStore();
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
@@ -44,8 +45,6 @@ export default function InboxPage() {
     searchParams.get('conversationId') ||
     searchParams.get('conversation_id') ||
     null;
-
-  // ... (useEffect for origin)
 
   const [origin, setOrigin] = useState('');
   useEffect(() => {
@@ -66,6 +65,9 @@ export default function InboxPage() {
     if (activeTab === 'unread') return (conv.unreadCount || 0) > 0;
     return true;
   });
+  const unreadCount = conversations.reduce((count, conversation) => {
+    return count + (conversation.unreadCount || 0)
+  }, 0);
 
   const directConversations = filteredConversations.filter(conv => conv.type !== 'one_time');
   const oneOffConversations = filteredConversations.filter(conv => conv.type === 'one_time');
@@ -99,9 +101,8 @@ export default function InboxPage() {
 
     markConversationRead(conversation.id).then(() => {
       refetchConversations();
-      refetchUnread();
     });
-  }, [refetchConversations, refetchUnread]);
+  }, [refetchConversations]);
 
   const handleConversationClick = (conversation: Conversation) => {
     // If one-time message, open modal
@@ -113,8 +114,14 @@ export default function InboxPage() {
     // Otherwise navigate to conversation page
     router.push(`/inbox/${conversation.id}`);
   };
+  
+  useEffect(() => {
+    if (!sessionValidated || session.user) return;
+    router.replace(`/auth?redirect=${encodeURIComponent('/inbox')}`);
+  }, [sessionValidated, session.user, router]);
 
   useEffect(() => {
+    if (!isSessionReady) return;
     if (!linkedConversationId) {
       setResolvedConversationLinkId(null);
       return;
@@ -148,6 +155,7 @@ export default function InboxPage() {
     conversations,
     router,
     openOneOffConversation,
+    isSessionReady,
   ]);
 
   const handleCloseModal = () => {
@@ -176,12 +184,16 @@ export default function InboxPage() {
     return conversation.participants.find(p => p.userId !== session?.user?.id);
   };
 
+  if (!sessionValidated) {
+    return <AppLoadingState title="Syncing your conversations..." />;
+  }
+
+  if (!session.user) {
+    return <AppLoadingState title="Taking you to sign in..." />;
+  }
+
   if (isLoading && conversations.length === 0) {
-    return (
-      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
-        <WhisprSpinner size={60} />
-      </div>
-    );
+    return <AppLoadingState title="Syncing your conversations..." />;
   }
 
   return (
@@ -420,7 +432,7 @@ export default function InboxPage() {
                                 </span>
                                 <span className="inline-flex items-center gap-1 text-[10px] md:text-xs text-purple-300 mt-1">
                                   <span className="px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30">
-                                    One-off · No replies
+                                    One-off - No replies
                                   </span>
                                 </span>
                               </div>
@@ -470,5 +482,13 @@ export default function InboxPage() {
         conversation={selectedConversation || undefined}
       />
     </div >
+  );
+}
+
+export default function InboxPage() {
+  return (
+    <Suspense fallback={<AppLoadingState title="Syncing your conversations..." />}>
+      <InboxPageContent />
+    </Suspense>
   );
 }

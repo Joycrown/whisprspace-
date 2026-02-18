@@ -9,6 +9,7 @@ import { useThreadStore } from "@/store/threadStore";
 import { ThreadFilters, Thread } from "@/types";
 import GlobalSearchBar from "@/components/features/threads/GlobalSearchBar";
 import { useRealtimeFeed } from "@/lib/core/realtime/useRealtimeThread";
+import AppLoadingState from "@/components/ui/AppLoadingState";
 
 type TabType = 'all' | 'popular' | 'recent';
 
@@ -206,9 +207,11 @@ const ThreadsPage = () => {
             )}
 
             {isLoading && threads.length === 0 ? (
-              <div className="flex justify-center items-center py-12">
-                <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
-              </div>
+              <AppLoadingState
+                fullScreen={false}
+                className="bg-transparent py-12"
+                title="Syncing your conversations..."
+              />
             ) : (
               <>
                 {threads.length === 0 && !isLoading && !error ? (

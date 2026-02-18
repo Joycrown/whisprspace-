@@ -7,14 +7,13 @@ import ThreadMessages from '@/components/features/threads/ThreadMessages';
 import ThreadInput from '@/components/features/threads/ThreadInput';
 import ThreadSidebar from '@/components/features/threads/ThreadSideBar';
 import ThreadHeader from '@/components/features/threads/ThreadHeader';
-import { useThreadQuery, useCreateThreadMessageMutation, useLikeThreadMutation, useDeleteThreadMutation, useUpdateThreadMutation, useLikeMessageMutation, useMessageReactionMutation, useVoteOnPollMutation, useJoinThreadMutation, useLeaveThreadMutation, useRemoveParticipantMutation, checkThreadBan, inviteUserToThread } from '@/lib/threads';
-import { useThreadStore } from '@/store/threadStore';
+import { useThreadQuery, useCreateThreadMessageMutation, useLikeThreadMutation, useDeleteThreadMutation, useUpdateThreadMutation, useMessageReactionMutation, useVoteOnPollMutation, useJoinThreadMutation, useLeaveThreadMutation, useRemoveParticipantMutation, checkThreadBan, inviteUserToThread } from '@/lib/threads';
 import { useUserStore } from '@/store/userStore';
-import { ThreadData, Message, Participant, ReactionType, Attachment, ThreadPrivacy } from '@/types';
+import { Message, Participant, ReactionType, ThreadPrivacy } from '@/types';
 import { SearchProvider } from '@/hooks/hooks/ThreadSearchHook';
 import ReportModal from '@/components/modals/ReportModal';
 import { MessageOptionsModal } from '@/components/modals/ThreadModals';
-import WhisprSpinner from '@/components/ui/WhisprSpinner';
+import AppLoadingState from '@/components/ui/AppLoadingState';
 import { useRealtimeThread, useTypingIndicator } from '@/lib/core/realtime/useRealtimeThread';
 import { useToast } from '@/components/ui/Toast';
 import { findDirectConversationWithUser } from '@/lib/messaging';
@@ -43,7 +42,6 @@ const ThreadPage = () => {
   const likeThreadMutation = useLikeThreadMutation();
   const deleteThreadMutation = useDeleteThreadMutation();
   const updateThreadMutation = useUpdateThreadMutation();
-  const likeMessageMutation = useLikeMessageMutation();
   const messageReactionMutation = useMessageReactionMutation();
   const voteOnPollMutation = useVoteOnPollMutation();
   const joinThreadMutation = useJoinThreadMutation();
@@ -58,7 +56,7 @@ const ThreadPage = () => {
   const [replyingTo, setReplyingTo] = useState<Message | undefined>(undefined);
   const [isMuted, setIsMuted] = useState(false);
   const [showReportMessageModal, setShowReportMessageModal] = useState(false);
-  const [selectedMessageToReport, setSelectedMessageToReport] = useState<string | null>(null);
+  const [, setSelectedMessageToReport] = useState<string | null>(null);
   const [messageFilter, setMessageFilter] = useState<{ senderId?: string; keyword?: string }>({}); // New state for message filtering
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile sidebar state
   const [joinActionError, setJoinActionError] = useState<string | null>(null);
@@ -270,6 +268,7 @@ const ThreadPage = () => {
 
   const handleViewReportedMessages = (threadId: string) => {
     // In a real application, this would navigate to a moderation panel or open a specific modal
+    void threadId;
   };
 
   const handleLeaveThread = () => {
@@ -666,30 +665,18 @@ const ThreadPage = () => {
   };
 
   if (!sessionValidated) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-[#121212]">
-        <WhisprSpinner size={60} />
-      </div>
-    );
+    return <AppLoadingState title="Syncing your conversations..." />;
   }
 
   if (!hasSession) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-[#121212]">
-        <WhisprSpinner size={60} />
-      </div>
-    );
+    return <AppLoadingState title="Taking you to sign in..." />;
   }
 
   // Prevent rendering cached thread content before the first post-mount fetch completes.
   // This avoids brief unauthorized content peeks on access-restricted threads.
   const waitingForFreshFetch = isFetching && !isFetchedAfterMount;
   if (isLoading || waitingForFreshFetch) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-[#121212]">
-        <WhisprSpinner size={60} />
-      </div>
-    );
+    return <AppLoadingState title="Syncing your conversations..." />;
   }
 
   if (error) {
@@ -998,6 +985,8 @@ const ThreadPage = () => {
         }}
         onSubmit={({ reason, customReason }) => {
           // In a real app, this would send the report to the backend
+          void reason;
+          void customReason;
           setShowReportMessageModal(false);
           setSelectedMessageToReport(null);
         }}

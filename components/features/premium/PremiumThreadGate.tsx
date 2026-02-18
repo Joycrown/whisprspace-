@@ -125,7 +125,7 @@ export function PremiumThreadGate({
                 />
               </svg>
             </div>
-            <span>Support the creator (70% goes to them)</span>
+            <span>Support the creator</span>
           </div>
         </div>
 

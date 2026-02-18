@@ -47,7 +47,7 @@ const WhisprSpinner: React.FC<WhisprSpinnerProps> = ({
           transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
           className="text-gray-400 text-sm font-medium tracking-wide"
         >
-          Loading...
+          Almost there...
         </motion.p>
       )}
     </div>

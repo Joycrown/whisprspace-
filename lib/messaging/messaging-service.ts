@@ -337,7 +337,7 @@ const fetchConversationDetails = async (conversationIds: string[]): Promise<{
 }> => {
 
   
-  const BATCH_SIZE = 5
+  const BATCH_SIZE = 10
   const validConversations: Conversation[] = []
   const errors: string[] = []
 
@@ -402,35 +402,35 @@ export const fetchConversationById = async (
 
     if (conversationError) throw conversationError
 
-    // Fetch participants with user details
-    const { data: participants, error: participantsError } = await rawDb.select<any[]>('conversation_participants', {
-      select: `
-        *,
-        user:users(id, anonymous_id, avatar_url, is_premium)
-      `.replace(/\s+/g, ''),
-      filters: { 'conversation_id': rawDb.filter.eq(conversationId) }
-    });
+    const [participantsResponse, lastMessagesResponse] = await Promise.all([
+      rawDb.select<any[]>('conversation_participants', {
+        select: `
+          *,
+          user:users(id, anonymous_id, avatar_url, is_premium)
+        `.replace(/\s+/g, ''),
+        filters: { 'conversation_id': rawDb.filter.eq(conversationId) }
+      }),
+      rawDb.select<any[]>('direct_messages', {
+        select: `
+          *,
+          sender:users!direct_messages_sender_id_fkey(id, anonymous_id, avatar_url)
+        `.replace(/\s+/g, ''),
+        filters: {
+          'conversation_id': rawDb.filter.eq(conversationId),
+          'is_deleted': rawDb.filter.eq(false)
+        },
+        order: { column: 'created_at', ascending: false },
+        limit: 1
+      }),
+    ])
 
+    const { data: participants, error: participantsError } = participantsResponse
     if (participantsError) throw participantsError
 
-    // Fetch last message
-    // Use rawDb with limit 1
-    const { data: lastMessages, error: lastMessageError } = await rawDb.select<any[]>('direct_messages', {
-      select: `
-        *,
-        sender:users!direct_messages_sender_id_fkey(id, anonymous_id, avatar_url)
-      `.replace(/\s+/g, ''),
-      filters: { 
-        'conversation_id': rawDb.filter.eq(conversationId),
-        'is_deleted': rawDb.filter.eq(false)
-      },
-      order: { column: 'created_at', ascending: false },
-      limit: 1
-    });
-    
-    // rawDb.select returns array even with limit 1 unless single: true. 
-    // Here we handle array.
-    const lastMessage = lastMessages && lastMessages.length > 0 ? lastMessages[0] : null;
+    const { data: lastMessages, error: lastMessageError } = lastMessagesResponse
+    if (lastMessageError) throw lastMessageError
+
+    const lastMessage = lastMessages && lastMessages.length > 0 ? lastMessages[0] : null
 
       const currentParticipant = (participants || []).find(
         (participant: any) => participant.user_id === user.id

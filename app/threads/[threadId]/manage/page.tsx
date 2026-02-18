@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import AccessManagement from '@/components/features/premium/AccessManagement';
+import AppLoadingState from '@/components/ui/AppLoadingState';
 import { useThreadStore } from '@/store/threadStore';
 import { useUserStore } from '@/store/userStore';
 import { AccessCode } from '@/types';
@@ -109,11 +110,7 @@ export default function ThreadManagePage({ params }: PageProps) {
   }, [threadId, session?.user?.id, isCreator, isGenerating]);
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
-      </div>
-    );
+    return <AppLoadingState title="Preparing thread controls..." />;
   }
 
   if (!currentThread) {

@@ -6,11 +6,12 @@ import { useGroupStore } from '@/store/groupStore';
 import { useUserStore } from '@/store/userStore';
 import { useThreadStore } from '@/store/threadStore';
 import { GroupMember } from '@/types';
-import { Users, Lock, Eye, Flag, UserMinus, MessageCircle, Share2, Settings, ArrowLeft, X } from 'lucide-react';
+import { Lock, Eye, Flag, UserMinus, Settings, ArrowLeft, X } from 'lucide-react';
 import ReportModal from '@/components/ReportModal';
 import GroupSettingsModal from '@/components/modals/GroupSettingsModal';
 import { RemoveMemberModal, InviteCodeModal } from '@/components/modals/GroupModals';
 import { ThreadList } from '@/components/features/threads/ThreadList';
+import AppLoadingState from '@/components/ui/AppLoadingState';
 
 const GroupDetailPage = () => {
   const params = useParams();
@@ -41,7 +42,6 @@ const GroupDetailPage = () => {
   }, [groupId, fetchGroupThreads]);
 
   const isMember = useMemo(() => {
-    // For mock data, we'll assume current user is a member of groups 1 and 2
     return currentGroup?.members?.some(member => member.id === currentUserId);
   }, [currentGroup?.members, currentUserId]);
 
@@ -84,12 +84,6 @@ const GroupDetailPage = () => {
 
   const handleRemoveMemberConfirm = async () => {
     if (currentGroup && selectedMemberToRemove) {
-      // This is a placeholder for the actual store action
-
-      // In a real scenario, you'd call an action like:
-      // await removeGroupMember(currentGroup.id, selectedMemberToRemove.id);
-
-      // Optimistically update UI
       updateGroup(currentGroup.id, {
         members: currentGroup.members.filter(m => m.id !== selectedMemberToRemove.id),
         currentMembers: currentGroup.currentMembers - 1,
@@ -103,14 +97,12 @@ const GroupDetailPage = () => {
     setShowReportModal(true);
   };
 
-  const handleReportSubmit = (reason: string, customReason?: string) => {
-
-    // Send report to backend
+  const handleReportSubmit = () => {
     setShowReportModal(false);
   };
 
   if (isLoading) {
-    return <div className="text-white p-4">Loading group details...</div>;
+    return <AppLoadingState title="Gathering group details..." />;
   }
 
   if (error) {
@@ -165,7 +157,7 @@ const GroupDetailPage = () => {
               <p className="text-gray-400">Created by {currentGroup.createdBy}</p>
               <div className="flex items-center gap-2 text-gray-500 text-sm mt-1">
                 <PrivacyIcon className="w-4 h-4" />
-                <span>{privacyText} • {currentGroup.currentMembers}/{currentGroup.maxMembers} members</span>
+                <span>{privacyText} - {currentGroup.currentMembers}/{currentGroup.maxMembers} members</span>
               </div>
             </div>
           </div>
@@ -179,11 +171,14 @@ const GroupDetailPage = () => {
           )}
         </div>
 
-        {/* Group-specific thread feed */}
         <div className="bg-[#1E1E1E] rounded-lg p-6 mb-6">
           <h3 className="text-xl font-bold text-white mb-4">Group Discussions</h3>
           {isThreadsLoading ? (
-            <div className="text-white">Loading group threads...</div>
+            <AppLoadingState
+              fullScreen={false}
+              className="bg-transparent py-8"
+              title="Syncing group conversations..."
+            />
           ) : threadsError ? (
             <div className="text-red-500">Error: {threadsError}</div>
           ) : threads.length > 0 ? (
@@ -197,7 +192,6 @@ const GroupDetailPage = () => {
           )}
         </div>
 
-        {/* Member Management (Admin only) */}
         {isCreator && (
           <div className="bg-[#1E1E1E] rounded-lg p-6 mb-6">
             <h3 className="text-xl font-bold text-white mb-4">Member Management</h3>
@@ -235,19 +229,18 @@ const GroupDetailPage = () => {
           </div>
         )}
 
-        {/* Moderation Tools (Admin only) */}
         {isCreator && (
           <div className="bg-[#1E1E1E] rounded-lg p-6 mb-6">
             <h3 className="text-xl font-bold text-white mb-4">Moderation Tools</h3>
             <div className="flex flex-col gap-3">
               <button
-                onClick={() => { }} // Placeholder for future logic
+                onClick={() => { }}
                 className="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg transition-colors"
               >
                 Review Reported Content
               </button>
               <button
-                onClick={() => { }} // Placeholder for future logic
+                onClick={() => { }}
                 className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
               >
                 Mute/Ban Users
@@ -257,7 +250,6 @@ const GroupDetailPage = () => {
           </div>
         )}
 
-        {/* Group Analytics Dashboard (Admin only) */}
         {isCreator && (
           <div className="bg-[#1E1E1E] rounded-lg p-6 mb-6">
             <h3 className="text-xl font-bold text-white mb-4">Group Analytics Dashboard</h3>
@@ -267,7 +259,6 @@ const GroupDetailPage = () => {
 
       </div>
 
-      {/* Modals */}
       <ReportModal
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}
@@ -299,7 +290,7 @@ const GroupDetailPage = () => {
           onClose={() => setShowRemoveMemberModal(false)}
           memberName={selectedMemberToRemove.name}
           onRemove={handleRemoveMemberConfirm}
-          isLoading={isLoading} // Use group store isLoading for modal
+          isLoading={isLoading}
         />
       )}
     </div>

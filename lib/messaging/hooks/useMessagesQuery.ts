@@ -274,13 +274,13 @@ export function useMessagesQuery(
     },
     getNextPageParam: (lastPage) => lastPage.nextOffset,
     enabled: enabled && !!conversationId,
-    staleTime: 10 * 1000, // 10 seconds (messages change frequently)
-    refetchOnWindowFocus: true,
+    staleTime: 20 * 1000,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
-    // Reliability fallback when realtime channel is stale/interrupted.
-    // Keeps active conversations fresh without forcing manual reload.
-    refetchInterval: realtimeEnabled ? 5000 : false,
+    // Realtime is primary source; keep a lightweight fallback poll.
+    refetchInterval: realtimeEnabled ? 30000 : 15000,
     refetchIntervalInBackground: false,
+    placeholderData: (previousData) => previousData,
     initialPageParam: 0,
   })
 

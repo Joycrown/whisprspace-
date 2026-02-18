@@ -8,6 +8,7 @@ export { Button } from './Button';
 export { Input } from './Input';
 export { Badge, CountBadge, StatusBadge } from './Badge';
 export { Spinner, PageLoader, LoadingDots } from './Spinner';
+export { default as AppLoadingState } from './AppLoadingState';
 
 // Layout Components
 export { 

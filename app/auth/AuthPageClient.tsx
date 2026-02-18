@@ -6,6 +6,7 @@ import { useUserStore } from '@/store/userStore';
 import { motion } from 'framer-motion';
 import { UserCheck, Shield, Zap, Copy, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
+import AppLoadingState from '@/components/ui/AppLoadingState';
 
 const AuthPage = () => {
   const [view, setView] = useState<'main' | 'anonymous' | 'login' | 'signup' | 'forgot' | 'welcome'>('main');
@@ -248,14 +249,7 @@ const AuthPage = () => {
   // Render blocking redirect if session is valid
   // This prevents the auth form from rendering and potentially causing state issues or race conditions
   if (!forceAuth && sessionValidated && (sessionInfo || session.isAuthenticated)) {
-    return (
-      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-400">Redirecting to WhisprSpace...</p>
-        </div>
-      </div>
-    );
+    return <AppLoadingState title="Opening your space..." />;
   }
 
   return (
@@ -329,7 +323,7 @@ const AuthPage = () => {
                 onClick={() => setView('anonymous')}
                 className="text-sm text-gray-600 hover:text-purple-600 transition-colors font-medium"
               >
-                Continue as a Guest →
+                Continue as a Guest
               </button>
             </div>
           </motion.div>
@@ -386,7 +380,7 @@ const AuthPage = () => {
                 onClick={() => setView('main')}
                 className="text-sm text-gray-600 hover:text-purple-600 transition-colors font-medium"
               >
-                ← Back to Sign In Options
+                Back to Sign In Options
               </button>
             </div>
           </motion.div>
@@ -443,19 +437,19 @@ const AuthPage = () => {
                   <>
                     <div className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2 flex-shrink-0" />
-                      <span>✅ Browse and discover threads</span>
+                      <span>Browse and discover threads</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2 flex-shrink-0" />
-                      <span>✅ Like and react to posts</span>
+                      <span>Like and react to posts</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2 flex-shrink-0" />
-                      <span>✅ Comment on discussions</span>
+                      <span>Comment on discussions</span>
                     </div>
                     <div className="flex items-start gap-2">
                       <div className="w-1.5 h-1.5 bg-orange-400 rounded-full mt-2 flex-shrink-0" />
-                      <span>🔒 Create threads (sign up required)</span>
+                      <span>Create threads (sign up required)</span>
                     </div>
                   </>
                 ) : (
@@ -512,7 +506,7 @@ const AuthPage = () => {
               className="w-full sm:w-auto px-2 sm:px-4 py-2 text-xs sm:text-sm rounded-md transition-colors text-gray-600 hover:text-gray-900 whitespace-nowrap"
               onClick={() => setView('main')}
             >
-              ← Back
+              Back
             </button>
           </div>
         )}
@@ -667,7 +661,7 @@ const AuthPage = () => {
               <div className="space-y-2">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p className="text-xs text-blue-800">
-                    💡 <strong>Note:</strong> Password reset is only available for registered accounts. Guests accounts cannot reset passwords.
+                    <strong>Note:</strong> Password reset is only available for registered accounts. Guests accounts cannot reset passwords.
                   </p>
                 </div>
 

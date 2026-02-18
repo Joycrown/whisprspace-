@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: '2025-01-27.acacia' as any,
+      apiVersion: '2025-01-27.acacia',
     })
   : null
 
@@ -19,6 +19,10 @@ type ThreadForPayment = {
   is_premium: boolean
   deleted_at: string | null
   expires_at: string | null
+}
+
+type CreatorProfile = {
+  is_premium: boolean | null
 }
 
 const getThreadForPayment = async (threadId: string) => {
@@ -171,8 +175,20 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       }
     }
 
-    const platformFee = amountDecimal * 0.3 // 30% platform fee
-    const creatorEarnings = amountDecimal * 0.7 // 70% to creator
+    const { data: creatorProfile, error: creatorProfileError } = await supabase
+      .from('users')
+      .select('is_premium')
+      .eq('id', creatorId)
+      .maybeSingle()
+
+    if (creatorProfileError) {
+      console.error('Failed to fetch creator premium status:', creatorProfileError)
+    }
+
+    const isCreatorPremium = (creatorProfile as CreatorProfile | null)?.is_premium === true
+    const creatorShare = isCreatorPremium ? 0.7 : 0.5
+    const platformFee = amountDecimal * (1 - creatorShare)
+    const creatorEarnings = amountDecimal * creatorShare
 
     const paymentIntentId = session.payment_intent as string
     const { data: existingPayment } = await supabase

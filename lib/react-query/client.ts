@@ -8,7 +8,7 @@ import { PostgrestError } from '@supabase/supabase-js'
 const queryConfig: DefaultOptions = {
   queries: {
     // Time until data is considered stale
-    staleTime: 30 * 1000, // 30 seconds (default for most queries)
+    staleTime: 60 * 1000, // 60 seconds (query-level hooks can override)
     
     // Time until inactive queries are garbage collected
     gcTime: 5 * 60 * 1000, // 5 minutes (formerly cacheTime)
@@ -29,8 +29,8 @@ const queryConfig: DefaultOptions = {
     // Retry delay with exponential backoff
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
     
-    // Refetch on window focus for fresh data
-    refetchOnWindowFocus: true,
+    // Avoid noisy global focus refetches. Opt in per-query where needed.
+    refetchOnWindowFocus: false,
     
     // Don't refetch on reconnect by default (real-time handles this)
     refetchOnReconnect: false,

@@ -40,7 +40,7 @@ export function PageLoader() {
     <div className="fixed inset-0 bg-[#121212] flex items-center justify-center z-50">
       <div className="text-center">
         <Spinner size="xl" />
-        <p className="mt-4 text-gray-400">Loading...</p>
+        <p className="mt-4 text-gray-400">Almost there...</p>
       </div>
     </div>
   );
