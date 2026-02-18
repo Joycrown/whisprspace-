@@ -74,8 +74,12 @@ const NotificationFeed: React.FC = () => {
 
   const getActionUrl = (notification: { data?: Record<string, unknown> }) => {
     const data = notification.data || {};
+    const conversationId =
+      (typeof data.conversation_id === 'string' && data.conversation_id) ||
+      (typeof data.conversationId === 'string' && data.conversationId) ||
+      null;
     if (typeof data.thread_id === 'string') return `/threads/${data.thread_id}`;
-    if (typeof data.conversation_id === 'string') return `/inbox/${data.conversation_id}`;
+    if (conversationId) return `/inbox?conversationId=${encodeURIComponent(conversationId)}`;
     if (typeof data.group_id === 'string') return `/groups/${data.group_id}`;
     return null;
   };

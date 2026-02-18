@@ -8,6 +8,7 @@ import AccessManagement from '@/components/features/premium/AccessManagement';
 import { useThreadStore } from '@/store/threadStore';
 import { useUserStore } from '@/store/userStore';
 import { AccessCode } from '@/types';
+import * as rawDb from '@/lib/core/supabase/raw-db';
 import {
   fetchThreadAccessCodes,
   createThreadAccessCode,
@@ -17,6 +18,11 @@ interface PageProps {
   params: Promise<{
     threadId: string;
   }>;
+}
+
+interface SalesRow {
+  id: string;
+  status?: string | null;
 }
 
 export default function ThreadManagePage({ params }: PageProps) {
@@ -30,6 +36,8 @@ export default function ThreadManagePage({ params }: PageProps) {
   const [codesLoading, setCodesLoading] = useState(false);
   const [codesError, setCodesError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [salesCount, setSalesCount] = useState(0);
+  const [salesLoading, setSalesLoading] = useState(false);
   const isThreadActive = Boolean(
     currentThread &&
     (!currentThread.expiresAt || new Date(currentThread.expiresAt) > new Date())
@@ -62,10 +70,43 @@ export default function ThreadManagePage({ params }: PageProps) {
     if (currentThread?.id) {
       loadCodes();
     }
-  }, [currentThread?.id, threadId]);
+  }, [currentThread, currentThread?.id, threadId]);
 
   // Check if user is the creator
   const isCreator = session?.user?.id === currentThread?.author.id;
+
+  useEffect(() => {
+    const loadSalesCount = async () => {
+      if (!threadId || !session?.user?.id || !isCreator) {
+        setSalesCount(0);
+        setSalesLoading(false);
+        return;
+      }
+
+      setSalesLoading(true);
+
+      const { data, error } = await rawDb.select<SalesRow[]>('creator_earnings', {
+        select: 'id,status',
+        filters: {
+          creator_id: rawDb.filter.eq(session.user.id),
+          thread_id: rawDb.filter.eq(threadId),
+        },
+      });
+
+      if (error) {
+        console.error('Failed to load premium thread sales count:', error);
+        setSalesLoading(false);
+        return;
+      }
+
+      const rows = data || [];
+      const nonRefundedCount = rows.filter((row) => String(row.status || '').toLowerCase() !== 'refunded').length;
+      setSalesCount(nonRefundedCount);
+      setSalesLoading(false);
+    };
+
+    loadSalesCount();
+  }, [threadId, session?.user?.id, isCreator, isGenerating]);
 
   if (isLoading) {
     return (
@@ -165,9 +206,11 @@ export default function ThreadManagePage({ params }: PageProps) {
             </p>
             <div className="mt-4 flex items-center gap-4 text-sm text-gray-400">
               <span>Price: <span className="text-white font-semibold">${currentThread.price?.toFixed(2)}</span></span>
-              <span>•</span>
-              <span>Sales: <span className="text-green-400 font-semibold">0</span></span>
-              <span>•</span>
+              <span>|</span>
+              <span>
+                Sales: <span className="text-green-400 font-semibold">{salesLoading ? '--' : salesCount}</span>
+              </span>
+              <span>|</span>
               <span>Free Access: <span className="text-purple-400 font-semibold">
                 {freeAccessCount}
               </span></span>
@@ -187,3 +230,4 @@ export default function ThreadManagePage({ params }: PageProps) {
     </div>
   );
 }
+

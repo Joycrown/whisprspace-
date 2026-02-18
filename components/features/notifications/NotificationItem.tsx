@@ -23,14 +23,20 @@ export default function NotificationItem({
     }
 
     // Navigate based on notification type
-    const data = notification.data as any
+    const data = (notification.data || {}) as Record<string, unknown>
+    const conversationId =
+      (typeof data.conversation_id === 'string' && data.conversation_id) ||
+      (typeof data.conversationId === 'string' && data.conversationId) ||
+      null
+    const threadId = typeof data.thread_id === 'string' ? data.thread_id : null
+    const groupId = typeof data.group_id === 'string' ? data.group_id : null
 
-    if (data.thread_id) {
-      router.push(`/threads/${data.thread_id}`)
-    } else if (data.conversation_id) {
-      router.push(`/inbox/${data.conversation_id}`)
-    } else if (data.group_id) {
-      router.push(`/groups/${data.group_id}`)
+    if (threadId) {
+      router.push(`/threads/${threadId}`)
+    } else if (conversationId) {
+      router.push(`/inbox?conversationId=${encodeURIComponent(conversationId)}`)
+    } else if (groupId) {
+      router.push(`/groups/${groupId}`)
     }
   }
 

@@ -1,19 +1,18 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
-import { MessageCircle, Send, Trash2, Mail, MailOpen, Lock, Copy, Check, Clock } from 'lucide-react';
-import { useConversationsQuery, useUnreadCountQuery, Conversation, markConversationRead } from '@/lib/messaging';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { MessageCircle, Mail, MailOpen, Lock, Copy, Check, Zap } from 'lucide-react';
+import { useConversationsQuery, useUnreadCountQuery, Conversation, DirectMessage, markConversationRead } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
-import Link from 'next/link';
 import WhisprSpinner from '@/components/ui/WhisprSpinner';
 import MessageModal from '@/components/features/inbox/MessageModal';
-import { Zap } from 'lucide-react';
 
 type TabType = 'all' | 'unread';
 
 export default function InboxPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // Use React Query hooks for data fetching
   const {
@@ -38,7 +37,13 @@ export default function InboxPage() {
 
   // State for One-time Message Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMessage, setModalMessage] = useState<any>(null); // Using any temporarily to avoid deep type imports if complex
+  const [modalMessage, setModalMessage] = useState<DirectMessage | null>(null);
+  const [resolvedConversationLinkId, setResolvedConversationLinkId] = useState<string | null>(null);
+
+  const linkedConversationId =
+    searchParams.get('conversationId') ||
+    searchParams.get('conversation_id') ||
+    null;
 
   // ... (useEffect for origin)
 
@@ -82,23 +87,73 @@ export default function InboxPage() {
   const hasMoreDirect = visibleDirect.length < directConversations.length;
   const hasMoreOneOff = visibleOneOff.length < oneOffConversations.length;
 
+  const openOneOffConversation = useCallback((conversation: Conversation) => {
+    setSelectedConversation(conversation);
+    if (conversation.lastMessage) {
+      setModalMessage(conversation.lastMessage);
+      setIsModalOpen(true);
+    } else {
+      setModalMessage(null);
+      setIsModalOpen(false);
+    }
+
+    markConversationRead(conversation.id).then(() => {
+      refetchConversations();
+      refetchUnread();
+    });
+  }, [refetchConversations, refetchUnread]);
+
   const handleConversationClick = (conversation: Conversation) => {
     // If one-time message, open modal
     if (conversation.type === 'one_time') {
-      if (conversation.lastMessage) {
-        setModalMessage(conversation.lastMessage);
-        setIsModalOpen(true);
-
-        markConversationRead(conversation.id).then(() => {
-          refetchConversations();
-          refetchUnread();
-        });
-      }
+      openOneOffConversation(conversation);
       return;
     }
 
     // Otherwise navigate to conversation page
     router.push(`/inbox/${conversation.id}`);
+  };
+
+  useEffect(() => {
+    if (!linkedConversationId) {
+      setResolvedConversationLinkId(null);
+      return;
+    }
+
+    if (isLoading || resolvedConversationLinkId === linkedConversationId) {
+      return;
+    }
+
+    const targetConversation = conversations.find(
+      (conversation) => conversation.id === linkedConversationId
+    );
+    setResolvedConversationLinkId(linkedConversationId);
+
+    if (!targetConversation) {
+      router.replace(`/inbox/${linkedConversationId}`);
+      return;
+    }
+
+    if (targetConversation.type === 'one_time') {
+      openOneOffConversation(targetConversation);
+      router.replace('/inbox');
+      return;
+    }
+
+    router.replace(`/inbox/${targetConversation.id}`);
+  }, [
+    linkedConversationId,
+    isLoading,
+    resolvedConversationLinkId,
+    conversations,
+    router,
+    openOneOffConversation,
+  ]);
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setModalMessage(null);
+    setSelectedConversation(null);
   };
 
 
@@ -251,7 +306,7 @@ export default function InboxPage() {
               <MessageCircle className="w-12 h-12 md:w-16 md:h-16 text-gray-600 mx-auto mb-3 md:mb-4" />
               <h3 className="text-lg md:text-xl font-semibold text-white mb-2">No Messages Yet</h3>
               <p className="text-sm md:text-base text-gray-400 mb-4 md:mb-6">
-                Start a conversation from someone's profile or wait for messages
+                Start a conversation from someone&apos;s profile or wait for messages
               </p>
             </div>
           ) : (
@@ -410,8 +465,9 @@ export default function InboxPage() {
 
       <MessageModal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={handleCloseModal}
         message={modalMessage}
+        conversation={selectedConversation || undefined}
       />
     </div >
   );

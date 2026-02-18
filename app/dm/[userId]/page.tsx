@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Send, MessageCircle } from 'lucide-react';
+import { Send, MessageCircle, Zap } from 'lucide-react';
 import { createOneTimeConversation, getOrCreateConversation, sendMessage } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
 
@@ -22,21 +22,31 @@ export default function DMPage({ params }: PageProps) {
   const [isSending, setIsSending] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [hasExplicitMode, setHasExplicitMode] = useState(false);
 
   const recipientAnonymousId = userId;
   const isLoggedIn = session?.isAuthenticated || false;
   const [mode, setMode] = useState<'one-time' | 'conversation'>('conversation');
+  const isSelfRecipient = Boolean(session?.user?.id && session.user.id === userId);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const modeParam = new URLSearchParams(window.location.search).get('mode');
     if (modeParam === 'one-time' || modeParam === 'conversation') {
       setMode(modeParam);
+      setHasExplicitMode(true);
+      return;
     }
+    setHasExplicitMode(false);
   }, []);
 
   const handleSend = async () => {
     if (!message.trim()) return;
+
+    if (isSelfRecipient) {
+      setErrorMessage('You cannot message yourself');
+      return;
+    }
 
     if (mode === 'conversation' && !isLoggedIn) {
       const redirect = encodeURIComponent(`/dm/${userId}?mode=conversation`);
@@ -88,8 +98,9 @@ export default function DMPage({ params }: PageProps) {
         setMessage('');
         setIsSending(false);
       }
-    } catch (error: any) {
-      setErrorMessage(error.message || 'Failed to send message');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to send message';
+      setErrorMessage(message);
       setIsSending(false);
     }
   };
@@ -110,6 +121,54 @@ export default function DMPage({ params }: PageProps) {
             to <span className="text-purple-400 font-semibold">{recipientAnonymousId}</span>
           </p>
         </div>
+
+        {!hasExplicitMode && (
+          <div className="grid gap-3 md:grid-cols-2 mb-4 md:mb-6">
+            <button
+              onClick={() => setMode('one-time')}
+              className={`text-left border rounded-xl p-4 transition-all ${
+                mode === 'one-time'
+                  ? 'border-purple-500 bg-purple-900/30 ring-1 ring-purple-500/40'
+                  : 'border-gray-700 bg-gray-900/40 hover:border-purple-500/40'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <span className="w-10 h-10 rounded-full bg-purple-600/20 flex items-center justify-center">
+                  <Zap className="w-5 h-5 text-purple-300" />
+                </span>
+                <div>
+                  <p className="text-white font-semibold">One-off Message</p>
+                  <p className="text-xs text-gray-400">No account needed</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">
+                Send one message without opening a full conversation.
+              </p>
+            </button>
+
+            <button
+              onClick={() => setMode('conversation')}
+              className={`text-left border rounded-xl p-4 transition-all ${
+                mode === 'conversation'
+                  ? 'border-orange-500 bg-orange-900/20 ring-1 ring-orange-500/30'
+                  : 'border-gray-700 bg-gray-900/40 hover:border-orange-500/40'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <span className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center">
+                  <MessageCircle className="w-5 h-5 text-orange-300" />
+                </span>
+                <div>
+                  <p className="text-white font-semibold">Start Conversation</p>
+                  <p className="text-xs text-gray-400">Account required</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">
+                Start an ongoing chat and receive replies in inbox.
+              </p>
+            </button>
+          </div>
+        )}
 
         {/* Message Form */}
         <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 md:p-6 mb-4 md:mb-6">

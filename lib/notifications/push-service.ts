@@ -91,7 +91,7 @@ const buildNotificationUrl = (notification: NotificationDispatchRecord) => {
   }
 
   if (conversationId) {
-    return `/inbox/${conversationId}`
+    return `/inbox?conversationId=${encodeURIComponent(conversationId)}`
   }
 
   return '/notifications'

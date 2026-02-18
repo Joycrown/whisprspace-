@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Send, Loader2, Check, CheckCheck, Clock, Image as ImageIcon, X } from 'lucide-react';
 import { createReadReceipt, markConversationDelivered, markConversationRead, useConversationQuery, useMessagesQuery, useSendMessageMutation } from '@/lib/messaging';
+import type { DirectMessage, MessageDeliveryReceipt, MessageReadReceipt } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
 import { uploadService } from '@/lib/utils/upload-service';
 import * as rawRealtime from '@/lib/core/supabase/raw-realtime';
@@ -76,6 +77,12 @@ export default function ConversationPage() {
   const otherUser = session.user && conversation?.participants
     ? conversation.participants.find((p) => p.userId !== session.user?.id) || null
     : null;
+
+  useEffect(() => {
+    if (isLoading || !conversation) return;
+    if (conversation.type !== 'one_time') return;
+    router.replace(`/inbox?conversationId=${encodeURIComponent(conversationId)}`);
+  }, [isLoading, conversation, conversationId, router]);
 
   useEffect(() => {
     if (!session.user || !conversationId) return;
@@ -306,14 +313,20 @@ export default function ConversationPage() {
     return `Last seen ${diffDays}d ago`;
   };
 
-  const getMessageStatus = (msg: any) => {
+  const getMessageStatus = (msg: DirectMessage) => {
     if (!session.user || msg.senderId !== session.user.id) return null;
     if (msg.id?.startsWith('temp-')) return 'Sending...';
     const otherUserId = otherUser?.user?.id || otherUser?.userId;
-    if (otherUserId && msg.readReceipts?.some((receipt: any) => receipt.userId === otherUserId)) {
+    if (
+      otherUserId &&
+      msg.readReceipts?.some((receipt: MessageReadReceipt) => receipt.userId === otherUserId)
+    ) {
       return 'Read';
     }
-    if (otherUserId && msg.deliveryReceipts?.some((receipt: any) => receipt.userId === otherUserId)) {
+    if (
+      otherUserId &&
+      msg.deliveryReceipts?.some((receipt: MessageDeliveryReceipt) => receipt.userId === otherUserId)
+    ) {
       return 'Delivered';
     }
     return 'Sent';

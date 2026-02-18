@@ -451,6 +451,31 @@ export interface ThreadEarnings {
   lastSaleAt?: string;
 }
 
+export interface CreatorEarningsSeries {
+  week: number[];
+  month: number[];
+  all: number[];
+}
+
+export interface CreatorEarningsTransaction {
+  id: string;
+  type: 'sale' | 'payout';
+  status: string;
+  threadId?: string | null;
+  threadTitle?: string | null;
+  grossAmount: number;
+  netAmount: number;
+  currency: string;
+  occurredAt: string;
+}
+
+export interface CreatorEarningsResponse {
+  earnings: CreatorEarnings;
+  threadEarnings: ThreadEarnings[];
+  earningsSeries: CreatorEarningsSeries;
+  recentTransactions: CreatorEarningsTransaction[];
+}
+
 // ===== API RESPONSE TYPES =====
 export interface ApiResponse<T> {
   success: boolean;

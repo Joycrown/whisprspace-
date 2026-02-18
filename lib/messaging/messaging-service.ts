@@ -123,6 +123,20 @@ const mapParticipant = (row: any): ConversationParticipant => ({
   user: mapUser(row.user),
 })
 
+const isDuplicateConversationParticipantError = (error: unknown) => {
+  if (!error) return false
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'object' && error !== null && 'message' in error
+        ? String((error as { message?: unknown }).message ?? '')
+        : String(error)
+  return (
+    message.includes('conversation_participants_pkey') &&
+    (message.includes('23505') || message.toLowerCase().includes('duplicate key'))
+  )
+}
+
 const getConversationUnreadCount = async (
   conversationId: string,
   userId: string,
@@ -161,6 +175,10 @@ export const getOrCreateConversation = async (
       return { data: null, error: 'User not authenticated' }
     }
 
+    if (user.id === otherUserId) {
+      return { data: null, error: 'You cannot start a conversation with yourself' }
+    }
+
     // Call database function to get or create conversation
     const { data, error } = await rawDb.rpc<string>('get_or_create_conversation', {
       user1_id: user.id,
@@ -177,6 +195,14 @@ export const getOrCreateConversation = async (
     
     return { data: null, error: 'Function returned null ID' }
   } catch (error: any) {
+    if (isDuplicateConversationParticipantError(error)) {
+      // Recover from duplicate participant races by loading existing conversation.
+      const fallback = await findDirectConversationWithUser(otherUserId)
+      if (fallback.data) {
+        return { data: fallback.data, error: null }
+      }
+    }
+
     console.error('Get or create conversation error:', error)
     return { data: null, error: error.message || 'Failed to get/create conversation' }
   }
@@ -194,6 +220,10 @@ export const findDirectConversationWithUser = async (
 
     if (!user) {
       return { data: null, error: 'User not authenticated' };
+    }
+
+    if (user.id === otherUserId) {
+      return { data: null, error: 'You cannot message yourself' };
     }
 
     const { data: conversations, error } = await fetchConversations();
@@ -438,6 +468,10 @@ export const createOneTimeConversation = async (
 
     if (!user) {
       return { data: null, error: 'User not authenticated' }
+    }
+
+    if (user.id === recipientId) {
+      return { data: null, error: 'You cannot send a one-off message to yourself' }
     }
 
     // Call RPC to create one-time conversation
