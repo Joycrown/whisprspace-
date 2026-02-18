@@ -334,6 +334,13 @@ export async function POST(request: NextRequest) {
     }
 
     if (currency === 'NGN') {
+      if (!/^\d{10}$/.test(accountNumber)) {
+        return NextResponse.json(
+          { error: 'NGN account number must be 10 digits.' },
+          { status: 400 }
+        )
+      }
+
       const accountResolveResponse = await fetch(
         `https://api.flutterwave.com/v3/accounts/resolve?account_number=${encodeURIComponent(
           accountNumber
@@ -349,14 +356,14 @@ export async function POST(request: NextRequest) {
 
       const accountResolvePayload = await accountResolveResponse.json().catch(() => null)
       if (!accountResolveResponse.ok || accountResolvePayload?.status !== 'success') {
-        const providerError =
-          extractFlutterwaveError(accountResolvePayload) ||
-          'Invalid bank details. Confirm bank and account number.'
-
-        return NextResponse.json(
-          { error: providerError },
-          { status: 400 }
-        )
+        const providerError = extractFlutterwaveError(accountResolvePayload)
+        // Do not hard-block here because some valid fintech accounts may fail resolve checks.
+        // Flutterwave transfer response remains the final source of truth.
+        console.warn('Flutterwave account resolve failed; proceeding to transfer attempt', {
+          accountBank,
+          currency,
+          providerError: providerError || 'unavailable',
+        })
       }
     }
 
