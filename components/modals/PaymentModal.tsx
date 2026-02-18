@@ -37,11 +37,6 @@ export default function PaymentModal({
   const currency = getCurrencyForCountry(userCountry);
   const threadPurchaseTxRefKey = `whispr_thread_tx_ref_${threadId}`;
   const localPrice = convertPrice(price, currency);
-  // Calculate platform fee (30%) and creator earnings (70%)
-  const platformFee = price * 0.30;
-  const creatorEarnings = price * 0.70;
-  const localPlatformFee = convertPrice(platformFee, currency);
-  const localCreatorEarnings = convertPrice(creatorEarnings, currency);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -184,14 +179,7 @@ export default function PaymentModal({
                 </div>
               </div>
               <div className="mt-2 pt-2 border-t border-purple-200 text-xs text-gray-600">
-                <div className="flex justify-between">
-                  <span>Creator earnings (70%):</span>
-                  <span className="font-medium text-green-600">{formatCurrency(localCreatorEarnings, currency)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Platform fee (30%):</span>
-                  <span className="font-medium">{formatCurrency(localPlatformFee, currency)}</span>
-                </div>
+                One-time payment - Lifetime access
               </div>
             </div>
 

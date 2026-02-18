@@ -14,7 +14,7 @@ export default function ConversationsList({
   selectedConversationId,
 }: ConversationsListProps) {
   const router = useRouter()
-  const { conversations, unreadCount, isLoading, startConversation } = useConversations({
+  const { conversations, unreadCount, isLoading } = useConversations({
     enableRealtime: true,
     autoRefresh: true,
   })
@@ -30,7 +30,7 @@ export default function ConversationsList({
   if (isLoading && conversations.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-gray-500 dark:text-gray-400">Loading conversations...</div>
+        <div className="text-gray-500 dark:text-gray-400">Syncing your conversations...</div>
       </div>
     )
   }

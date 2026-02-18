@@ -7,6 +7,7 @@ import { Lock, CheckCircle, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import { updatePassword } from '@/lib/auth/auth-service';
 import { supabase } from '@/lib/core/supabase/client';
+import AppLoadingState from '@/components/ui/AppLoadingState';
 
 const ResetPasswordContent = () => {
   const [newPassword, setNewPassword] = useState('');
@@ -164,12 +165,10 @@ const ResetPasswordContent = () => {
 
   if (isValidToken === null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Verifying reset link...</p>
-        </div>
-      </div>
+      <AppLoadingState
+        tone="light"
+        title="Validating your reset link..."
+      />
     );
   }
 
@@ -362,12 +361,10 @@ const ResetPasswordContent = () => {
 const ResetPasswordPage = () => {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
+      <AppLoadingState
+        tone="light"
+        title="Almost there..."
+      />
     }>
       <ResetPasswordContent />
     </Suspense>

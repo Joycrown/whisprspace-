@@ -15,6 +15,28 @@ type ThreadForPayment = {
   expires_at: string | null
 }
 
+type CreatorProfile = {
+  is_premium: boolean | null
+}
+
+type PaystackChargeMetadata = {
+  threadId?: string
+  userId?: string
+  creatorId?: string
+  usdAmount?: number | string | null
+  localAmount?: number | string | null
+  amount?: number | string | null
+  currency?: string | null
+}
+
+type PaystackChargeSuccessPayload = {
+  metadata?: PaystackChargeMetadata | null
+  amount?: number | null
+  reference?: string | null
+  status?: string | null
+  currency?: string | null
+}
+
 const conversionRates: Record<string, number> = {
   NGN: 1550,
   GHS: 15.5,
@@ -93,7 +115,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function handleChargeSuccess(data: any) {
+async function handleChargeSuccess(data: PaystackChargeSuccessPayload) {
   try {
     const { metadata, amount, reference, status } = data
 
@@ -145,7 +167,7 @@ async function handleChargeSuccess(data: any) {
       return
     }
 
-    const amountDecimal = amount / 100
+    const amountDecimal = Number(amount || 0) / 100
     const currencyCode = (metadata.currency || data.currency || 'NGN').toUpperCase()
     const legacyLocalAmount = localAmount ?? metadata.amount
 
@@ -173,8 +195,20 @@ async function handleChargeSuccess(data: any) {
       return
     }
 
-    const platformFee = amountUsd * 0.3
-    const creatorEarnings = amountUsd * 0.7
+    const { data: creatorProfile, error: creatorProfileError } = await supabase
+      .from('users')
+      .select('is_premium')
+      .eq('id', creatorId)
+      .maybeSingle()
+
+    if (creatorProfileError) {
+      console.error('Failed to fetch creator premium status:', creatorProfileError)
+    }
+
+    const isCreatorPremium = (creatorProfile as CreatorProfile | null)?.is_premium === true
+    const creatorShare = isCreatorPremium ? 0.7 : 0.5
+    const platformFee = amountUsd * (1 - creatorShare)
+    const creatorEarnings = amountUsd * creatorShare
 
     const { data: existingPayment } = await supabase
       .from('payments')

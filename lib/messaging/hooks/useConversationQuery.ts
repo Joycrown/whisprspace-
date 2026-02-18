@@ -1,8 +1,8 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/react-query/queryKeys'
-import { fetchConversationById } from '@/lib/messaging/messaging-service'
+import { fetchConversationById, Conversation } from '@/lib/messaging/messaging-service'
 import { useRealtimeSync } from '@/lib/react-query/realtime'
 
 /**
@@ -23,6 +23,7 @@ export function useConversationQuery(
   conversationId: string | undefined,
   options: UseConversationQueryOptions = {}
 ) {
+  const queryClient = useQueryClient()
   const {
     enableRealtime = true,
     enabled = true,
@@ -48,8 +49,14 @@ export function useConversationQuery(
       return result.data
     },
     enabled: enabled && !!conversationId,
-    staleTime: 30 * 1000, // 30 seconds
-    refetchOnWindowFocus: true,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+    placeholderData: () => {
+      if (!conversationId) return undefined
+      const cachedConversations =
+        queryClient.getQueryData<Conversation[]>(queryKeys.conversations.lists()) || []
+      return cachedConversations.find((conversation) => conversation.id === conversationId)
+    },
   })
 
   const realtimeEnabled = Boolean(enableRealtime && enabled && conversationId)
@@ -72,5 +79,6 @@ export function useConversationQuery(
     isError: query.isError,
     error: query.error,
     refetch: query.refetch,
+    isFetching: query.isFetching,
   }
 }

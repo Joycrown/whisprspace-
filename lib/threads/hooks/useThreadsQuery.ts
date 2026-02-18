@@ -35,8 +35,9 @@ export function useThreadsQuery(filters?: ThreadFilters, searchQuery?: string, u
       return lastPage.hasMore ? pages.length + 1 : undefined
     },
     initialPageParam: 1,
-    staleTime: 1 * 60 * 1000, // 1 minute
-    refetchOnWindowFocus: true,
+    staleTime: 2 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
   })
 
   return query
@@ -71,13 +72,13 @@ export function useThreadQuery(threadId: string | undefined, enabled = true) {
       return threadData
     },
     enabled: detailEnabled,
-    staleTime: 0, // 0 for Debugging (Always refetch)
-    refetchOnWindowFocus: true,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
     refetchOnReconnect: true,
-    // Reliability fallback for intermittent realtime dropouts.
-    // Keeps active thread timelines fresh without requiring manual reload.
-    refetchInterval: detailEnabled ? 5000 : false,
+    // Lightweight reliability fallback for intermittent realtime dropouts.
+    refetchInterval: detailEnabled ? 30000 : false,
     refetchIntervalInBackground: false,
+    placeholderData: (previousData) => previousData,
   })
 
   return {

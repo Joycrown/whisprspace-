@@ -10,21 +10,22 @@ import type { DirectMessage, MessageDeliveryReceipt, MessageReadReceipt } from '
 import { useUserStore } from '@/store/userStore';
 import { uploadService } from '@/lib/utils/upload-service';
 import * as rawRealtime from '@/lib/core/supabase/raw-realtime';
+import AppLoadingState from '@/components/ui/AppLoadingState';
 
 export default function ConversationPage() {
   const router = useRouter();
   const params = useParams();
   const conversationId = params.messageId as string;
-  const { session } = useUserStore();
+  const { session, sessionValidated } = useUserStore();
 
-  const isAuthed = !!session.user;
+  const isAuthed = Boolean(sessionValidated && session.user);
   const { conversation, isLoading: isConversationLoading, error: conversationError } =
-    useConversationQuery(conversationId, { enabled: isAuthed });
+    useConversationQuery(conversationId, { enabled: isAuthed && !!conversationId });
   const { messages, isLoading: isMessagesLoading, error: messagesError } =
-    useMessagesQuery(conversationId, { enabled: isAuthed });
+    useMessagesQuery(conversationId, { enabled: isAuthed && !!conversationId });
   const sendMessageMutation = useSendMessageMutation(conversationId);
 
-  const isLoading = isConversationLoading || isMessagesLoading;
+  const isLoading = !sessionValidated || isConversationLoading || isMessagesLoading;
   const error = conversationError || messagesError;
   const orderedMessages = [...messages].reverse();
 
@@ -79,10 +80,16 @@ export default function ConversationPage() {
     : null;
 
   useEffect(() => {
+    if (!sessionValidated || session.user) return;
+    router.replace(`/auth?redirect=${encodeURIComponent(`/inbox/${conversationId}`)}`);
+  }, [sessionValidated, session.user, conversationId, router]);
+
+  useEffect(() => {
+    if (!sessionValidated || !session.user) return;
     if (isLoading || !conversation) return;
     if (conversation.type !== 'one_time') return;
     router.replace(`/inbox?conversationId=${encodeURIComponent(conversationId)}`);
-  }, [isLoading, conversation, conversationId, router]);
+  }, [sessionValidated, session.user, isLoading, conversation, conversationId, router]);
 
   useEffect(() => {
     if (!session.user || !conversationId) return;
@@ -276,11 +283,11 @@ export default function ConversationPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-[#121212] flex items-center justify-center p-4">
-        <Loader2 className="w-8 h-8 text-purple-400 animate-spin" />
-      </div>
-    );
+    return <AppLoadingState title="Syncing your conversations..." />;
+  }
+
+  if (!session.user) {
+    return <AppLoadingState title="Taking you to sign in..." />;
   }
 
   if (error || !conversation) {

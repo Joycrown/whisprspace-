@@ -6,6 +6,7 @@ import { X } from 'lucide-react';
 import { useNotifications, NotificationCategory } from '@/lib/notifications';
 import { useUserStore } from '@/store/userStore';
 import NotificationItem from './NotificationItem';
+import AppLoadingState from '@/components/ui/AppLoadingState';
 
 interface NotificationPanelProps {
   isOpen?: boolean;
@@ -130,7 +131,11 @@ const NotificationPanel: React.FC<NotificationPanelProps> = ({
               In-app notifications are turned off.
             </div>
           ) : isLoading ? (
-            <div className="p-4 text-white">Loading notifications...</div>
+            <AppLoadingState
+              fullScreen={false}
+              className="bg-transparent py-10"
+              title="Pulling your latest alerts..."
+            />
           ) : error ? (
             <div className="p-4 text-red-500">Error: {error}</div>
           ) : filteredNotifications.length > 0 ? (

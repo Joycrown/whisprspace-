@@ -2,7 +2,7 @@
 
 import { useConversation } from '@/lib/messaging'
 import MessageBubble from './MessageBubble'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useUserStore } from '@/store/userStore'
 
 interface ChatWindowProps {
@@ -68,7 +68,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
   if (!conversation) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-gray-500 dark:text-gray-400">Loading conversation...</div>
+        <div className="text-gray-500 dark:text-gray-400">Syncing your conversations...</div>
       </div>
     )
   }
@@ -138,7 +138,7 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
               disabled={isLoading}
               className="px-4 py-2 text-sm text-purple-600 dark:text-purple-400 hover:underline disabled:opacity-50"
             >
-              {isLoading ? 'Loading...' : 'Load older messages'}
+              {isLoading ? 'Pulling more messages...' : 'Load older messages'}
             </button>
           </div>
         )}

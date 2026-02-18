@@ -10,8 +10,8 @@ import { useUserStore } from '@/store/userStore'
  * React Query hook for fetching conversations list
  * 
  * Features:
- * - Automatic caching with 30s stale time
- * - Background refetching on window focus
+ * - Automatic caching with sensible stale time
+ * - Realtime-first refresh strategy
  * - Optional real-time sync
  * 
  * @param options Configuration options
@@ -26,6 +26,12 @@ interface UseConversationsQueryOptions {
   
   /** Additional React Query options */
   queryOptions?: Omit<UseQueryOptions<Conversation[], Error>, 'queryKey' | 'queryFn'>
+}
+
+interface UseUnreadCountQueryOptions {
+  enabled?: boolean
+  enableRealtime?: boolean
+  refetchInterval?: number | false
 }
 
 export function useConversationsQuery(options: UseConversationsQueryOptions = {}) {
@@ -51,10 +57,11 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
       
       return result.data
     },
-    // Conversations are relatively dynamic, keep stale time short
-    staleTime: 30 * 1000, // 30 seconds
-    refetchOnWindowFocus: true,
-    refetchInterval: autoRefreshInterval,
+    // Realtime keeps this fresh; avoid aggressive refetch churn.
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchInterval: enableRealtime ? false : autoRefreshInterval,
+    placeholderData: (previousData) => previousData,
     enabled: queryEnabled,
     ...restQueryOptions,
   })
@@ -88,9 +95,12 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
 /**
  * Hook for fetching unread conversation count
  */
-export function useUnreadCountQuery() {
+export function useUnreadCountQuery(options: UseUnreadCountQueryOptions = {}) {
   const { session } = useUserStore()
   const isAuthed = Boolean(session.user)
+  const queryEnabled = Boolean(options.enabled ?? true) && isAuthed
+  const enableRealtime = options.enableRealtime ?? true
+  const refetchInterval = options.refetchInterval ?? false
 
   const query = useQuery({
     queryKey: queryKeys.conversations.unreadCount(),
@@ -105,9 +115,10 @@ export function useUnreadCountQuery() {
       
       return result.count
     },
-    staleTime: 15 * 1000, // 15 seconds
-    refetchInterval: 30 * 1000, // Refetch every 30 seconds
-    enabled: isAuthed,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: false,
+    refetchInterval,
+    enabled: queryEnabled,
   })
 
   // Real-time sync for unread count
@@ -116,7 +127,7 @@ export function useUnreadCountQuery() {
     event: 'INSERT',
     queryKey: queryKeys.conversations.unreadCount(),
     schema: 'public',
-    enabled: isAuthed,
+    enabled: queryEnabled && enableRealtime,
   })
 
   // Also refresh unread count when read state changes
@@ -125,7 +136,7 @@ export function useUnreadCountQuery() {
     event: 'UPDATE',
     queryKey: queryKeys.conversations.unreadCount(),
     schema: 'public',
-    enabled: isAuthed,
+    enabled: queryEnabled && enableRealtime,
   })
 
   return {
