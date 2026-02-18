@@ -90,6 +90,60 @@ const sanitizeTransferMetadata = (metadata: Record<string, unknown>) => {
   return cleaned
 }
 
+const normalizeBaseUrl = (rawUrl: string) => {
+  const trimmed = String(rawUrl || '').trim().replace(/\/+$/, '')
+  if (!trimmed) return ''
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  return `https://${trimmed}`
+}
+
+const getBaseUrl = (request: NextRequest) => {
+  const origin = request.headers.get('origin') || ''
+  const envUrl = process.env.NEXT_PUBLIC_APP_URL || ''
+  const raw = origin || envUrl
+  return normalizeBaseUrl(raw)
+}
+
+const extractFlutterwaveError = (payload: unknown) => {
+  if (!payload || typeof payload !== 'object') return null
+  const record = payload as Record<string, unknown>
+
+  const directMessage = record.message
+  if (typeof directMessage === 'string' && directMessage.trim()) {
+    return directMessage.trim()
+  }
+
+  const data = record.data
+  if (data && typeof data === 'object') {
+    const dataRecord = data as Record<string, unknown>
+    const dataMessage = dataRecord.message
+    if (typeof dataMessage === 'string' && dataMessage.trim()) {
+      return dataMessage.trim()
+    }
+
+    const completeMessage = dataRecord.complete_message
+    if (typeof completeMessage === 'string' && completeMessage.trim()) {
+      return completeMessage.trim()
+    }
+  }
+
+  const errors = record.errors
+  if (Array.isArray(errors) && errors.length > 0) {
+    const firstError = errors[0]
+    if (firstError && typeof firstError === 'object') {
+      const firstErrorMessage = (firstError as Record<string, unknown>).message
+      if (typeof firstErrorMessage === 'string' && firstErrorMessage.trim()) {
+        return firstErrorMessage.trim()
+      }
+    }
+    if (typeof firstError === 'string' && firstError.trim()) {
+      return firstError.trim()
+    }
+  }
+
+  return null
+}
+
 const decodeJwtPayload = (token: string): Record<string, unknown> | null => {
   try {
     const payload = token.split('.')[1]
@@ -271,12 +325,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.headers.get('origin') || ''
+    const baseUrl = getBaseUrl(request)
     if (!baseUrl) {
       return NextResponse.json(
         { error: 'Missing app URL configuration' },
         { status: 500 }
       )
+    }
+
+    if (currency === 'NGN') {
+      const accountResolveResponse = await fetch(
+        `https://api.flutterwave.com/v3/accounts/resolve?account_number=${encodeURIComponent(
+          accountNumber
+        )}&account_bank=${encodeURIComponent(accountBank)}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${flutterwaveSecretKey}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+
+      const accountResolvePayload = await accountResolveResponse.json().catch(() => null)
+      if (!accountResolveResponse.ok || accountResolvePayload?.status !== 'success') {
+        const providerError =
+          extractFlutterwaveError(accountResolvePayload) ||
+          'Invalid bank details. Confirm bank and account number.'
+
+        return NextResponse.json(
+          { error: providerError },
+          { status: 400 }
+        )
+      }
     }
 
     const txRef = reference || `payout_${creatorId}_${crypto.randomUUID()}`
@@ -391,9 +472,24 @@ export async function POST(request: NextRequest) {
           .in('id', earningIds)
       }
 
+      const providerError =
+        extractFlutterwaveError(transferData) ||
+        'Failed to initiate payout'
+
+      console.error('Flutterwave payout initiation failed:', {
+        status: transferResponse.status,
+        error: providerError,
+        txRef,
+      })
+
       return NextResponse.json(
-        { error: 'Failed to initiate payout' },
-        { status: 500 }
+        { error: providerError },
+        {
+          status:
+            transferResponse.status >= 400 && transferResponse.status < 500
+              ? transferResponse.status
+              : 500,
+        }
       )
     }
 
@@ -419,7 +515,12 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Flutterwave transfer initiation error:', error)
     return NextResponse.json(
-      { error: 'Failed to initiate payout' },
+      {
+        error:
+          error instanceof Error && error.message
+            ? error.message
+            : 'Failed to initiate payout',
+      },
       { status: 500 }
     )
   }
