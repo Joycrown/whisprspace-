@@ -2,9 +2,8 @@
 // components/thread/ThreadList.tsx
 'use client'
 
-import { ArrowRight, Heart, MessageCircle, Star, Crown } from "lucide-react";
+import { ArrowRight, Heart, MessageCircle, Star, Crown, X } from "lucide-react";
 import { Thread } from "@/types";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { FaLock } from 'react-icons/fa'; // Import FaLock
@@ -13,6 +12,29 @@ import { useUserStore } from "@/store/userStore";
 import { redeemThreadAccessCode } from "@/lib/threads/thread-service";
 import { useJoinThreadMutation } from "@/lib/threads/hooks/useThreadMutations";
 import { Loader2 } from "lucide-react";
+
+type ThreadPreviewMessage = {
+  id: string;
+  content: string;
+  createdAt: string;
+  senderName: string;
+};
+
+type ThreadPreviewData = {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  type: string;
+  privacy: string;
+  isPremium: boolean;
+  price: number | null;
+  messageCount: number;
+  participantCount: number;
+  likes: number;
+  expiresAt: string | null;
+  messages: ThreadPreviewMessage[];
+};
 
 // Thread component with ratings and likes
 export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
@@ -23,10 +45,15 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [hasAccess, setHasAccess] = useState(!!thread.hasJoined || !!thread.hasAccess);
   const [isJoining, setIsJoining] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewData, setPreviewData] = useState<ThreadPreviewData | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const joinMutation = useJoinThreadMutation();
 
   // Check if current user is the thread creator
   const isCreator = session?.user?.id === thread.author.id;
+  const isThreadBlocked = thread.isLocked === true;
   const canAccessPremium = !thread.isPremium || hasAccess || isCreator;
 
   useEffect(() => {
@@ -41,10 +68,39 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
     }
   }, [thread.hasAccess]);
 
-  const handleThreadClick = (e: React.MouseEvent) => {
-    if (thread.isPremium && !canAccessPremium) {
-      e.preventDefault();
-      setShowPaymentModal(true);
+  const loadPreview = async () => {
+    if (previewLoading || previewData) return;
+
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const response = await fetch(`/api/threads/${thread.id}/preview`, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok || !payload?.data) {
+        throw new Error(payload?.error || 'Failed to load thread preview');
+      }
+
+      setPreviewData(payload.data as ThreadPreviewData);
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : 'Failed to load thread preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleCardClick = () => {
+    setShowPreviewModal(true);
+    void loadPreview();
+  };
+
+  const handleCardKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      handleCardClick();
     }
   };
 
@@ -64,9 +120,10 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
     return result.success;
   };
 
-  const handleJoinClick = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const joinThreadNow = async () => {
+    if (isThreadBlocked) {
+      return;
+    }
 
     if (!session?.user?.id) {
       router.push('/auth');
@@ -86,7 +143,7 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
         userId: session.user.id
       });
       router.push(`/threads/${thread.id}`);
-    } catch (error) {
+    } catch {
       // If it fails (e.g. RLS or other issue), still try to navigate
       // The thread page will handle access control
       router.push(`/threads/${thread.id}`);
@@ -95,12 +152,62 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
     }
   };
 
+  const handleJoinClick = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    await joinThreadNow();
+  };
+
+  const handleUnlockClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowPaymentModal(true);
+  };
+
+  const handlePreviewPrimaryAction = async () => {
+    if (isThreadBlocked) {
+      return;
+    }
+
+    if (thread.isPremium && !canAccessPremium) {
+      setShowPreviewModal(false);
+      setShowPaymentModal(true);
+      return;
+    }
+
+    setShowPreviewModal(false);
+    await joinThreadNow();
+  };
+
+  const preview = previewData || {
+    id: thread.id,
+    title: thread.title,
+    content: thread.content,
+    category: thread.category,
+    type: thread.type,
+    privacy: thread.privacy,
+    isPremium: thread.isPremium,
+    price: thread.price ?? null,
+    messageCount: thread.messageCount || 0,
+    participantCount: thread.participantCount || 0,
+    likes: thread.likes || 0,
+    expiresAt: thread.expiresAt || null,
+    messages: [] as ThreadPreviewMessage[],
+  };
+
   return (
     <>
-      <div className={`p-3 md:p-4 transition-colors w-full max-w-full overflow-hidden ${thread.isPremium
+      <div
+        className={`p-3 md:p-4 transition-colors w-full max-w-full overflow-hidden cursor-pointer ${thread.isPremium
         ? 'bg-gradient-to-br from-purple-900/30 to-orange-900/30 border-l-2 border-purple-500/50 hover:bg-gradient-to-br hover:from-purple-900/40 hover:to-orange-900/40 active:from-purple-900/50 active:to-orange-900/50'
         : 'hover:bg-gray-900/50 active:bg-gray-900/70'
-        }`}>
+        }`}
+        role="button"
+        tabIndex={0}
+        onClick={handleCardClick}
+        onKeyDown={handleCardKeyDown}
+        aria-label={`Preview thread ${thread.title}`}
+      >
         <div className="flex items-start gap-2 md:gap-3 w-full max-w-full">
           {thread.author.avatar?.startsWith('/avatars/') ? (
             <img
@@ -162,7 +269,7 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
                   </div>
                   {thread.isPremium && thread.price && (
                     <div className="flex items-center gap-1 text-purple-400 font-semibold">
-                      <span>• ${thread.price.toFixed(2)}</span>
+                      <span>- ${thread.price.toFixed(2)}</span>
                     </div>
                   )}
                 </div>
@@ -179,9 +286,17 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {/* Join/Unlock button */}
-                {thread.isPremium && !canAccessPremium ? (
+                {isThreadBlocked ? (
                   <button
-                    onClick={handleThreadClick}
+                    disabled
+                    className="inline-flex items-center gap-1 px-2.5 md:px-3 py-1.5 md:py-2 rounded-full text-white text-xs md:text-sm font-medium bg-gray-700/70 cursor-not-allowed min-h-[36px]"
+                  >
+                    <span className="hidden sm:inline">Blocked</span>
+                    <ArrowRight className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                  </button>
+                ) : thread.isPremium && !canAccessPremium ? (
+                  <button
+                    onClick={handleUnlockClick}
                     className="inline-flex items-center gap-1 px-2.5 md:px-3 py-1.5 md:py-2 rounded-full transition-all text-white text-xs md:text-sm font-medium bg-gradient-to-r from-purple-600 to-orange-500 hover:opacity-90 active:scale-95 min-h-[36px]"
                   >
                     <span className="hidden sm:inline">Unlock</span>
@@ -224,6 +339,112 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
           onSuccess={handlePaymentSuccess}
           onValidateCode={handleValidateCode}
         />
+      )}
+
+      {showPreviewModal && (
+        <div
+          className="fixed inset-0 z-[1200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 modal-safe-overlay"
+          onClick={() => setShowPreviewModal(false)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl border border-gray-700 bg-[#151515] text-white shadow-2xl modal-safe-panel overflow-y-auto max-h-[calc(var(--app-viewport-height)-2rem)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-gray-800 px-5 py-4">
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-wider text-gray-400">{preview.category}</p>
+                <h3 className="mt-1 text-lg md:text-xl font-semibold text-white break-words">{preview.title}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="rounded-md p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                aria-label="Close preview"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              {previewLoading ? (
+                <div className="py-8 text-center text-sm text-gray-300">Loading preview...</div>
+              ) : previewError ? (
+                <div className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+                  {previewError}
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">{preview.content}</p>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <div className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
+                      <p className="text-[11px] uppercase text-gray-400">Messages</p>
+                      <p className="text-sm font-semibold">{preview.messageCount}</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
+                      <p className="text-[11px] uppercase text-gray-400">Participants</p>
+                      <p className="text-sm font-semibold">{preview.participantCount}</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
+                      <p className="text-[11px] uppercase text-gray-400">Likes</p>
+                      <p className="text-sm font-semibold">{preview.likes}</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
+                      <p className="text-[11px] uppercase text-gray-400">Type</p>
+                      <p className="text-sm font-semibold">
+                        {preview.isPremium ? `Premium${preview.price ? ` $${preview.price.toFixed(2)}` : ''}` : 'Standard'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-100 mb-2">Message Preview</h4>
+                    {isThreadBlocked && (
+                      <p className="mb-2 text-xs text-red-300">
+                        This thread is blocked due to community reports.
+                      </p>
+                    )}
+                    {preview.messages.length === 0 ? (
+                      <p className="text-xs text-gray-400">No messages available yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {preview.messages.map((message) => (
+                          <div key={message.id} className="rounded-lg border border-gray-800 bg-gray-900/50 px-3 py-2">
+                            <p className="text-[11px] text-gray-400">{message.senderName}</p>
+                            <p className="text-sm text-gray-200 break-words">{message.content}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-gray-800 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setShowPreviewModal(false)}
+                className="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-200 hover:bg-gray-800/70 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handlePreviewPrimaryAction}
+                disabled={isJoining || isThreadBlocked}
+                className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-orange-500 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 transition-opacity disabled:opacity-70"
+              >
+                {isJoining ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : null}
+                {isThreadBlocked
+                  ? 'Thread Blocked'
+                  : (thread.isPremium && !canAccessPremium ? 'Unlock & Join' : 'Join Thread')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

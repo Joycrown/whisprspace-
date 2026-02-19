@@ -122,6 +122,7 @@ export default function PWAInstallPrompt() {
   if (isStandalone || !isVisible || shouldHideByRoute) return null
 
   const isManualMode = !deferredPrompt
+  const primaryButtonLabel = isManualMode && isIOS ? 'Show iPhone Steps' : 'Install App'
 
   return (
     <div className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[1300] md:inset-x-auto md:right-5 md:bottom-5 md:w-[360px]">
@@ -172,9 +173,13 @@ export default function PWAInstallPrompt() {
           <button
             type="button"
             onClick={handleInstall}
-            className="flex-1 rounded-lg bg-gradient-to-r from-purple-600 to-orange-500 px-3 py-2 text-sm font-semibold hover:opacity-95 transition-opacity"
+            className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+              isManualMode && isIOS
+                ? 'border border-gray-600 text-gray-100 hover:bg-gray-700/50'
+                : 'bg-gradient-to-r from-purple-600 to-orange-500 hover:opacity-95'
+            }`}
           >
-            Install App
+            {primaryButtonLabel}
           </button>
           <button
             type="button"

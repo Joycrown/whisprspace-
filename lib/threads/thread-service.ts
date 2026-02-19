@@ -1,8 +1,9 @@
 import * as rawDb from '@/lib/core/supabase/raw-db';
 import * as rawAuth from '@/lib/core/supabase/raw-auth';
-import { Thread, ThreadData, ThreadFilters, CreateThreadForm, Participant, Message, AccessCode } from '@/types';
+import { Thread, ThreadData, ThreadFilters, CreateThreadForm, Participant, Message, AccessCode, CHARACTER_LIMITS } from '@/types';
 import { calculateThreadExpiration } from '../utils/utils/helpers/threadHelpers';
 import { uploadService } from '@/lib/utils/upload-service';
+import { MESSAGE_CONFIG } from '@/lib/core/constants';
 
 export interface ThreadInviteItem {
   inviteId: string;
@@ -22,8 +23,6 @@ export const fetchThreads = async (
   userId?: string
 ): Promise<{ threads: Thread[]; hasMore: boolean }> => {
   try {
-    console.log('fetchThreads called with:', { filters, searchQuery, page, limit, userId });
-    
     // Build filter object for rawDb
     const queryFilters: Record<string, string> = {};
     
@@ -124,8 +123,6 @@ export const fetchThreads = async (
       throw error
     }
 
-    console.log('Fetched threads:', data?.length, 'threads');
-
     const threadRows = data || []
     const threadIds = threadRows.map((thread: any) => thread.id).filter(Boolean)
     let purchasedThreadIds = new Set<string>()
@@ -151,8 +148,6 @@ export const fetchThreads = async (
 
     // Check if there are more threads
     const hasMore = (data || []).length === limit
-
-    console.log('Returning:', { threadsCount: threads.length, hasMore });
 
     return { threads, hasMore }
 
@@ -247,6 +242,25 @@ export const createThread = async (
 ): Promise<string | null> => {
   try {
       console.log('Service: Creating thread', { threadData, userId });
+
+      const title = threadData.title?.trim() || '';
+      const content = threadData.content?.trim() || '';
+
+      if (!title) {
+        throw new Error('Thread title is required');
+      }
+
+      if (title.length > CHARACTER_LIMITS.title) {
+        throw new Error(`Thread title must be ${CHARACTER_LIMITS.title} characters or fewer.`);
+      }
+
+      if (!content) {
+        throw new Error('Thread content is required');
+      }
+
+      if (content.length > CHARACTER_LIMITS.content) {
+        throw new Error(`Thread content must be ${CHARACTER_LIMITS.content} characters or fewer.`);
+      }
     
     // Get user's premium status
     const { data: userData } = await rawDb.select('users', {
@@ -324,8 +338,8 @@ export const createThread = async (
     // Create the thread
     const { data: threadDataResult, error: threadError } = await rawDb.insert('threads', {
       creator_id: userId,
-      title: threadData.title,
-      content: threadData.content,
+      title,
+      content,
       type: threadData.type,
       category: threadData.category,
       privacy: threadData.privacy || 'public',
@@ -696,6 +710,70 @@ export const addMessage = async (
 }
 
 /**
+ * Edit a thread message owned by the current user.
+ */
+export const editThreadMessage = async (
+  messageId: string,
+  content: string,
+  userId: string
+): Promise<Message> => {
+  const nextContent = content.trim();
+  if (!nextContent) {
+    throw new Error('Message cannot be empty');
+  }
+  if (nextContent.length > MESSAGE_CONFIG.maxLength) {
+    throw new Error(`Message must be ${MESSAGE_CONFIG.maxLength} characters or fewer.`);
+  }
+
+  const { data: updatedRows, error: updateError } = await rawDb.update<any[]>(
+    'messages',
+    {
+      content: nextContent,
+      is_edited: true,
+      edited_at: new Date().toISOString(),
+    },
+    {
+      'id': rawDb.filter.eq(messageId),
+      'sender_id': rawDb.filter.eq(userId),
+      'deleted_at': 'is.null',
+    }
+  );
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  const updated = updatedRows?.[0];
+  if (!updated?.id) {
+    throw new Error('Message not found or not editable');
+  }
+
+  const selectStr = `
+    *,
+    sender:users!messages_sender_id_fkey(id, username, anonymous_id, is_premium, avatar_url),
+    message_likes(user_id),
+    message_reactions(reaction_type, user_id),
+    parent_message:messages!parent_message_id(
+      id,
+      content,
+      sender:users!messages_sender_id_fkey(id, username, anonymous_id, avatar_url, is_premium)
+    )
+  `.replace(/\s+/g, '');
+
+  const { data: fetchedData, error: fetchError } = await rawDb.select<any>('messages', {
+    select: selectStr,
+    filters: { 'id': rawDb.filter.eq(updated.id) },
+    single: true,
+  });
+
+  if (fetchError || !fetchedData) {
+    throw fetchError || new Error('Message updated but could not be retrieved');
+  }
+
+  return transformMessage(fetchedData, userId);
+}
+
+/**
  * Update a thread
  */
 export const updateThread = async (
@@ -948,6 +1026,9 @@ function parseRpcErrorMessage(error: unknown): string | null {
         if (json.message === 'You are banned from this thread') {
           return 'You have been removed from this thread.';
         }
+        if (json.message === 'Thread is locked due to community reports') {
+          return 'This thread is blocked due to community reports.';
+        }
         return json.message;
       }
     } catch {
@@ -957,6 +1038,10 @@ function parseRpcErrorMessage(error: unknown): string | null {
 
   if (msg.includes('You are banned from this thread')) {
     return 'You have been removed from this thread.';
+  }
+
+  if (msg.includes('Thread is locked due to community reports')) {
+    return 'This thread is blocked due to community reports.';
   }
 
   if (
@@ -1329,6 +1414,254 @@ export const checkThreadBan = async (
   }
 };
 
+interface PostgrestErrorPayload {
+  code?: string;
+  message?: string;
+  details?: string;
+  hint?: string;
+}
+
+const REPORT_REASON_VALUES = new Set([
+  'spam',
+  'harassment',
+  'hate_speech',
+  'violence',
+  'sexual_content',
+  'misinformation',
+  'copyright',
+  'other',
+]);
+
+function parsePostgrestErrorPayload(error: unknown): PostgrestErrorPayload | null {
+  if (!(error instanceof Error)) return null;
+
+  const rawMessage = error.message || '';
+  const jsonStart = rawMessage.indexOf('{');
+  if (jsonStart === -1) return null;
+
+  try {
+    const parsed = JSON.parse(rawMessage.slice(jsonStart));
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed as PostgrestErrorPayload;
+  } catch {
+    return null;
+  }
+}
+
+function isMissingReportThreadRpc(error: unknown): boolean {
+  const payload = parsePostgrestErrorPayload(error);
+  const code = payload?.code;
+  const message = payload?.message || '';
+  return (
+    (code === 'PGRST202' || code === 'PGRST204') &&
+    message.includes('public.report_thread')
+  );
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  const payload = parsePostgrestErrorPayload(error);
+  if (payload?.code === '23505') return true;
+  return error instanceof Error && error.message.includes('duplicate key value');
+}
+
+const reportThreadWithoutRpc = async (
+  threadId: string,
+  reason: string,
+  description?: string
+): Promise<{
+  success: boolean;
+  alreadyReported?: boolean;
+  reportCount?: number;
+  participantCount?: number;
+  isLocked?: boolean;
+  error?: string;
+}> => {
+  const session = rawAuth.getSession();
+  const reporterId = session?.user?.id;
+  if (!reporterId) {
+    return { success: false, error: 'Not authenticated' };
+  }
+
+  const safeReason = REPORT_REASON_VALUES.has(reason) ? reason : 'other';
+
+  const { data: threadRows, error: threadError } = await rawDb.select<any[]>('threads', {
+    select: 'id,creator_id,participant_count',
+    filters: { id: rawDb.filter.eq(threadId) },
+    limit: 1,
+  });
+
+  if (threadError) {
+    return { success: false, error: threadError.message || 'Failed to load thread details' };
+  }
+
+  const thread = threadRows?.[0];
+  if (!thread) {
+    return { success: false, error: 'Thread not found' };
+  }
+
+  const { data: existingRows, error: existingError } = await rawDb.select<any[]>('content_reports', {
+    select: 'id',
+    filters: {
+      reporter_id: rawDb.filter.eq(reporterId),
+      content_type: rawDb.filter.eq('thread'),
+      content_id: rawDb.filter.eq(threadId),
+    },
+    limit: 1,
+  });
+
+  if (existingError) {
+    return { success: false, error: existingError.message || 'Failed to verify existing report' };
+  }
+
+  let alreadyReported = (existingRows?.length || 0) > 0;
+
+  if (!alreadyReported) {
+    const { error: insertError } = await rawDb.insert(
+      'content_reports',
+      {
+        reporter_id: reporterId,
+        reported_user_id: thread.creator_id,
+        content_type: 'thread',
+        content_id: threadId,
+        reason: safeReason,
+        description: description?.trim() ? description.trim() : null,
+      },
+      { returning: false }
+    );
+
+    if (insertError) {
+      if (isUniqueViolation(insertError)) {
+        alreadyReported = true;
+      } else {
+        return { success: false, error: insertError.message || 'Failed to submit report' };
+      }
+    }
+  }
+
+  const { data: reportRows, error: reportCountError } = await rawDb.select<any[]>('content_reports', {
+    select: 'reporter_id',
+    filters: {
+      content_type: rawDb.filter.eq('thread'),
+      content_id: rawDb.filter.eq(threadId),
+    },
+  });
+
+  if (reportCountError) {
+    return { success: false, error: reportCountError.message || 'Failed to refresh report count' };
+  }
+
+  const reportCount = new Set(
+    (reportRows || [])
+      .map((row: any) => row.reporter_id)
+      .filter((id: unknown) => typeof id === 'string' && id.length > 0)
+  ).size;
+
+  let participantCount =
+    typeof thread.participant_count === 'number' && Number.isFinite(thread.participant_count)
+      ? thread.participant_count
+      : 0;
+
+  if (participantCount <= 0) {
+    const { data: participantRows, error: participantError } = await rawDb.select<any[]>('thread_participants', {
+      select: 'user_id',
+      filters: { thread_id: rawDb.filter.eq(threadId) },
+    });
+
+    if (!participantError && participantRows) {
+      participantCount = new Set(
+        participantRows
+          .map((row: any) => row.user_id)
+          .filter((id: unknown) => typeof id === 'string' && id.length > 0)
+      ).size;
+    }
+  }
+
+  if (participantCount <= 0) {
+    participantCount = 1;
+  }
+
+  const threshold = Math.max(1, Math.ceil(participantCount * 0.8));
+  const isLocked = reportCount >= threshold;
+
+  const threadUpdate: Record<string, unknown> = { report_count: reportCount };
+  if (isLocked) {
+    threadUpdate.is_locked = true;
+  }
+
+  const { error: updateError } = await rawDb.update(
+    'threads',
+    threadUpdate,
+    { id: rawDb.filter.eq(threadId) },
+    { returning: false }
+  );
+
+  if (updateError) {
+    const payload = parsePostgrestErrorPayload(updateError);
+    const message = updateError.message || '';
+    const missingColumns =
+      payload?.code === '42703' ||
+      message.includes('column "report_count" does not exist') ||
+      message.includes('column "is_locked" does not exist');
+
+    if (!missingColumns) {
+      console.warn('[ThreadService] report fallback update failed:', updateError);
+    }
+  }
+
+  return {
+    success: true,
+    alreadyReported,
+    reportCount,
+    participantCount,
+    isLocked,
+  };
+};
+
+export const reportThread = async (
+  threadId: string,
+  reason: string,
+  description?: string
+): Promise<{
+  success: boolean;
+  alreadyReported?: boolean;
+  reportCount?: number;
+  participantCount?: number;
+  isLocked?: boolean;
+  error?: string;
+}> => {
+  try {
+    const { data, error } = await rawDb.rpc<any>('report_thread', {
+      p_thread_id: threadId,
+      p_reason: reason,
+      p_description: description ?? null,
+    });
+
+    if (error) {
+      if (isMissingReportThreadRpc(error)) {
+        console.warn('[ThreadService] report_thread RPC is unavailable, using fallback report flow.');
+        return reportThreadWithoutRpc(threadId, reason, description);
+      }
+
+      const friendly = parseRpcErrorMessage(error);
+      return { success: false, error: friendly || error.message || 'Failed to submit report' };
+    }
+
+    if (!data || data.success !== true) {
+      return { success: false, error: data?.error || 'Failed to submit report' };
+    }
+
+    return {
+      success: true,
+      alreadyReported: data.already_reported === true,
+      reportCount: typeof data.report_count === 'number' ? data.report_count : 0,
+      participantCount: typeof data.participant_count === 'number' ? data.participant_count : 0,
+      isLocked: data.is_locked === true,
+    };
+  } catch (error: any) {
+    return { success: false, error: error?.message || 'Failed to submit report' };
+  }
+};
+
 /**
  * Remove participant from thread (creator only) and blacklist
  */
@@ -1431,7 +1764,7 @@ function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Se
     ratingCount: 0,
     participantCount,
     isPinned: false,
-    isLocked: false,
+    isLocked: dbThread.is_locked === true,
     privacy: dbThread.privacy || 'public',
     isSaved: dbThread.is_saved ?? false,  // Fallback if column doesn't exist yet
   }
@@ -1561,7 +1894,7 @@ function transformThreadData(
       status: 'online' as const,
       isPremium: dbThread.creator.is_premium,
     },
-    reportCount: 0,
+    reportCount: typeof dbThread.report_count === 'number' ? dbThread.report_count : 0,
   }
 }
 
@@ -1616,6 +1949,8 @@ export function transformMessage(msg: any, userId?: string): Message {
     content: msg.content,
     type: msg.type,
     timestamp: msg.created_at,
+    isEdited: msg.is_edited ?? false,
+    editedAt: msg.edited_at ?? undefined,
     likes: msg.likes_count || 0,
     hasLiked: userId ? (msg.message_likes || []).some((like: any) => like.user_id === userId) : false,
     replyToId: msg.parent_message_id,

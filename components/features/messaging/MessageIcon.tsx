@@ -4,7 +4,10 @@ import { useMessageBadge } from '@/lib/messaging'
 import { useRouter } from 'next/navigation'
 
 export default function MessageIcon() {
-  const { unreadCount } = useMessageBadge()
+  const { unreadCount } = useMessageBadge({
+    enableRealtime: false,
+    refetchInterval: 30000,
+  })
   const router = useRouter()
 
   return (

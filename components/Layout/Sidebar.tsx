@@ -23,7 +23,10 @@ const Sidebar = () => {
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isSessionPanelOpen, setIsSessionPanelOpen] = useState(false);
   const { session } = useUserStore();
-  const { unreadCount: unreadMessageCount } = useMessageBadge();
+  const { unreadCount: unreadMessageCount } = useMessageBadge({
+    enableRealtime: false,
+    refetchInterval: 30000,
+  });
 
   return (
     <>

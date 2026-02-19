@@ -304,7 +304,7 @@ class RealtimeSocket {
       const timeout = setTimeout(() => {
         this.pendingJoins.delete(ref);
         reject(new Error(`Channel join timed out: ${channel.topic}`));
-      }, 10000);
+      }, 15000);
 
       this.pendingJoins.set(ref, {
         resolve: () => {
@@ -458,6 +458,7 @@ export function subscribeToTable(
 
   let isActive = true;
   let retryAttempt = 0;
+  const maxRetryAttempts = 8;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   const subscribeWithRetry = () => {
@@ -469,7 +470,21 @@ export function subscribeToTable(
       })
       .catch((error) => {
         if (!isActive) return;
-        console.error('[RawRealtime] Failed to subscribe:', error);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isJoinTimeout = errorMessage.includes('Channel join timed out');
+
+        if (retryAttempt >= maxRetryAttempts) {
+          console.warn(
+            `[RawRealtime] Giving up subscription after ${maxRetryAttempts} retries: ${channelName}`
+          );
+          return;
+        }
+
+        if (isJoinTimeout) {
+          console.warn('[RawRealtime] Channel join timed out, retrying:', channelName);
+        } else {
+          console.error('[RawRealtime] Failed to subscribe:', error);
+        }
 
         const retryDelayMs = Math.min(1000 * Math.pow(2, retryAttempt), 15000);
         retryAttempt++;

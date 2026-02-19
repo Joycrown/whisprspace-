@@ -31,6 +31,7 @@ interface UseConversationsQueryOptions {
 interface UseUnreadCountQueryOptions {
   enabled?: boolean
   enableRealtime?: boolean
+  enableDirectMessagesRealtime?: boolean
   refetchInterval?: number | false
 }
 
@@ -97,10 +98,12 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
  */
 export function useUnreadCountQuery(options: UseUnreadCountQueryOptions = {}) {
   const { session } = useUserStore()
+  const userId = session.user?.id
   const isAuthed = Boolean(session.user)
   const queryEnabled = Boolean(options.enabled ?? true) && isAuthed
-  const enableRealtime = options.enableRealtime ?? true
-  const refetchInterval = options.refetchInterval ?? false
+  const enableRealtime = options.enableRealtime ?? false
+  const enableDirectMessagesRealtime = options.enableDirectMessagesRealtime ?? false
+  const refetchInterval = options.refetchInterval ?? 30000
 
   const query = useQuery({
     queryKey: queryKeys.conversations.unreadCount(),
@@ -127,7 +130,7 @@ export function useUnreadCountQuery(options: UseUnreadCountQueryOptions = {}) {
     event: 'INSERT',
     queryKey: queryKeys.conversations.unreadCount(),
     schema: 'public',
-    enabled: queryEnabled && enableRealtime,
+    enabled: queryEnabled && enableRealtime && enableDirectMessagesRealtime,
   })
 
   // Also refresh unread count when read state changes
@@ -136,7 +139,8 @@ export function useUnreadCountQuery(options: UseUnreadCountQueryOptions = {}) {
     event: 'UPDATE',
     queryKey: queryKeys.conversations.unreadCount(),
     schema: 'public',
-    enabled: queryEnabled && enableRealtime,
+    filter: userId ? `user_id=eq.${userId}` : undefined,
+    enabled: queryEnabled && enableRealtime && !!userId,
   })
 
   return {

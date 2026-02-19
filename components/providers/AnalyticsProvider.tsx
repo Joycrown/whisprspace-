@@ -6,10 +6,20 @@ import { PostHogProvider } from 'posthog-js/react';
 import { usePathname } from 'next/navigation';
 import { useUserStore } from '@/store/userStore';
 
-const isPostHogReady = () => (posthog as any).__loaded;
+const isPostHogReady = () =>
+  Boolean((posthog as unknown as { __loaded?: boolean }).__loaded);
+const isAnalyticsEnabled = process.env.NODE_ENV === 'production' && Boolean(process.env.NEXT_PUBLIC_POSTHOG_KEY);
 
 const initPostHog = () => {
   if (typeof window === 'undefined') return;
+  if (!isAnalyticsEnabled) {
+    if (isPostHogReady()) {
+      posthog.stopSessionRecording();
+      posthog.opt_out_capturing();
+    }
+    return;
+  }
+
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   if (!key) return;
 
@@ -36,6 +46,7 @@ const PostHogPageView = () => {
   const pathname = usePathname();
 
   useEffect(() => {
+    if (!isAnalyticsEnabled) return;
     if (!isPostHogReady()) return;
     if (typeof window === 'undefined') return;
     posthog.capture('$pageview', { $current_url: window.location.href });
@@ -46,15 +57,16 @@ const PostHogPageView = () => {
 
 export default function AnalyticsProvider({ children }: { children: React.ReactNode }) {
   const { session } = useUserStore();
+  const user = session.user;
 
   useEffect(() => {
     initPostHog();
   }, []);
 
   useEffect(() => {
+    if (!isAnalyticsEnabled) return;
     if (!isPostHogReady()) return;
 
-    const user = session.user;
     if (user?.id) {
       posthog.identify(user.id, {
         is_premium: !!user.isPremium,
@@ -64,9 +76,9 @@ export default function AnalyticsProvider({ children }: { children: React.ReactN
     } else {
       posthog.reset();
     }
-  }, [session.user?.id, session.user?.isPremium, session.user?.anonymousId, session.user?.username]);
+  }, [user]);
 
-  if (!process.env.NEXT_PUBLIC_POSTHOG_KEY) {
+  if (!isAnalyticsEnabled) {
     return <>{children}</>;
   }
 

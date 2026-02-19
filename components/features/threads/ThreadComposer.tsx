@@ -465,6 +465,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft 
                     type="text"
                     value={formData.title}
                     onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                    maxLength={CHARACTER_LIMITS.title}
                     placeholder="What's on your mind?"
                     className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 bg-white placeholder-gray-500 ${errors.title ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -757,6 +758,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft 
                     name="content"
                     value={formData.content}
                     onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
+                    maxLength={CHARACTER_LIMITS.content}
                     placeholder="Share your thoughts..."
                     rows={8}
                     className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none text-gray-900 bg-white ${errors.content ? 'border-red-500' : 'border-gray-300'

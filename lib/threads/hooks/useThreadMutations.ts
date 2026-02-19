@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/react-query/queryKeys'
 import { 
   addMessage, 
+  editThreadMessage,
   deleteThread, 
   likeThread, 
   unlikeThread, 
@@ -19,7 +20,7 @@ import {
   removeThreadParticipant
 } from '@/lib/threads/thread-service'
 import { uploadService } from '@/lib/utils/upload-service'
-import { CreateThreadForm, Thread, Message, ThreadData, Attachment } from '@/types'
+import { CreateThreadForm, Thread, Message, ThreadData } from '@/types'
 import { useUserStore } from '@/store/userStore'
 import { useToastHelpers } from '@/components/ui/Toast'
 
@@ -325,6 +326,67 @@ export function useCreateThreadMessageMutation() {
       if (context?.previousThread) {
         queryClient.setQueryData(queryKeys.threads.detail(newMsg.threadId), context.previousThread);
       }
+    },
+  })
+}
+
+/**
+ * Hook for editing a message in a thread
+ */
+export function useEditThreadMessageMutation() {
+  const queryClient = useQueryClient()
+  const toast = useToastHelpers()
+
+  return useMutation({
+    mutationFn: async ({
+      threadId,
+      messageId,
+      content,
+      userId,
+    }: {
+      threadId: string
+      messageId: string
+      content: string
+      userId: string
+    }) => {
+      const message = await editThreadMessage(messageId, content, userId)
+      return { threadId, message }
+    },
+    onMutate: async ({ threadId, messageId, content }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.threads.detail(threadId) })
+      const previousThread = queryClient.getQueryData<ThreadData>(queryKeys.threads.detail(threadId))
+
+      queryClient.setQueryData<ThreadData>(queryKeys.threads.detail(threadId), (old) => {
+        if (!old) return old
+        const nextMessages = (old.messages || []).map((msg) =>
+          msg.id === messageId
+            ? {
+                ...msg,
+                content,
+                isEdited: true,
+                editedAt: new Date().toISOString(),
+              }
+            : msg
+        )
+        return { ...old, messages: nextMessages }
+      })
+
+      return { previousThread }
+    },
+    onError: (error: any, variables, context) => {
+      if (context?.previousThread) {
+        queryClient.setQueryData(queryKeys.threads.detail(variables.threadId), context.previousThread)
+      }
+      toast.error(error?.message || 'Failed to edit message')
+    },
+    onSuccess: ({ threadId, message }) => {
+      queryClient.setQueryData<ThreadData>(queryKeys.threads.detail(threadId), (old) => {
+        if (!old) return old
+        const nextMessages = (old.messages || []).map((msg) =>
+          msg.id === message.id ? { ...msg, ...message } : msg
+        )
+        return { ...old, messages: nextMessages }
+      })
     },
   })
 }

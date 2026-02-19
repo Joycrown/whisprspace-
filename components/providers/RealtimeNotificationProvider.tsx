@@ -5,18 +5,18 @@
 
 'use client';
 
-import { useEffect } from 'react';
 import { useRealtimeNotifications } from '@/lib/core/realtime/hooks';
 import { useUserStore } from '@/store/userStore';
 
 export const RealtimeNotificationProvider = () => {
   const { session } = useUserStore();
   const userId = session?.user?.id;
+  const isRealtimeEnabled = process.env.NODE_ENV === 'production';
 
   // Subscribe to realtime notifications
   useRealtimeNotifications({
     userId,
-    enabled: !!userId,
+    enabled: !!userId && isRealtimeEnabled,
     showToastNotification: true,
     playSound: true,
     onNotification: (notification) => {

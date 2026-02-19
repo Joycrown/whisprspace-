@@ -378,7 +378,7 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
                   }
                 }
 
-                if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                   e.preventDefault();
                   handleSend();
                 }
@@ -435,7 +435,7 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
 
         <div className="mt-2 flex items-center gap-1.5 px-1 text-[11px] md:text-xs text-gray-400">
           <FaAt className="w-3 h-3 text-indigo-300" />
-          <span>Type @ to pick a participant. Use @username or @ANON_12345678.</span>
+          <span>Type @ to pick a participant. Press Ctrl/Cmd + Enter to send.</span>
         </div>
       </div>
     </div>

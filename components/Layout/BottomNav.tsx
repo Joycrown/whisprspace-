@@ -15,7 +15,10 @@ const BottomNav = () => {
   const [isSessionPanelOpen, setIsSessionPanelOpen] = useState(false);
   const { session } = useUserStore();
   const { unreadCount } = useNotificationStore();
-  const { unreadCount: unreadMessageCount } = useMessageBadge();
+  const { unreadCount: unreadMessageCount } = useMessageBadge({
+    enableRealtime: false,
+    refetchInterval: 30000,
+  });
   const leftItems = [
     {
       icon: Home,

@@ -5,7 +5,7 @@ import { Eye, Settings } from 'lucide-react'; // Import Settings icon
 import { Thread, Message, Participant, ThreadPrivacy } from '@/types';
 import { useSearch } from '@/hooks/hooks/ThreadSearchHook';
 import { SearchBar, SearchResults } from './ThreadSearchBar';
-import { DeleteModal, RemoveModal, ReportModal, VisibilityModal, LeaveModal } from '@/components/modals/ThreadModals';
+import { DeleteModal, RemoveModal, ReportModal as ThreadReportModal, VisibilityModal, LeaveModal } from '@/components/modals/ThreadModals';
 import ThreadSettingsPanel from './ThreadSettingsPanel'; // Import the new settings panel
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/components/ui/Toast'; // Import useToast
@@ -25,7 +25,7 @@ interface ThreadSidebarProps {
   onMessageParticipant?: (participantId: string) => void;
   onLeaveThread?: () => void;
   onDeleteThread?: () => void;
-  onReportThread?: () => void;
+  onReportThread?: (data: { reason: string; customReason?: string }) => void | Promise<void>;
   onUpdateThreadPrivacy?: (privacy: ThreadPrivacy, memberLimit?: number) => void; // New prop for privacy update
   onSetMessageFilter?: (filter: { senderId?: string; keyword?: string }) => void; // New prop for setting message filter
   currentMessageFilter?: { senderId?: string; keyword?: string }; // New prop for current message filter state
@@ -51,6 +51,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
   onMessageParticipant,
   onLeaveThread,
   onDeleteThread,
+  onReportThread,
   onUpdateThreadPrivacy,
   onSetMessageFilter,
   currentMessageFilter,
@@ -108,8 +109,23 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
     console.log('Navigate to message:', messageId);
   };
 
-  const handleReport = ({ reason, customReason }: { reason: string; customReason?: string }) => {
-    console.log('Report submitted:', { reason, customReason });
+  const handleReport = async ({ reason, customReason }: { reason: string; customReason?: string }) => {
+    if (thread.isLocked) {
+      showToast({
+        type: 'error',
+        title: 'Thread Blocked',
+        message: 'This thread is already blocked due to community reports.',
+        duration: 4000,
+      });
+      setShowReportModal(false);
+      return;
+    }
+
+    try {
+      await onReportThread?.({ reason, customReason });
+    } finally {
+      setShowReportModal(false);
+    }
   };
 
   interface TooltipProps {
@@ -305,10 +321,11 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
     </div>
   );
 
-  const ReportButton = ({ onReportClick }: any) => (
+  const ReportButton = ({ onReportClick, disabled = false }: any) => (
     <button
       onClick={onReportClick}
-      className="text-gray-400 hover:text-red-400 transition-colors"
+      disabled={disabled}
+      className={`text-gray-400 transition-colors ${disabled ? 'cursor-not-allowed opacity-50' : 'hover:text-red-400'}`}
     >
       <CustomTooltip text="Report this thread if you find any content that violates community guidelines">
         <div className="flex items-center gap-2">
@@ -427,8 +444,17 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
 
                   <ReportSection reportCount={thread.reportCount} />
 
+                  {thread.isLocked && (
+                    <div className="rounded-md border border-red-800 bg-red-950/40 px-3 py-2 text-xs text-red-200">
+                      This thread is blocked due to community reports.
+                    </div>
+                  )}
+
                   {!isCreator && (
-                    <ReportButton onReportClick={() => setShowReportModal(true)} />
+                    <ReportButton
+                      disabled={thread.isLocked}
+                      onReportClick={() => setShowReportModal(true)}
+                    />
                   )}
 
                   <MuteSection isMuted={isMuted} setIsMuted={setIsMuted} />
@@ -635,7 +661,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
         onRemove={() => onRemoveParticipant?.(selectedParticipant?.id || '')}
       />
 
-      <ReportModal
+      <ThreadReportModal
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}
         onReport={handleReport}

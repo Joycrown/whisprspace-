@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Crown, Settings, Users, MessageCircle, Calendar, TrendingUp, Globe, Lock } from 'lucide-react';
+import { Crown, Settings, Users, MessageCircle, Calendar, TrendingUp, Globe, Lock, X, Loader2 } from 'lucide-react';
 import { useThreadStore } from '@/store/threadStore';
 import { useUserStore } from '@/store/userStore';
 import { Thread } from '@/types';
@@ -14,6 +14,27 @@ import AppLoadingState from '@/components/ui/AppLoadingState';
 
 type TabType = 'joined' | 'created' | 'invited';
 type ThreadMessageCountRow = { thread_id: string; message_count: number | null };
+type ThreadPreviewMessage = {
+  id: string;
+  content: string;
+  createdAt: string;
+  senderName: string;
+};
+type ThreadPreviewData = {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  type: string;
+  privacy: string;
+  isPremium: boolean;
+  price: number | null;
+  messageCount: number;
+  participantCount: number;
+  likes: number;
+  expiresAt: string | null;
+  messages: ThreadPreviewMessage[];
+};
 
 export default function MyThreadsPage() {
   const router = useRouter();
@@ -25,6 +46,13 @@ export default function MyThreadsPage() {
   const [invitedThreads, setInvitedThreads] = useState<Thread[]>([]);
   const [joiningThreadId, setJoiningThreadId] = useState<string | null>(null);
   const [messageCountsByThread, setMessageCountsByThread] = useState<Record<string, number>>({});
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewThread, setPreviewThread] = useState<Thread | null>(null);
+  const [previewIsJoinAction, setPreviewIsJoinAction] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewCache, setPreviewCache] = useState<Record<string, ThreadPreviewData>>({});
+  const activePreviewThreadRef = useRef<string | null>(null);
 
   // Check if user is allowed to create threads
   const canCreate = canCreateThread();
@@ -137,12 +165,75 @@ export default function MyThreadsPage() {
     };
   };
 
-  const handleThreadAction = async (thread: Thread, isJoinAction: boolean) => {
-    if (!isJoinAction) {
-      router.push(`/threads/${thread.id}`);
-      return;
-    }
+  const getIsJoinAction = (thread: Thread) =>
+    activeTab === 'invited' && thread.author.id !== currentUserId && !thread.hasJoined;
 
+  const getFallbackPreview = (thread: Thread): ThreadPreviewData => {
+    const stats = getThreadStats(thread);
+    return {
+      id: thread.id,
+      title: thread.title,
+      content: thread.content,
+      category: thread.category || 'general',
+      type: thread.type,
+      privacy: thread.privacy,
+      isPremium: thread.isPremium,
+      price: thread.price ?? null,
+      messageCount: stats.messages,
+      participantCount: thread.participantCount || 0,
+      likes: thread.likes || 0,
+      expiresAt: thread.expiresAt || null,
+      messages: [],
+    };
+  };
+
+  const loadPreview = async (threadId: string) => {
+    if (previewCache[threadId]) return;
+
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const response = await fetch(`/api/threads/${threadId}/preview`, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.data) {
+        throw new Error(payload?.error || 'Failed to load thread preview');
+      }
+
+      setPreviewCache((prev) => ({
+        ...prev,
+        [threadId]: payload.data as ThreadPreviewData,
+      }));
+    } catch (error) {
+      if (activePreviewThreadRef.current === threadId) {
+        setPreviewError(error instanceof Error ? error.message : 'Failed to load thread preview');
+      }
+    } finally {
+      if (activePreviewThreadRef.current === threadId) {
+        setPreviewLoading(false);
+      }
+    }
+  };
+
+  const openPreview = (thread: Thread, isJoinAction: boolean) => {
+    activePreviewThreadRef.current = thread.id;
+    setPreviewThread(thread);
+    setPreviewIsJoinAction(isJoinAction);
+    setPreviewError(null);
+    setShowPreviewModal(true);
+    void loadPreview(thread.id);
+  };
+
+  const closePreview = () => {
+    activePreviewThreadRef.current = null;
+    setShowPreviewModal(false);
+    setPreviewLoading(false);
+    setPreviewError(null);
+  };
+
+  const handleJoinThread = async (thread: Thread) => {
     const userId = session?.user?.id;
     if (!userId) {
       router.push(`/auth?redirect=${encodeURIComponent(`/threads/${thread.id}`)}`);
@@ -167,6 +258,36 @@ export default function MyThreadsPage() {
       setJoiningThreadId((current) => (current === thread.id ? null : current));
     }
   };
+
+  const handleThreadAction = async (thread: Thread) => {
+    if (getIsJoinAction(thread)) {
+      await handleJoinThread(thread);
+      return;
+    }
+    openPreview(thread, false);
+  };
+
+  const handlePreviewPrimaryAction = async () => {
+    if (!previewThread) return;
+    if (previewThread.isLocked) return;
+
+    const selectedThread = previewThread;
+    const shouldJoin = previewIsJoinAction;
+    closePreview();
+
+    if (shouldJoin) {
+      await handleJoinThread(selectedThread);
+      return;
+    }
+
+    router.push(`/threads/${selectedThread.id}`);
+  };
+
+  const activePreviewData = previewThread ? previewCache[previewThread.id] : null;
+  const preview = previewThread
+    ? (activePreviewData || getFallbackPreview(previewThread))
+    : null;
+  const isPreviewJoining = previewThread ? joiningThreadId === previewThread.id : false;
 
   if (isLoading) {
     return <AppLoadingState title="Syncing your conversations..." />;
@@ -307,30 +428,43 @@ export default function MyThreadsPage() {
             displayThreads.map((thread) => {
               const stats = getThreadStats(thread);
               const isCreator = thread.author.id === currentUserId;
-              const isJoinAction =
-                activeTab === 'invited' && !isCreator && !thread.hasJoined;
+              const isJoinAction = getIsJoinAction(thread);
               const isJoining = joiningThreadId === thread.id;
-              const actionLabel = isJoinAction ? (isJoining ? 'Joining...' : 'Join') : 'View';
+              const actionLabel = isJoinAction ? (isJoining ? 'Joining...' : 'Join') : 'Preview';
 
               return (
                 <div
                   key={thread.id}
-                  className={`bg-gray-800 border rounded-xl transition-all hover:border-purple-500/50 ${thread.isPremium
+                  className={`bg-gray-800 border rounded-xl transition-all hover:border-purple-500/50 cursor-pointer ${thread.isPremium
                     ? 'border-purple-500/30 bg-gradient-to-br from-purple-900/20 to-orange-900/20'
                     : 'border-gray-700'
                     }`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => openPreview(thread, isJoinAction)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openPreview(thread, isJoinAction);
+                    }
+                  }}
+                  aria-label={`Preview thread ${thread.title}`}
                 >
                   <div className="p-4 md:p-6">
                     {/* Thread Header */}
                     <div className="flex flex-col md:flex-row md:items-start md:justify-between mb-3 md:mb-4 gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start flex-wrap gap-2 mb-2">
-                          <Link
-                            href={`/threads/${thread.id}`}
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openPreview(thread, isJoinAction);
+                            }}
                             className="text-base md:text-xl font-semibold text-white hover:text-purple-400 transition-colors line-clamp-2"
                           >
                             {thread.title}
-                          </Link>
+                          </button>
                           {thread.isPremium && (
                             <div className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-purple-600 to-orange-500 rounded-full flex-shrink-0">
                               <Crown className="w-3 h-3 text-white" />
@@ -362,7 +496,10 @@ export default function MyThreadsPage() {
                       {/* Actions */}
                       {isCreator && thread.isPremium && (
                         <button
-                          onClick={() => router.push(`/threads/${thread.id}/manage`)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            router.push(`/threads/${thread.id}/manage`);
+                          }}
                           className="flex items-center justify-center gap-2 px-3 md:px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white text-xs md:text-sm font-medium transition-colors w-full md:w-auto"
                           title="Manage Access"
                         >
@@ -422,7 +559,10 @@ export default function MyThreadsPage() {
 
                       <button
                         type="button"
-                        onClick={() => handleThreadAction(thread, isJoinAction)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleThreadAction(thread);
+                        }}
                         disabled={isJoining}
                         className="px-3 md:px-4 py-1.5 md:py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-60 disabled:cursor-not-allowed rounded-lg text-white text-xs md:text-sm font-medium transition-colors whitespace-nowrap"
                       >
@@ -435,6 +575,114 @@ export default function MyThreadsPage() {
             })
           )}
         </div>
+
+        {showPreviewModal && preview && previewThread && (
+          <div
+            className="fixed inset-0 z-[1200] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 modal-safe-overlay"
+            onClick={closePreview}
+          >
+            <div
+              className="w-full max-w-2xl rounded-2xl border border-gray-700 bg-[#151515] text-white shadow-2xl modal-safe-panel overflow-y-auto max-h-[calc(var(--app-viewport-height)-2rem)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-gray-800 px-5 py-4">
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-wider text-gray-400">{preview.category}</p>
+                  <h3 className="mt-1 text-lg md:text-xl font-semibold text-white break-words">{preview.title}</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={closePreview}
+                  className="rounded-md p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                  aria-label="Close preview"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="px-5 py-4 space-y-4">
+                {previewLoading && !activePreviewData ? (
+                  <div className="py-8 text-center text-sm text-gray-300">Loading preview...</div>
+                ) : previewError && !activePreviewData ? (
+                  <div className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+                    {previewError}
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">{preview.content}</p>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                      <div className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
+                        <p className="text-[11px] uppercase text-gray-400">Messages</p>
+                        <p className="text-sm font-semibold">{preview.messageCount}</p>
+                      </div>
+                      <div className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
+                        <p className="text-[11px] uppercase text-gray-400">Participants</p>
+                        <p className="text-sm font-semibold">{preview.participantCount}</p>
+                      </div>
+                      <div className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
+                        <p className="text-[11px] uppercase text-gray-400">Likes</p>
+                        <p className="text-sm font-semibold">{preview.likes}</p>
+                      </div>
+                      <div className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
+                        <p className="text-[11px] uppercase text-gray-400">Type</p>
+                        <p className="text-sm font-semibold">
+                          {preview.isPremium ? `Premium${preview.price ? ` $${preview.price.toFixed(2)}` : ''}` : 'Standard'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-100 mb-2">Message Preview</h4>
+                      {previewThread.isLocked && (
+                        <p className="mb-2 text-xs text-red-300">
+                          This thread is blocked due to community reports.
+                        </p>
+                      )}
+                      {preview.messages.length === 0 ? (
+                        <p className="text-xs text-gray-400">No messages available yet.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {preview.messages.map((message) => (
+                            <div key={message.id} className="rounded-lg border border-gray-800 bg-gray-900/50 px-3 py-2">
+                              <p className="text-[11px] text-gray-400">{message.senderName}</p>
+                              <p className="text-sm text-gray-200 break-words">{message.content}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-gray-800 px-5 py-4">
+                <button
+                  type="button"
+                  onClick={closePreview}
+                  className="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-200 hover:bg-gray-800/70 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handlePreviewPrimaryAction()}
+                  disabled={isPreviewJoining || previewThread.isLocked}
+                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-orange-500 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 transition-opacity disabled:opacity-70"
+                >
+                  {isPreviewJoining ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : null}
+                  {previewThread.isLocked
+                    ? 'Thread Blocked'
+                    : previewIsJoinAction
+                      ? 'Join Thread'
+                      : 'Open Thread'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

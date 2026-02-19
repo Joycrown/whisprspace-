@@ -7,6 +7,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { RealtimeNotificationProvider } from "@/components/providers/RealtimeNotificationProvider";
 import AnalyticsProvider from "@/components/providers/AnalyticsProvider";
+import ServiceWorkerGuard from "@/components/providers/ServiceWorkerGuard";
 import { QueryProvider } from "@/lib/react-query";
 import { generateMetadata as generateSEO } from "@/lib/seo";
 
@@ -82,6 +83,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased overflow-x-hidden w-full max-w-full`}
       >
         <QueryProvider>
+          <ServiceWorkerGuard />
           <AnalyticsProvider>
             <AuthProvider>
               <ThemeProvider>

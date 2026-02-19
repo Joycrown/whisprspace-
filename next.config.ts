@@ -1,12 +1,14 @@
 import type { NextConfig } from "next";
+import withPWAFactory from "@ducanh2912/next-pwa";
+import { withSentryConfig } from "@sentry/nextjs";
 
-const withPWA = require("@ducanh2912/next-pwa").default({
+const withPWA = withPWAFactory({
   dest: "public",
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
   reloadOnOnline: true,
   swcMinify: true,
-  disable: false, // process.env.NODE_ENV === "development",
+  disable: process.env.NODE_ENV === "development",
   workboxOptions: {
     disableDevLogs: true,
   },
@@ -28,8 +30,6 @@ const nextConfig: NextConfig = {
     return config;
   },
 };
-
-const { withSentryConfig } = require("@sentry/nextjs");
 
 const pwaConfig = withPWA(nextConfig);
 
