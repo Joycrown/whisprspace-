@@ -15,12 +15,19 @@ type TabType = 'all' | 'popular' | 'recent';
 
 const ThreadsPage = () => {
   const { session } = useUserStore();
-  const { searchQuery } = useThreadStore();
-  useRealtimeFeed(); // Enable real-time updates for thread list (new threads, participant changes)
+  const searchQuery = useThreadStore((state) => state.searchQuery);
+  useRealtimeFeed(process.env.NODE_ENV === 'production'); // Avoid dev-mode realtime thrash on feed
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const loader = useRef(null);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery.trim());
+  const loader = useRef<HTMLDivElement | null>(null);
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const isFetchLockedRef = useRef(false);
+  const hasNextPageRef = useRef(false);
+  const isFetchingRef = useRef(false);
+  const isFetchingNextPageRef = useRef(false);
+  const lastFetchAtRef = useRef(0);
 
   const isAnonymous = session.user?.isAnonymous ?? true;
   // Direct check for permissions to avoid stale helper state
@@ -46,21 +53,40 @@ const ThreadsPage = () => {
   }, [activeTab]);
 
   // Use React Query for threads
-  const { data, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useThreadsQuery(
+  const { data, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage, isFetching } = useThreadsQuery(
     filters,
-    searchQuery,
+    debouncedSearchQuery,
     session.user?.id
   );
 
   // Flatten pages into single threads array
   const threads = useMemo(() => {
-    return data?.pages.flatMap(page => page.threads) ?? [];
+    const flattened = data?.pages.flatMap(page => page.threads) ?? [];
+    if (flattened.length <= 1) return flattened;
+
+    const seen = new Set<string>();
+    return flattened.filter((thread) => {
+      if (!thread?.id || seen.has(thread.id)) {
+        return false;
+      }
+      seen.add(thread.id);
+      return true;
+    });
   }, [data]);
 
   // Prevent hydration mismatch by waiting for client-side mount
   useEffect(() => {
     setIsMounted(true);
   }, []);
+
+  useEffect(() => {
+    const normalizedQuery = searchQuery.trim();
+    const handle = setTimeout(() => {
+      setDebouncedSearchQuery((prev) => (prev === normalizedQuery ? prev : normalizedQuery));
+    }, 250);
+
+    return () => clearTimeout(handle);
+  }, [searchQuery]);
 
   const tabs = [
     { id: 'all' as const, label: 'All' },
@@ -69,50 +95,78 @@ const ThreadsPage = () => {
   ];
 
   // Infinite scroll logic with React Query
+  useEffect(() => {
+    hasNextPageRef.current = Boolean(hasNextPage);
+    isFetchingRef.current = isFetching;
+    isFetchingNextPageRef.current = isFetchingNextPage;
+  }, [hasNextPage, isFetching, isFetchingNextPage]);
+
   const handleObserver = useCallback((entries: IntersectionObserverEntry[]) => {
     const target = entries[0];
-    if (target.isIntersecting && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+    if (
+      !target?.isIntersecting ||
+      !hasNextPageRef.current ||
+      isFetchingNextPageRef.current ||
+      isFetchingRef.current ||
+      isFetchLockedRef.current
+    ) {
+      return;
     }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+    const now = Date.now();
+    if (now - lastFetchAtRef.current < 500) {
+      return;
+    }
+
+    lastFetchAtRef.current = now;
+    isFetchLockedRef.current = true;
+    fetchNextPage()
+      .catch(() => null)
+      .finally(() => {
+        isFetchLockedRef.current = false;
+      });
+  }, [fetchNextPage]);
 
   useEffect(() => {
-    const option = {
-      root: null,
-      rootMargin: "20px",
-      threshold: 0
-    };
-    const observer = new IntersectionObserver(handleObserver, option);
-    const currentLoader = loader.current;
-
-    if (currentLoader) {
-      observer.observe(currentLoader);
+    if (!hasNextPage) {
+      return;
     }
 
-    return () => {
-      if (currentLoader) {
-        observer.unobserve(currentLoader);
-      }
+    const currentLoader = loader.current;
+    const currentContainer = listContainerRef.current;
+
+    if (!currentLoader || !currentContainer) {
+      return;
+    }
+
+    const option = {
+      root: currentContainer,
+      rootMargin: "200px 0px",
+      threshold: 0.01
     };
-  }, [handleObserver]);
+    const observer = new IntersectionObserver(handleObserver, option);
+    observer.observe(currentLoader);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [handleObserver, hasNextPage, threads.length]);
 
   // Scroll to top button visibility
   useEffect(() => {
-    const scrollContainer = document.getElementById('thread-list-container');
+    const scrollContainer = listContainerRef.current;
+    if (!scrollContainer) return;
+
     const handleScroll = () => {
-      if (scrollContainer) {
-        setIsScrolled(scrollContainer.scrollTop > 100);
-      }
+      setIsScrolled(scrollContainer.scrollTop > 100);
     };
 
-    if (scrollContainer) {
-      scrollContainer.addEventListener('scroll', handleScroll);
-      return () => scrollContainer.removeEventListener('scroll', handleScroll);
-    }
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
   }, []);
 
   const scrollToTop = () => {
-    document.getElementById('thread-list-container')?.scrollTo({ top: 0, behavior: 'smooth' });
+    listContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -121,7 +175,7 @@ const ThreadsPage = () => {
       <div className="flex-1 min-w-0 border-x-0 md:border-x border-gray-800 flex flex-col relative overflow-x-hidden max-w-full">
         {/* Create Button */}
         <div
-          className={`px-3 md:px-4 pt-3 md:pt-4 flex-shrink-0 transition-all duration-300 w-full ${isScrolled ? 'opacity-0 -translate-y-full absolute top-0 left-0 right-0' : 'opacity-100 translate-y-0 relative'
+          className={`px-3 md:px-4 pt-3 md:pt-4 flex-shrink-0 transition-all duration-300 w-full ${isScrolled ? 'opacity-0 -translate-y-full absolute top-0 left-0 right-0 md:opacity-100 md:translate-y-0 md:relative md:top-auto md:left-auto md:right-auto' : 'opacity-100 translate-y-0 relative'
             }`}
         >
           {!isMounted ? (
@@ -197,7 +251,9 @@ const ThreadsPage = () => {
         {/* Thread List - Scrollable Container */}
         <div
           id="thread-list-container"
-          className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide w-full"
+          ref={listContainerRef}
+          className="flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain scrollbar-hide w-full"
+          style={{ overflowAnchor: 'none' }}
         >
           <div className="divide-y divide-gray-800 w-full pb-28 md:pb-4">
             {error && (
@@ -225,17 +281,20 @@ const ThreadsPage = () => {
                   ))
                 )}
 
-                {threads.length > 0 && (
+                {threads.length > 0 && hasNextPage && (
                   <div ref={loader} className="loading-indicator p-3 md:p-4 text-center text-gray-500 text-sm md:text-base">
-                    {isFetchingNextPage && hasNextPage && (
+                    {isFetchingNextPage && (
                       <div className="flex justify-center items-center gap-2">
                         <div className="w-5 h-5 border-2 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
                         <span>Loading more threads...</span>
                       </div>
                     )}
-                    {!hasNextPage && !isLoading && (
-                      <p className="text-gray-600">You&apos;ve reached the end</p>
-                    )}
+                  </div>
+                )}
+
+                {threads.length > 0 && !hasNextPage && !isLoading && (
+                  <div className="loading-indicator p-3 md:p-4 text-center text-gray-500 text-sm md:text-base">
+                    <p className="text-gray-600">You&apos;ve reached the end</p>
                   </div>
                 )}
               </>

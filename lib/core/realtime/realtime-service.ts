@@ -256,13 +256,24 @@ export const subscribeToAllThreads = (
 export const subscribeToAllParticipantChanges = (
   onChange: () => void
 ): (() => void) => {
-  return rawRealtime.subscribeToTable('thread_participants', {
-    event: '*',
+  const unsubInsert = rawRealtime.subscribeToTable('thread_participants', {
+    event: 'INSERT',
     onChange: () => {
-
       onChange();
     }
   });
+
+  const unsubDelete = rawRealtime.subscribeToTable('thread_participants', {
+    event: 'DELETE',
+    onChange: () => {
+      onChange();
+    }
+  });
+
+  return () => {
+    unsubInsert();
+    unsubDelete();
+  };
 };
 
 export const subscribeToUserNotifications = (
@@ -282,10 +293,49 @@ export const subscribeToUserNotifications = (
     }
   });
 
-  channel.subscribe().catch(err => {
-    console.error(`[Realtime] Failed to subscribe to notifications for user ${userId}:`, err);
-  });
-  return () => channel.unsubscribe();
+  let isActive = true;
+  let retryAttempt = 0;
+  const maxRetryAttempts = 5;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const subscribeWithRetry = () => {
+    if (!isActive) return;
+
+    channel.subscribe().catch((err) => {
+      if (!isActive) return;
+
+      const message = err instanceof Error ? err.message : String(err);
+      const isJoinTimeout = message.includes('Channel join timed out');
+
+      if (retryAttempt >= maxRetryAttempts) {
+        console.warn(
+          `[Realtime] Notifications subscription disabled after ${maxRetryAttempts} retries for user ${userId}`
+        );
+        return;
+      }
+
+      if (isJoinTimeout) {
+        console.warn(`[Realtime] Notifications channel join timed out for user ${userId}; retrying...`);
+      } else {
+        console.error(`[Realtime] Failed to subscribe to notifications for user ${userId}:`, err);
+      }
+
+      const retryDelayMs = Math.min(1000 * Math.pow(2, retryAttempt), 15000);
+      retryAttempt++;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        subscribeWithRetry();
+      }, retryDelayMs);
+    });
+  };
+
+  subscribeWithRetry();
+
+  return () => {
+    isActive = false;
+    if (retryTimer) clearTimeout(retryTimer);
+    channel.unsubscribe();
+  };
 };
 
 // Legacy Wrappers (Proxy to unified function)

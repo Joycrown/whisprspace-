@@ -13,7 +13,8 @@ interface ThreadListSidebarProps {
 }
 
 const ThreadListSidebar = ({ threads: threadsProp }: ThreadListSidebarProps) => {
-  const { threads: storeThreads, setSearchQuery } = useThreadStore();
+  const storeThreads = useThreadStore((state) => state.threads);
+  const setSearchQuery = useThreadStore((state) => state.setSearchQuery);
   const threads = threadsProp && threadsProp.length > 0 ? threadsProp : storeThreads;
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const { session } = useUserStore();

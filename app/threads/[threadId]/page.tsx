@@ -7,11 +7,10 @@ import ThreadMessages from '@/components/features/threads/ThreadMessages';
 import ThreadInput from '@/components/features/threads/ThreadInput';
 import ThreadSidebar from '@/components/features/threads/ThreadSideBar';
 import ThreadHeader from '@/components/features/threads/ThreadHeader';
-import { useThreadQuery, useCreateThreadMessageMutation, useLikeThreadMutation, useDeleteThreadMutation, useUpdateThreadMutation, useMessageReactionMutation, useVoteOnPollMutation, useJoinThreadMutation, useLeaveThreadMutation, useRemoveParticipantMutation, checkThreadBan, inviteUserToThread } from '@/lib/threads';
+import { useThreadQuery, useCreateThreadMessageMutation, useEditThreadMessageMutation, useLikeThreadMutation, useDeleteThreadMutation, useUpdateThreadMutation, useMessageReactionMutation, useVoteOnPollMutation, useJoinThreadMutation, useLeaveThreadMutation, useRemoveParticipantMutation, checkThreadBan, inviteUserToThread, reportThread } from '@/lib/threads';
 import { useUserStore } from '@/store/userStore';
 import { Message, Participant, ReactionType, ThreadPrivacy } from '@/types';
 import { SearchProvider } from '@/hooks/hooks/ThreadSearchHook';
-import ReportModal from '@/components/modals/ReportModal';
 import { MessageOptionsModal } from '@/components/modals/ThreadModals';
 import AppLoadingState from '@/components/ui/AppLoadingState';
 import { useRealtimeThread, useTypingIndicator } from '@/lib/core/realtime/useRealtimeThread';
@@ -20,6 +19,33 @@ import { findDirectConversationWithUser } from '@/lib/messaging';
 import { confirmThreadPurchase } from '@/lib/flutterwave/flutterwave-service';
 import { DualGatewayPremiumGate } from '@/components/features/premium/DualGatewayPremiumGate';
 
+
+const normalizeReportReason = (reason: string) => {
+  switch (reason) {
+    case 'spam':
+      return 'spam';
+    case 'harassment':
+      return 'harassment';
+    case 'hate_speech':
+    case 'hate':
+      return 'hate_speech';
+    case 'violence':
+      return 'violence';
+    case 'sexual_content':
+      return 'sexual_content';
+    case 'inappropriate':
+    case 'inappropriate_content':
+      return 'other';
+    case 'misinformation':
+      return 'misinformation';
+    case 'copyright':
+      return 'copyright';
+    case 'other':
+    case 'others':
+    default:
+      return 'other';
+  }
+};
 
 const ThreadPage = () => {
   const params = useParams();
@@ -39,6 +65,7 @@ const ThreadPage = () => {
     Boolean(threadId && sessionValidated && hasSession)
   );
   const createMessageMutation = useCreateThreadMessageMutation();
+  const editMessageMutation = useEditThreadMessageMutation();
   const likeThreadMutation = useLikeThreadMutation();
   const deleteThreadMutation = useDeleteThreadMutation();
   const updateThreadMutation = useUpdateThreadMutation();
@@ -55,8 +82,6 @@ const ThreadPage = () => {
   const messages = useMemo(() => currentThread?.messages || [], [currentThread?.messages]);
   const [replyingTo, setReplyingTo] = useState<Message | undefined>(undefined);
   const [isMuted, setIsMuted] = useState(false);
-  const [showReportMessageModal, setShowReportMessageModal] = useState(false);
-  const [, setSelectedMessageToReport] = useState<string | null>(null);
   const [messageFilter, setMessageFilter] = useState<{ senderId?: string; keyword?: string }>({}); // New state for message filtering
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Mobile sidebar state
   const [joinActionError, setJoinActionError] = useState<string | null>(null);
@@ -99,6 +124,24 @@ const ThreadPage = () => {
   }, [isSidebarOpen]);
 
   const currentUserId = useMemo(() => session.user?.id || '', [session.user?.id]);
+  const isThreadLocked = Boolean(currentThread?.isLocked);
+  const isThreadBlocked = isBanned || isThreadLocked;
+
+  const handleBlockedAction = () => {
+    if (isBanned) {
+      setShowRemovedModal(true);
+      return;
+    }
+
+    if (isThreadLocked) {
+      showToast({
+        type: 'error',
+        title: 'Thread Blocked',
+        message: 'This thread has been blocked due to community reports.',
+        duration: 4500,
+      });
+    }
+  };
 
   useEffect(() => {
     if (!threadId) return;
@@ -174,8 +217,8 @@ const ThreadPage = () => {
 
 
   const handleLike = () => {
-    if (isBanned) {
-      setShowRemovedModal(true);
+    if (isThreadBlocked) {
+      handleBlockedAction();
       return;
     }
     if (currentThread && threadId) {
@@ -194,6 +237,16 @@ const ThreadPage = () => {
   };
 
   const handleInviteParticipant = async (threadId: string, username: string) => {
+    if (isThreadLocked) {
+      showToast({
+        type: 'error',
+        title: 'Thread Blocked',
+        message: 'This thread is blocked and no further activity is allowed.',
+        duration: 4500,
+      });
+      return;
+    }
+
     if (!currentThread) return;
     const result = await inviteUserToThread(threadId, username, currentThread.title);
 
@@ -286,8 +339,8 @@ const ThreadPage = () => {
 
   const handleJoinThread = async () => {
     if (!threadId) return;
-    if (isBanned) {
-      setShowRemovedModal(true);
+    if (isThreadBlocked) {
+      handleBlockedAction();
       return;
     }
 
@@ -335,8 +388,8 @@ const ThreadPage = () => {
   };
 
   const handleReact = (messageId: string, reaction: string) => {
-    if (isBanned) {
-      setShowRemovedModal(true);
+    if (isThreadBlocked) {
+      handleBlockedAction();
       return;
     }
     if (!currentUserId) return;
@@ -359,12 +412,79 @@ const ThreadPage = () => {
     });
   };
 
-  const handleReportMessage = (messageId: string) => {
-    setSelectedMessageToReport(messageId);
-    setShowReportMessageModal(true);
+  const handleReportThread = async ({
+    reason,
+    customReason,
+  }: {
+    reason: string;
+    customReason?: string;
+  }) => {
+    if (!currentThread?.id) return;
+
+    let reporterId = currentUserId;
+    if (!reporterId) {
+      const { loginAnonymously } = useUserStore.getState();
+      await loginAnonymously();
+      reporterId = useUserStore.getState().session.user?.id || '';
+    }
+
+    if (!reporterId) {
+      showToast({
+        type: 'error',
+        title: 'Report Failed',
+        message: 'Unable to authenticate your report right now. Please try again.',
+        duration: 4500,
+      });
+      return;
+    }
+
+    const normalizedReason = normalizeReportReason(reason);
+    const description = customReason?.trim() || undefined;
+
+    const result = await reportThread(
+      currentThread.id,
+      normalizedReason,
+      description
+    );
+
+    if (result.success) {
+      const alreadyReported = result.alreadyReported === true;
+      const didLockThread = result.isLocked === true;
+      showToast({
+        type: 'success',
+        title: alreadyReported ? 'Already Reported' : 'Report Submitted',
+        message: alreadyReported
+          ? 'You have already reported this thread.'
+          : 'Thanks. Our moderation team will review this thread.',
+        duration: 4200,
+      });
+
+      if (didLockThread) {
+        showToast({
+          type: 'error',
+          title: 'Thread Blocked',
+          message: 'This thread has been blocked due to high report volume.',
+          duration: 5000,
+        });
+      }
+
+      await refetch();
+      return;
+    }
+
+    showToast({
+      type: 'error',
+      title: 'Report Failed',
+      message: result.error || 'Unable to submit report right now.',
+      duration: 4500,
+    });
   };
 
   const handleReply = (message: Message) => {
+    if (isThreadBlocked) {
+      handleBlockedAction();
+      return;
+    }
     setReplyingTo(message);
   };
 
@@ -373,8 +493,8 @@ const ThreadPage = () => {
   };
 
   const handleSendMessage = (content: string, attachments?: any[]) => {
-    if (isBanned) {
-      setShowRemovedModal(true);
+    if (isThreadBlocked) {
+      handleBlockedAction();
       return;
     }
 
@@ -404,6 +524,21 @@ const ThreadPage = () => {
       type: 'text', // Mutation handles type inference from attachments
       attachments: attachments, // Pass raw File[] for mutation to upload
       replyToId: replyingTo?.id,
+    });
+  };
+
+  const handleEditMessage = (messageId: string, content: string) => {
+    if (isThreadBlocked) {
+      handleBlockedAction();
+      return;
+    }
+    if (!threadId || !currentUserId) return;
+
+    editMessageMutation.mutate({
+      threadId,
+      messageId,
+      content,
+      userId: currentUserId,
     });
   };
 
@@ -650,8 +785,8 @@ const ThreadPage = () => {
   };
 
   const handleVote = (optionId: string) => {
-    if (isBanned) {
-      setShowRemovedModal(true);
+    if (isThreadBlocked) {
+      handleBlockedAction();
       return;
     }
     if (!currentThread || currentThread.type !== 'poll' || !currentThread.pollId || !threadId || hasAlreadyVoted) return;
@@ -680,7 +815,43 @@ const ThreadPage = () => {
   }
 
   if (error) {
-    return <div className="text-red-500 p-4">Error: {error.message || 'Failed to load thread'}</div>;
+    const queryError = error as Error & { code?: string };
+    const isExpiredThread =
+      queryError?.code === 'THREAD_EXPIRED' ||
+      /thread has expired/i.test(queryError?.message || '');
+
+    return (
+      <div className="min-h-[100dvh] bg-[#121212] flex items-center justify-center p-4">
+        <div className="w-full max-w-md rounded-xl border border-gray-800 bg-[#1E1E1E] p-6 text-white shadow-2xl">
+          <h2 className="text-lg font-semibold">
+            {isExpiredThread ? 'Thread Expired' : 'Unable to Open Thread'}
+          </h2>
+          <p className="mt-2 text-sm text-gray-300">
+            {isExpiredThread
+              ? 'This thread has expired and is no longer available.'
+              : (queryError?.message || 'Failed to load thread.')}
+          </p>
+          <div className="mt-5 flex gap-2">
+            <button
+              type="button"
+              onClick={() => router.push('/threads')}
+              className="flex-1 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition-colors"
+            >
+              Return to Threads
+            </button>
+            {!isExpiredThread && (
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="flex-1 rounded-md bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
+              >
+                Try Again
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!currentThread) {
@@ -691,6 +862,12 @@ const ThreadPage = () => {
 
   const contentBlock = (
     <>
+      {isThreadLocked && (
+        <div className="border-b border-red-900 bg-red-950/40 px-4 py-3 text-sm text-red-200">
+          This thread is blocked due to community reports. New activity is disabled.
+        </div>
+      )}
+
       {/* Poll Section */}
       {currentThread.type === 'poll' && currentThread.pollOptions && (
         <div className="border-b border-gray-800 bg-gray-900/50 flex-shrink-0">
@@ -780,9 +957,9 @@ const ThreadPage = () => {
           threadId={threadId ?? ''}
           threadCreatorId={threadCreatorId}
           onReply={handleReply}
+          onEditMessage={handleEditMessage}
           onReact={handleReact}
           getRepliedMessage={(id: string) => messagesMap[id]}
-          onReportMessage={handleReportMessage}
           messageFilter={messageFilter}
           onRetry={(msg) => {
             // Extract raw files from attachments if available
@@ -807,8 +984,10 @@ const ThreadPage = () => {
             replyingTo ? `Replying to ${messagesMap[replyingTo.id]?.sender.name || 'User'}: ${messagesMap[replyingTo.id]?.content.substring(0, 30) || 'Attachment'}...` : undefined
           }
           isLoading={createMessageMutation.isPending}
-          isDisabled={isBanned}
-          disabledMessage="You have been removed from this thread."
+          isDisabled={isThreadBlocked}
+          disabledMessage={isThreadLocked
+            ? 'This thread has been blocked due to community reports.'
+            : 'You have been removed from this thread.'}
         />
       </div>
     </>
@@ -933,6 +1112,7 @@ const ThreadPage = () => {
                       handleInviteParticipant={handleInviteParticipant}
                       handleSetMessageFilter={handleSetMessageFilter}
                       handleLockThread={handleLockThread}
+                      handleReportThread={handleReportThread}
                       handleViewReportedMessages={handleViewReportedMessages}
                       isDeleting={deleteThreadMutation.isPending}
                       onlineCount={onlineCount}
@@ -965,6 +1145,7 @@ const ThreadPage = () => {
               handleInviteParticipant={handleInviteParticipant}
               handleSetMessageFilter={handleSetMessageFilter}
               handleLockThread={handleLockThread}
+              handleReportThread={handleReportThread}
               handleViewReportedMessages={handleViewReportedMessages}
               isDeleting={deleteThreadMutation.isPending}
               onJoinThread={handleJoinThread}
@@ -975,22 +1156,6 @@ const ThreadPage = () => {
           </div>
         </>
       )}
-
-      {/* Report Modal (positioned as overlay, outside flex flow) */}
-      <ReportModal
-        isOpen={showReportMessageModal}
-        onClose={() => {
-          setShowReportMessageModal(false);
-          setSelectedMessageToReport(null);
-        }}
-        onSubmit={({ reason, customReason }) => {
-          // In a real app, this would send the report to the backend
-          void reason;
-          void customReason;
-          setShowReportMessageModal(false);
-          setSelectedMessageToReport(null);
-        }}
-      />
 
       <MessageOptionsModal
         isOpen={showMessageOptions}
@@ -1034,7 +1199,7 @@ const MobileSidebarContent = React.memo((props: any) => {
     participants, messages, currentThread, isMuted, setIsMuted, messageFilter, isCreator,
     handleRemoveParticipant, handleMessageParticipant, handleLeaveThread, handleDeleteThread,
     handleUpdateThreadPrivacy, handleInviteParticipant, handleSetMessageFilter, handleLockThread,
-    handleViewReportedMessages, isDeleting, onJoinThread, isJoined, joinErrorMessage, isBanned
+    handleReportThread, handleViewReportedMessages, isDeleting, onJoinThread, isJoined, joinErrorMessage, isBanned
   } = props;
 
   const initialData = useMemo(() => ({
@@ -1104,6 +1269,7 @@ const MobileSidebarContent = React.memo((props: any) => {
         onSetMessageFilter={handleSetMessageFilter}
         currentMessageFilter={messageFilter}
         onLockThread={handleLockThread}
+        onReportThread={handleReportThread}
         onViewReportedMessages={handleViewReportedMessages}
         isDeleting={isDeleting}
         onJoinThread={onJoinThread}
@@ -1120,7 +1286,7 @@ const DesktopSidebarContent = React.memo((props: any) => {
     participants, messages, currentThread, isMuted, setIsMuted, messageFilter, isCreator,
     handleRemoveParticipant, handleMessageParticipant, handleLeaveThread, handleDeleteThread,
     handleUpdateThreadPrivacy, handleInviteParticipant, handleSetMessageFilter, handleLockThread,
-    handleViewReportedMessages, isDeleting, onJoinThread, isJoined, joinErrorMessage, isBanned
+    handleReportThread, handleViewReportedMessages, isDeleting, onJoinThread, isJoined, joinErrorMessage, isBanned
   } = props;
 
   const initialData = useMemo(() => ({
@@ -1189,6 +1355,7 @@ const DesktopSidebarContent = React.memo((props: any) => {
         onSetMessageFilter={handleSetMessageFilter}
         currentMessageFilter={messageFilter}
         onLockThread={handleLockThread}
+        onReportThread={handleReportThread}
         onViewReportedMessages={handleViewReportedMessages}
         isDeleting={isDeleting}
         onJoinThread={onJoinThread}

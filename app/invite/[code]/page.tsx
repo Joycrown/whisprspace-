@@ -22,6 +22,22 @@ const InvitePage = () => {
 
   const hasSession = !!session.user || !!sessionInfo;
 
+  const normalizeInviteError = (message: string) => {
+    const normalized = message.toLowerCase();
+
+    if (
+      normalized.includes('invalid invite code') ||
+      normalized.includes('invite code has expired') ||
+      normalized.includes('thread not found') ||
+      normalized.includes('thread is deleted') ||
+      normalized.includes('thread has expired')
+    ) {
+      return 'Thread expired or deleted. Ask the creator for a new invite.';
+    }
+
+    return message;
+  };
+
   const redeem = async () => {
     if (!code) {
       setErrorMessage('Invalid invite link.');
@@ -33,7 +49,7 @@ const InvitePage = () => {
     const result = await redeemThreadInvite(code);
 
     if (result.error || !result.threadId) {
-      const message = result.error || 'Unable to redeem invite.';
+      const message = normalizeInviteError(result.error || 'Unable to redeem invite.');
       setErrorMessage(message);
       setStatus('error');
       showToast({

@@ -31,11 +31,28 @@ export function useThreadsQuery(filters?: ThreadFilters, searchQuery?: string, u
       return result
     },
     getNextPageParam: (lastPage, pages) => {
-      // If hasMore is true, return next page number
-      return lastPage.hasMore ? pages.length + 1 : undefined
+      if (!lastPage.hasMore || lastPage.threads.length === 0) {
+        return undefined
+      }
+
+      // Defensive guard: stop pagination if backend returns duplicate page rows.
+      // This prevents an infinite fetch loop when the sentinel stays visible.
+      const previousThreadIds = new Set(
+        pages
+          .slice(0, -1)
+          .flatMap((page) => page.threads.map((thread) => thread.id))
+      )
+
+      const hasNewThread = lastPage.threads.some((thread) => !previousThreadIds.has(thread.id))
+      if (!hasNewThread) {
+        return undefined
+      }
+
+      return pages.length + 1
     },
     initialPageParam: 1,
     staleTime: 2 * 60 * 1000,
+    retry: 1,
     refetchOnWindowFocus: false,
     placeholderData: (previousData) => previousData,
   })
@@ -66,7 +83,27 @@ export function useThreadQuery(threadId: string | undefined, enabled = true) {
       const threadData = await import('../thread-service').then(m => m.fetchThreadById(threadId, user?.id))
       
       if (!threadData) {
-        throw new Error('Failed to fetch thread')
+        const statusResponse = await fetch(`/api/threads/${threadId}/status`, {
+          method: 'GET',
+          cache: 'no-store',
+        }).catch(() => null)
+
+        if (statusResponse) {
+          const statusPayload = await statusResponse.json().catch(() => null) as {
+            code?: string
+            message?: string
+          } | null
+
+          if (statusPayload?.message) {
+            const enrichedError = new Error(statusPayload.message) as Error & { code?: string }
+            enrichedError.code = statusPayload.code || 'THREAD_FETCH_FAILED'
+            throw enrichedError
+          }
+        }
+
+        const fallbackError = new Error('Failed to fetch thread') as Error & { code?: string }
+        fallbackError.code = 'THREAD_FETCH_FAILED'
+        throw fallbackError
       }
       
       return threadData

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useUserStore } from '@/store/userStore'
-import { useThreadStore } from '@/store/threadStore'
 import * as realtimeService from './realtime-service'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/react-query/queryKeys'
@@ -174,7 +173,7 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
         content: typeof record.content === 'string' ? record.content : currentMessage.content,
         attachments: record.attachments ?? currentMessage.attachments,
         isEdited: record.is_edited ?? currentMessage.isEdited,
-        editedAt: record.updated_at ?? currentMessage.editedAt,
+        editedAt: record.edited_at ?? record.updated_at ?? currentMessage.editedAt,
         replyToId: record.parent_message_id ?? currentMessage.replyToId,
       }
 
@@ -462,34 +461,37 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
 /**
  * Hook to subscribe to real-time feed updates (all threads)
  */
-export const useRealtimeFeed = () => {
-  const { fetchThreads } = useThreadStore()
+export const useRealtimeFeed = (enabled = true) => {
   const queryClient = useQueryClient()
+  const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    if (!enabled) return
+
+    const scheduleListRefresh = () => {
+      if (invalidateTimerRef.current) return
+
+      invalidateTimerRef.current = setTimeout(() => {
+        invalidateTimerRef.current = null
+        queryClient.invalidateQueries({ queryKey: queryKeys.threads.lists(), refetchType: 'active' })
+      }, 300)
+    }
+
     // Subscribe to new threads
     const unsubThreads = realtimeService.subscribeToAllThreads(
       () => {
-        // New thread created - refresh feed
-
-        fetchThreads()
-        queryClient.invalidateQueries({ queryKey: queryKeys.threads.lists() });
+        scheduleListRefresh()
       }
     )
 
-    // Subscribe to participant changes across all threads
-    const unsubParticipants = realtimeService.subscribeToAllParticipantChanges(() => {
-
-      queryClient.invalidateQueries({ queryKey: queryKeys.threads.lists() });
-      // Also invalidate detail queries to be safe
-      queryClient.invalidateQueries({ queryKey: queryKeys.threads.all });
-    });
-
     return () => {
+      if (invalidateTimerRef.current) {
+        clearTimeout(invalidateTimerRef.current)
+        invalidateTimerRef.current = null
+      }
       unsubThreads()
-      unsubParticipants()
     }
-  }, [fetchThreads, queryClient])
+  }, [queryClient, enabled])
 }
 
 /**
