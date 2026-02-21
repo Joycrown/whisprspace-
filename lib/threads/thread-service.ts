@@ -39,12 +39,27 @@ export const fetchThreads = async (
       ? `is_saved.is.null,is_saved.eq.false,and(is_saved.eq.true,creator_id.eq.${userId})`
       : 'is_saved.is.null,is_saved.eq.false';
 
-    // Search
+    const nowIso = new Date().toISOString();
+    const expirationMode = filters.expiration ?? 'active';
+    const expirationLogic =
+      expirationMode === 'active'
+        ? `or(expires_at.is.null,expires_at.gt.${nowIso})`
+        : expirationMode === 'expired'
+          ? `and(expires_at.not.is.null,expires_at.lte.${nowIso})`
+          : null;
+
+    // Search + visibility + expiration are composed as grouped logical expressions.
     if (searchQuery) {
       const safeSearch = sanitizeSearch(searchQuery);
       const savedLogic = `or(${savedOrConditions})`;
       const searchLogic = `or(title.ilike.*${safeSearch}*,content.ilike.*${safeSearch}*)`;
-      queryFilters['and'] = `(${savedLogic},${searchLogic})`;
+      const andConditions = [savedLogic, searchLogic];
+      if (expirationLogic) {
+        andConditions.push(expirationLogic);
+      }
+      queryFilters['and'] = `(${andConditions.join(',')})`;
+    } else if (expirationLogic) {
+      queryFilters['and'] = `(or(${savedOrConditions}),${expirationLogic})`;
     } else {
       // Saved/Visibility logic using horizontal filtering (OR)
       queryFilters['or'] = `(${savedOrConditions})`;
@@ -79,13 +94,6 @@ export const fetchThreads = async (
       }
     } else if (!filters.privacy) {
       queryFilters['privacy'] = 'eq.public';
-    }
-
-    // Expiration
-    if (filters.expiration === 'active') {
-      queryFilters['expires_at'] = `gt.${new Date().toISOString()}`;
-    } else if (filters.expiration === 'expired') {
-      queryFilters['expires_at'] = `lte.${new Date().toISOString()}`;
     }
 
     // Sorting
