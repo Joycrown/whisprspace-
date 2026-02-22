@@ -635,11 +635,6 @@ export const addMessage = async (
   attachments?: unknown[],
   replyToId?: string
 ): Promise<Message> => {
-  console.log('📡 [Service] addMessage START', { threadId, userId, contentLength: content.length });
-  
-  // STEP 1: Minimal INSERT
-  console.log('📡 [Service] STEP 1: About to perform INSERT');
-  
   const { data: insertedData, error: insertError } = await rawDb.insert('messages', {
     thread_id: threadId,
     sender_id: userId,
@@ -647,74 +642,40 @@ export const addMessage = async (
     type,
     attachments: attachments || [],
     parent_message_id: replyToId || null,
-  }, { returning: true }); // Return inserted row
+  }, { returning: true });
 
   const inserted = insertedData?.[0];
 
-  console.log('📡 [Service] INSERT completed', { 
-    hasData: !!inserted, 
-    hasError: !!insertError,
-    error: insertError,
-    id: inserted?.id 
-  });
-
   if (insertError) {
-    console.error('❌ [Service] INSERT error:', insertError);
     throw insertError;
   }
 
   if (!inserted?.id) {
-    console.error('❌ [Service] No ID returned from insert');
     throw new Error('Message entry created but no ID returned');
   }
 
-  console.log('✅ [Service] INSERT SUCCESS, ID:', inserted.id);
-
-  // STEP 2: Separate Fetch with complex joins
-  console.log('📡 [Service] STEP 2: About to fetch with joins');
-  
-  const selectStr = `
-    *,
-    sender:users!messages_sender_id_fkey(id, username, anonymous_id, is_premium, avatar_url),
-    message_reactions(reaction_type, user_id),
-    parent_message:messages!parent_message_id(
-      id,
-      content,
-      sender:users!messages_sender_id_fkey(id, username, anonymous_id, avatar_url, is_premium)
-    )
-  `.replace(/\s+/g, '');
-
-  const { data: fetchedData, error: fetchError } = await rawDb.select<any>('messages', {
-    select: selectStr,
-    filters: { 'id': rawDb.filter.eq(inserted.id) },
-    single: true
-  });
-
-  const data = fetchedData;
-
-  console.log('📡 [Service] FETCH completed', { 
-    hasData: !!data, 
-    hasError: !!fetchError 
-  });
-
-  if (fetchError) {
-    console.error('❌ [Service] Post-insert fetch error:', fetchError);
-    throw fetchError;
-  }
-
-  if (!data) {
-    console.error('❌ [Service] No data from fetch');
-    throw new Error('Message created but could not be retrieved');
-  }
-
-  console.log('✅ [Service] FETCH SUCCESS');
-
-  
-
-  console.log('📡 [Service] About to transform message');
-  const transformed = transformMessage(data, userId);
-  console.log('✅ [Service] Message transformed, returning');
-  return transformed;
+  return transformMessage(
+    {
+      ...inserted,
+      sender: {
+        id: userId,
+        username: 'You',
+        anonymous_id: 'You',
+        avatar_url: '#cccccc',
+        is_premium: false,
+      },
+      message_likes: [],
+      message_reactions: [],
+      parent_message: replyToId
+        ? {
+            id: replyToId,
+            content: '',
+            sender: null,
+          }
+        : null,
+    },
+    userId
+  );
 }
 
 /**
@@ -1986,4 +1947,5 @@ export function transformMessage(msg: any, userId?: string): Message {
     attachments: msg.attachments || [],
   };
 }
+
 

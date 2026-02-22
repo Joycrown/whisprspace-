@@ -3,9 +3,8 @@
 import { useCallback } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/react-query/queryKeys'
-import { fetchMessages, DirectMessage, createDeliveryReceipt } from '@/lib/messaging/messaging-service'
+import { fetchMessages, DirectMessage } from '@/lib/messaging/messaging-service'
 import { useRealtimeSync } from '@/lib/react-query/realtime'
-import { getSession } from '@/lib/core/supabase/raw-auth'
 
 /**
  * React Query infinite query hook for conversation messages
@@ -304,12 +303,6 @@ export function useMessagesQuery(
     }
 
     if (eventType === 'INSERT' && record && recordId) {
-      const currentUserId = getSession()?.user?.id
-      const senderId = readStringField(record, ['sender_id', 'senderId'])
-      if (currentUserId && senderId !== currentUserId) {
-        void createDeliveryReceipt(recordId)
-      }
-
       queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
         upsertMessageInCache(old, mapRealtimeMessage(record), true)
       )

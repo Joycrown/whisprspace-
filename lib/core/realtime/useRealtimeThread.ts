@@ -19,6 +19,8 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
   const queryClient = useQueryClient()
   const [onlineUsers, setOnlineUsers] = useState<any[]>([])
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set())
+  const detailInvalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const listInvalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
 
 
@@ -316,6 +318,22 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
     })
   }
 
+  const scheduleThreadDetailRefresh = (delayMs = 300) => {
+    if (!threadId || detailInvalidateTimerRef.current) return
+    detailInvalidateTimerRef.current = setTimeout(() => {
+      detailInvalidateTimerRef.current = null
+      queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId), refetchType: 'active' })
+    }, delayMs)
+  }
+
+  const scheduleThreadListRefresh = (delayMs = 300) => {
+    if (listInvalidateTimerRef.current) return
+    listInvalidateTimerRef.current = setTimeout(() => {
+      listInvalidateTimerRef.current = null
+      queryClient.invalidateQueries({ queryKey: queryKeys.threads.lists(), refetchType: 'active' })
+    }, delayMs)
+  }
+
   useEffect(() => {
 
     if (!threadId) {
@@ -330,7 +348,7 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
       if (document.visibilityState === 'visible') {
 
         // The underlying supabase client handles auto-reconnects, but invalidating queries helps sync state
-        queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!) });
+        scheduleThreadDetailRefresh(0)
       }
     };
 
@@ -345,19 +363,20 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
         onMessageInsert: (payload) => {
           // Apply message immediately, then hydrate richer fields from backend.
           upsertRealtimeMessage(payload)
-          queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!), refetchType: 'active' });
-          queryClient.invalidateQueries({ queryKey: queryKeys.threads.lists() });
+          scheduleThreadDetailRefresh(350)
+          scheduleThreadListRefresh(250)
         },
         onMessageUpdate: (payload) => {
           patchRealtimeMessage(payload)
         },
         onMessageDelete: (payload) => {
           removeRealtimeMessage(payload)
-          queryClient.invalidateQueries({ queryKey: queryKeys.threads.lists() });
+          scheduleThreadDetailRefresh(250)
+          scheduleThreadListRefresh(200)
         },
         
         onThreadUpdate: () => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!) });
+          scheduleThreadDetailRefresh(120)
         },
 
         onMessageLikeInsert: (payload) => {
@@ -387,8 +406,8 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
           if (participantId) {
             updateParticipantCache(participantId, 'add');
           }
-          queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!) });
-          queryClient.invalidateQueries({ queryKey: queryKeys.threads.all });
+          scheduleThreadDetailRefresh(180)
+          scheduleThreadListRefresh(180)
         },
         onParticipantDelete: (payload) => {
 
@@ -396,8 +415,8 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
           if (participantId) {
             updateParticipantCache(participantId, 'remove');
           }
-          queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!) });
-          queryClient.invalidateQueries({ queryKey: queryKeys.threads.all });
+          scheduleThreadDetailRefresh(180)
+          scheduleThreadListRefresh(180)
         },
 
         onTyping: (payload) => {
@@ -436,7 +455,7 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
 
         pollId: pollId || undefined,
         onPollVote: () => {
-          queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(threadId!) });
+          scheduleThreadDetailRefresh(120)
         }
       });
       unsubscribers.push(unsubThreadEvents);
@@ -445,6 +464,14 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
     }
 
     return () => {
+      if (detailInvalidateTimerRef.current) {
+        clearTimeout(detailInvalidateTimerRef.current)
+        detailInvalidateTimerRef.current = null
+      }
+      if (listInvalidateTimerRef.current) {
+        clearTimeout(listInvalidateTimerRef.current)
+        listInvalidateTimerRef.current = null
+      }
       unsubscribers.forEach((unsub) => unsub());
     }
     // Subscription should only rebuild when thread identity or current user changes.

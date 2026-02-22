@@ -256,9 +256,10 @@ export function useCreateThreadMessageMutation() {
 
     // Restored Optimistic Updates
     onMutate: async (newMsg) => {
+      const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       // Create an optimistic message
       const optimisticMessage: Message = {
-        id: `optimistic-${Date.now()}`,
+        id: optimisticId,
         threadId: newMsg.threadId,
         authorId: newMsg.userId,
         // Mock sender - UI handles basic display
@@ -294,7 +295,7 @@ export function useCreateThreadMessageMutation() {
         });
       }
 
-      return { previousThread };
+      return { previousThread, optimisticId };
     },
 
     onSuccess: (serverMessage, variables, context) => {
@@ -303,17 +304,26 @@ export function useCreateThreadMessageMutation() {
         queryKeys.threads.detail(variables.threadId),
         (oldData) => {
           if (!oldData) return oldData;
+          const existingMessages = oldData.messages || []
+          let replaced = false
 
-          // Replace optimistic message with server message
-          // Filter out the specific optimistic one we added and append the real one
-          // Or smarter: map over and replace if we can match them properties
+          const nextMessages = existingMessages.map((msg) => {
+            const shouldReplace = context?.optimisticId
+              ? msg.id === context.optimisticId
+              : (msg.id.startsWith('optimistic-') && msg.content === serverMessage.content)
+
+            if (!shouldReplace) return msg
+            replaced = true
+
+            return {
+              ...serverMessage,
+              sender: msg.sender,
+            }
+          })
+
           return {
             ...oldData,
-            messages: (oldData.messages || []).map((msg) => 
-               msg.id.startsWith('optimistic-') && msg.content === serverMessage.content
-                ? { ...serverMessage, sender: msg.sender } // Preserve sender info we mocked if needed, or let server override
-                : msg
-            ),
+            messages: replaced ? nextMessages : [...nextMessages, serverMessage],
           };
         }
       );
@@ -398,7 +408,17 @@ export function useLikeMessageMutation() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ messageId, userId, isLiked }: { messageId: string; userId: string; isLiked: boolean }) => {
+    mutationFn: async ({
+      messageId,
+      userId,
+      isLiked,
+      threadId,
+    }: {
+      messageId: string
+      userId: string
+      isLiked: boolean
+      threadId?: string
+    }) => {
       const success = isLiked
         ? await unlikeMessage(messageId, userId)
         : await likeMessage(messageId, userId)
@@ -407,11 +427,15 @@ export function useLikeMessageMutation() {
         throw new Error('Failed to toggle message like')
       }
       
-      return { success }
+      return { success, threadId }
     },
     
-    onSuccess: () => {
-      // Invalidate all thread messages
+    onSuccess: (_, variables) => {
+      if (variables.threadId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(variables.threadId) })
+        queryClient.invalidateQueries({ queryKey: queryKeys.threads.lists() })
+        return
+      }
       queryClient.invalidateQueries({ queryKey: queryKeys.threads.all })
     },
   })
@@ -428,12 +452,14 @@ export function useMessageReactionMutation() {
       messageId, 
       userId, 
       reaction, 
-      action 
+      action,
+      threadId,
     }: { 
       messageId: string; 
       userId: string; 
       reaction: string; 
-      action: 'add' | 'remove' 
+      action: 'add' | 'remove'
+      threadId?: string
     }) => {
       const success = action === 'add'
         ? await addMessageReaction(messageId, userId, reaction)
@@ -443,11 +469,14 @@ export function useMessageReactionMutation() {
         throw new Error(`Failed to ${action} reaction`)
       }
       
-      return { success }
+      return { success, threadId }
     },
     
-    onSuccess: () => {
-      // Invalidate all thread messages so the reaction shows up
+    onSuccess: (_, variables) => {
+      if (variables.threadId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.threads.detail(variables.threadId) })
+        return
+      }
       queryClient.invalidateQueries({ queryKey: queryKeys.threads.all })
     },
   })
@@ -571,7 +600,6 @@ export function useJoinThreadMutation() {
  */
 export function useLeaveThreadMutation() {
   const queryClient = useQueryClient()
-  const { session } = useUserStore()
   const toast = useToastHelpers()
 
   return useMutation({

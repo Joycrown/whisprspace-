@@ -408,7 +408,8 @@ const ThreadPage = () => {
       messageId,
       userId: currentUserId,
       reaction,
-      action
+      action,
+      threadId,
     });
   };
 

@@ -80,16 +80,44 @@ export const subscribeToThreadEvents = (config: ThreadEventsConfig): (() => void
     channelConfig.postgres_changes.push({ event: 'UPDATE', schema: 'public', table: 'threads', filter: `id=eq.${threadId}` });
   }
 
-  // 3. Message likes (table has no thread_id, filtered in callback layer)
+  // 3. Message likes (thread-scoped for lower payload volume)
   if (config.onMessageLikeInsert || config.onMessageLikeDelete) {
-    if (config.onMessageLikeInsert) channelConfig.postgres_changes.push({ event: 'INSERT', schema: 'public', table: 'message_likes' });
-    if (config.onMessageLikeDelete) channelConfig.postgres_changes.push({ event: 'DELETE', schema: 'public', table: 'message_likes' });
+    if (config.onMessageLikeInsert) {
+      channelConfig.postgres_changes.push({
+        event: 'INSERT',
+        schema: 'public',
+        table: 'message_likes',
+        filter: `thread_id=eq.${threadId}`,
+      });
+    }
+    if (config.onMessageLikeDelete) {
+      channelConfig.postgres_changes.push({
+        event: 'DELETE',
+        schema: 'public',
+        table: 'message_likes',
+        filter: `thread_id=eq.${threadId}`,
+      });
+    }
   }
 
-  // 4. Message reactions (table has no thread_id, filtered in callback layer)
+  // 4. Message reactions (thread-scoped for lower payload volume)
   if (config.onMessageReactionInsert || config.onMessageReactionDelete) {
-    if (config.onMessageReactionInsert) channelConfig.postgres_changes.push({ event: 'INSERT', schema: 'public', table: 'message_reactions' });
-    if (config.onMessageReactionDelete) channelConfig.postgres_changes.push({ event: 'DELETE', schema: 'public', table: 'message_reactions' });
+    if (config.onMessageReactionInsert) {
+      channelConfig.postgres_changes.push({
+        event: 'INSERT',
+        schema: 'public',
+        table: 'message_reactions',
+        filter: `thread_id=eq.${threadId}`,
+      });
+    }
+    if (config.onMessageReactionDelete) {
+      channelConfig.postgres_changes.push({
+        event: 'DELETE',
+        schema: 'public',
+        table: 'message_reactions',
+        filter: `thread_id=eq.${threadId}`,
+      });
+    }
   }
 
   // 5. Thread Likes

@@ -1,5 +1,6 @@
 'use client'
 
+import { useCallback, useEffect, useRef } from 'react'
 import { useQuery, UseQueryOptions } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/react-query/queryKeys'
 import { fetchConversations, Conversation } from '@/lib/messaging/messaging-service'
@@ -38,6 +39,7 @@ interface UseUnreadCountQueryOptions {
 export function useConversationsQuery(options: UseConversationsQueryOptions = {}) {
   const { session } = useUserStore()
   const isAuthed = Boolean(session.user)
+  const userId = session.user?.id
   const {
     enableRealtime = true,
     autoRefreshInterval,
@@ -59,20 +61,43 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
       return result.data
     },
     // Realtime keeps this fresh; avoid aggressive refetch churn.
-    staleTime: 60 * 1000,
+    staleTime: 2 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchInterval: enableRealtime ? false : autoRefreshInterval,
     placeholderData: (previousData) => previousData,
     enabled: queryEnabled,
     ...restQueryOptions,
   })
+  const refetchConversations = query.refetch
+
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleRealtimeRefresh = useCallback(() => {
+    if (refreshTimerRef.current) return
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null
+      refetchConversations()
+    }, 120)
+  }, [refetchConversations])
+
+  useEffect(() => {
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current)
+        refreshTimerRef.current = null
+      }
+    }
+  }, [])
 
   useRealtimeSync({
     table: 'direct_messages',
     event: '*',
     queryKey: queryKeys.conversations.lists(),
     schema: 'public',
+    invalidateQuery: false,
     enabled: enableRealtime && queryEnabled,
+    onPayload: () => {
+      scheduleRealtimeRefresh()
+    },
   })
 
   useRealtimeSync({
@@ -80,7 +105,12 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
     event: '*',
     queryKey: queryKeys.conversations.lists(),
     schema: 'public',
+    filter: userId ? `user_id=eq.${userId}` : undefined,
+    invalidateQuery: false,
     enabled: enableRealtime && queryEnabled,
+    onPayload: () => {
+      scheduleRealtimeRefresh()
+    },
   })
 
   return {

@@ -13,6 +13,20 @@ import {
   DMMessageType,
 } from '@/lib/messaging/messaging-service'
 
+type InfiniteMessagesCache = {
+  pages: Array<{ messages: DirectMessage[]; nextOffset?: number }>
+  pageParams: unknown[]
+}
+
+type ConversationCacheItem = {
+  id: string
+  lastMessage?: DirectMessage
+  lastMessageAt?: string
+  updatedAt?: string
+  createdAt?: string
+  [key: string]: unknown
+}
+
 /**
  * Hook for sending messages with optimistic updates
  */
@@ -63,8 +77,9 @@ export function useSendMessageMutation(conversationId: string) {
       }
 
       // Optimistically add message
+      const optimisticId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       const optimisticMessage: DirectMessage = {
-        id: `temp-${Date.now()}`,
+        id: optimisticId,
         conversationId,
         senderId: currentUserId,
         content: variables.content,
@@ -79,7 +94,7 @@ export function useSendMessageMutation(conversationId: string) {
       // Update cache optimistically
       queryClient.setQueryData(
         queryKeys.conversations.messages(conversationId),
-        (old: any) => {
+        (old: InfiniteMessagesCache | undefined) => {
           if (!old) return { pages: [{ messages: [optimisticMessage], nextOffset: undefined }], pageParams: [0] }
           
           const newPages = [...old.pages]
@@ -94,7 +109,7 @@ export function useSendMessageMutation(conversationId: string) {
         }
       )
 
-      return { previousMessages }
+      return { previousMessages, optimisticId }
     },
     
     // Rollback on error
@@ -108,15 +123,15 @@ export function useSendMessageMutation(conversationId: string) {
     },
     
     // Reconcile optimistic row with server row for instant delivery UX
-    onSuccess: (serverMessage) => {
+    onSuccess: (serverMessage, _variables, context) => {
       queryClient.setQueryData(
         queryKeys.conversations.messages(conversationId),
-        (old: any) => {
+        (old: InfiniteMessagesCache | undefined) => {
           if (!old?.pages) {
             return { pages: [{ messages: [serverMessage], nextOffset: undefined }], pageParams: [0] }
           }
 
-          const pages = old.pages.map((page: any) => ({
+          const pages = old.pages.map((page) => ({
             ...page,
             messages: [...(page.messages || [])],
           }))
@@ -137,12 +152,15 @@ export function useSendMessageMutation(conversationId: string) {
             return { ...old, pages: [{ messages: [serverMessage], nextOffset: undefined }], pageParams: old.pageParams || [0] }
           }
 
-          const optimisticIndex = firstPage.messages.findIndex(
-            (message: DirectMessage) =>
-              message.id.startsWith('temp-') &&
-              message.senderId === serverMessage.senderId &&
-              message.content === serverMessage.content &&
-              message.messageType === serverMessage.messageType
+          const optimisticIndex = firstPage.messages.findIndex((message: DirectMessage) =>
+            context?.optimisticId
+              ? message.id === context.optimisticId
+              : (
+                  message.id.startsWith('temp-') &&
+                  message.senderId === serverMessage.senderId &&
+                  message.content === serverMessage.content &&
+                  message.messageType === serverMessage.messageType
+                )
           )
 
           if (optimisticIndex !== -1) {
@@ -155,15 +173,54 @@ export function useSendMessageMutation(conversationId: string) {
         }
       )
 
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.detail(conversationId),
-      })
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.lists(),
-      })
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.conversations.unreadCount(),
-      })
+      const messageTimestamp = serverMessage.createdAt || new Date().toISOString()
+
+      queryClient.setQueryData(
+        queryKeys.conversations.detail(conversationId),
+        (old: ConversationCacheItem | undefined) => {
+          if (!old) return old
+          return {
+            ...old,
+            lastMessage: {
+              ...(old.lastMessage || {}),
+              ...serverMessage,
+            },
+            lastMessageAt: messageTimestamp,
+            updatedAt: messageTimestamp,
+          }
+        }
+      )
+
+      queryClient.setQueryData(
+        queryKeys.conversations.lists(),
+        (old: ConversationCacheItem[] | undefined) => {
+          if (!Array.isArray(old)) return old
+
+          const updatedConversations = old.map((conversation) => {
+            if (conversation.id !== conversationId) return conversation
+
+            return {
+              ...conversation,
+              lastMessage: {
+                ...(conversation.lastMessage || {}),
+                ...serverMessage,
+              },
+              lastMessageAt: messageTimestamp,
+              updatedAt: messageTimestamp,
+            }
+          })
+
+          return [...updatedConversations].sort((a, b) => {
+            const aTime = new Date(
+              a.lastMessage?.createdAt || a.lastMessageAt || a.updatedAt || a.createdAt
+            ).getTime()
+            const bTime = new Date(
+              b.lastMessage?.createdAt || b.lastMessageAt || b.updatedAt || b.createdAt
+            ).getTime()
+            return bTime - aTime
+          })
+        }
+      )
     },
   })
 }

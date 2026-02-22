@@ -123,6 +123,28 @@ const mapParticipant = (row: any): ConversationParticipant => ({
   user: mapUser(row.user),
 })
 
+const mapConversationSnapshot = (row: any): Conversation => {
+  const participants = Array.isArray(row.participants)
+    ? row.participants.map(mapParticipant)
+    : []
+  const lastMessage = row.last_message ? mapDirectMessage(row.last_message) : undefined
+  const unreadCount =
+    typeof row.unread_count === 'number'
+      ? row.unread_count
+      : Number.parseInt(String(row.unread_count ?? '0'), 10) || 0
+
+  return {
+    id: row.id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    lastMessageAt: row.last_message_at || lastMessage?.createdAt || row.updated_at || row.created_at,
+    participants,
+    lastMessage,
+    unreadCount,
+    type: row.type || 'direct',
+  }
+}
+
 const isDuplicateConversationParticipantError = (error: unknown) => {
   if (!error) return false
   const message =
@@ -257,6 +279,17 @@ export const fetchConversations = async (): Promise<{
     if (!user) {
       console.warn('FetchConversations: No user found')
       return { data: [], error: 'User not authenticated' }
+    }
+
+    // Fast path: single RPC returns conversation + participants + last message + unread counts.
+    const snapshotResponse = await rawDb.rpc<any[]>('get_user_conversations_snapshot', {
+      p_user_id: user.id,
+      p_limit: 250,
+    })
+
+    if (!snapshotResponse.error && Array.isArray(snapshotResponse.data)) {
+      const mapped = snapshotResponse.data.map(mapConversationSnapshot)
+      return { data: mapped, error: null }
     }
 
     // Attempt 1: Optimized query with complex join
@@ -571,30 +604,33 @@ export const sendMessage = async (
 
     if (insertError) throw insertError
 
-    const messageId = insertedData && insertedData[0]?.id;
-    if (!messageId) throw new Error("Inserted message has no ID");
+    const inserted = insertedData && insertedData[0]
+    if (!inserted?.id) throw new Error('Inserted message has no ID')
 
-    // Fetch the full message details separately to ensure we handle the join correctly
-    const { data, error } = await rawDb.select<any>('direct_messages', {
-      select: `
-        *,
-        sender:users!direct_messages_sender_id_fkey(id, anonymous_id, avatar_url),
-        message_read_receipts(*),
-        message_delivery_receipts(*)
-      `.replace(/\s+/g, ''),
-      filters: { 'id': rawDb.filter.eq(messageId) },
-      single: true
-    });
+    const now = inserted.created_at || new Date().toISOString()
+    const mapped = mapDirectMessage({
+      ...inserted,
+      sender: {
+        id: user.id,
+        anonymous_id: user.anonymous_id ?? user.anonymousId ?? 'You',
+        avatar_url: user.avatar_url ?? user.avatarUrl,
+      },
+      message_read_receipts: [],
+      message_delivery_receipts: [
+        {
+          message_id: inserted.id,
+          user_id: user.id,
+          delivered_at: now,
+        },
+      ],
+    })
 
-    if (error) throw error
-
-      const mapped = data ? mapDirectMessage(data) : null
-      return { data: mapped, error: null }
-    } catch (error: any) {
-      console.error('Send message error:', error)
-      return { data: null, error: error.message || 'Failed to send message' }
-    }
+    return { data: mapped, error: null }
+  } catch (error: any) {
+    console.error('Send message error:', error)
+    return { data: null, error: error.message || 'Failed to send message' }
   }
+}
 
 /**
  * Edit a message
@@ -673,6 +709,40 @@ export const markConversationRead = async (
   } catch (error: any) {
     console.error('Mark conversation read error:', error)
     return { success: false, error: error.message || 'Failed to mark as read' }
+  }
+}
+
+/**
+ * Mark a conversation read and upsert all read receipts in a single RPC.
+ */
+export const markConversationReadWithReceipts = async (
+  conversationId: string
+): Promise<{ success: boolean; insertedCount: number; error: string | null }> => {
+  try {
+    const session = rawAuth.getSession()
+    const user = session?.user
+
+    if (!user) {
+      return { success: false, insertedCount: 0, error: 'User not authenticated' }
+    }
+
+    const { data, error } = await rawDb.rpc<number>('mark_conversation_read_with_receipts', {
+      p_conversation_id: conversationId,
+      p_user_id: user.id,
+    })
+
+    if (error) {
+      const fallback = await markConversationRead(conversationId)
+      if (fallback.success) {
+        return { success: true, insertedCount: 0, error: null }
+      }
+      throw error
+    }
+
+    return { success: true, insertedCount: data || 0, error: null }
+  } catch (error: any) {
+    console.error('Mark conversation read with receipts error:', error)
+    return { success: false, insertedCount: 0, error: error.message || 'Failed to mark as read' }
   }
 }
 

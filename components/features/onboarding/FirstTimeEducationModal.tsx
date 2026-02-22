@@ -5,98 +5,86 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   ArrowRight,
-  BookOpen,
   Crown,
-  Lock,
-  MessageSquare,
-  PlusCircle,
-  Shield,
   X,
+  Sparkles,
+  Globe,
+  Inbox,
+  User,
+  ListPlus,
+  Zap,
+  MessageCircle,
+  Bell,
+  Settings2,
+  ShieldCheck,
+  CheckCircle2,
+  PlusCircle
 } from 'lucide-react'
 import { useUserStore } from '@/store/userStore'
 import { UserPreferences } from '@/types'
 
-const ONBOARDING_VERSION = '2026-02-thread-guide-v1'
+const ONBOARDING_VERSION = '2026-02-thread-guide-v2'
+
+type GuidePoint = {
+  text: string
+  icon: React.ElementType
+}
 
 type GuideStep = {
   id: string
   title: string
   subtitle: string
-  points: string[]
+  points: GuidePoint[]
   ctaLabel?: string
   ctaHref?: string
+  mainIcon: React.ElementType
+  color: string
 }
 
 const GUIDE_STEPS: GuideStep[] = [
   {
     id: 'welcome',
     title: 'Welcome to WhisprSpace',
-    subtitle: 'This short guide helps new users navigate quickly.',
+    subtitle: 'Your central hub for meaningful conversations.',
+    mainIcon: Sparkles,
+    color: 'from-indigo-600 via-purple-600 to-fuchsia-600',
     points: [
-      'Use Threads as your main hub for conversations.',
-      'Use Inbox for direct messages and private conversations.',
-      'Use Profile to control preferences and notification settings.',
+      { text: 'Discover & join public Threads.', icon: Globe },
+      { text: 'Private 1-on-1s in your Inbox.', icon: Inbox },
+      { text: 'Manage your settings in Profile.', icon: User },
     ],
-    ctaLabel: 'Open Threads Feed',
+    ctaLabel: 'Explore Threads',
     ctaHref: '/threads',
   },
   {
     id: 'create',
-    title: 'Create Threads',
-    subtitle: 'Start a thread from the create screen and pick a format.',
+    title: 'Create & Share',
+    subtitle: 'Start discussions exactly how you want them.',
+    mainIcon: ListPlus,
+    color: 'from-cyan-500 via-blue-600 to-indigo-700',
     points: [
-      'Text thread: normal discussion with replies and reactions.',
-      'Poll thread: add options, then let participants vote.',
-      'Premium thread: set a price for paid access.',
+      { text: 'Standard, Poll, or Premium formats.', icon: PlusCircle },
+      { text: 'Set clear privacy controls.', icon: ShieldCheck },
+      { text: 'Monetize with Premium access.', icon: Crown },
     ],
-    ctaLabel: 'Go To Create Thread',
+    ctaLabel: 'Create Thread',
     ctaHref: '/threads/create',
   },
   {
-    id: 'privacy',
-    title: 'Choose Thread Privacy',
-    subtitle: 'Every thread should have the right visibility.',
+    id: 'engage',
+    title: 'Engage & Manage',
+    subtitle: 'Stay active and always in control.',
+    mainIcon: Zap,
+    color: 'from-emerald-500 via-teal-600 to-cyan-700',
     points: [
-      'Public: anyone can discover and join.',
-      'Private or Invite-only: access requires invitation.',
-      'For private sharing, use the generated invite link in management.',
+      { text: 'Real-time typing & @mentions.', icon: MessageCircle },
+      { text: 'Get instant push notifications.', icon: Bell },
+      { text: 'Powerful moderation tools.', icon: Settings2 },
     ],
-  },
-  {
-    id: 'premium',
-    title: 'Understand Premium Threads',
-    subtitle: 'Premium threads are paid-access conversations.',
-    points: [
-      'Set the price while creating or editing premium thread settings.',
-      'Only confirmed payment unlocks full access.',
-      'You can still grant free access using invite paths when needed.',
-    ],
-  },
-  {
-    id: 'manage',
-    title: 'Manage Your Threads',
-    subtitle: 'Use the thread sidebar and manage panel for controls.',
-    points: [
-      'Invite participants and manage membership.',
-      'Lock, save, extend, or delete threads when necessary.',
-      'Remove or moderate participants if rules are violated.',
-    ],
-    ctaLabel: 'Open My Threads',
+    ctaLabel: 'Manage Threads',
     ctaHref: '/my-threads',
   },
-  {
-    id: 'messaging',
-    title: 'Messaging And Mentions',
-    subtitle: 'Stay active with mentions and realtime typing updates.',
-    points: [
-      'Type @ to mention participants quickly from the composer.',
-      'Use notifications to track replies, mentions, invites, and updates.',
-      'Typing indicators show who is actively writing in threads and DMs.',
-    ],
-  },
 ]
-
-const stepIcons = [BookOpen, PlusCircle, Lock, Crown, Shield, MessageSquare]
 
 const FirstTimeEducationModal: React.FC = () => {
   const router = useRouter()
@@ -182,121 +170,130 @@ const FirstTimeEducationModal: React.FC = () => {
   }
 
   const currentStep = GUIDE_STEPS[stepIndex]
-  const Icon = stepIcons[stepIndex] || BookOpen
   const isLastStep = stepIndex === GUIDE_STEPS.length - 1
 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[1400] bg-black/70 backdrop-blur-sm modal-safe-overlay flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl rounded-2xl border border-slate-700 bg-[#0E1422] text-white shadow-2xl modal-safe-panel overflow-y-auto">
-        <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="h-9 w-9 rounded-full bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center flex-shrink-0">
-              <Icon className="h-4 w-4 text-indigo-300" />
+    <div className="fixed inset-0 z-[1400] bg-black/80 backdrop-blur-md modal-safe-overlay flex items-center justify-center p-4">
+      <div className="w-full max-w-4xl rounded-3xl border border-slate-700/50 bg-[#0A0F1C] text-white shadow-2xl modal-safe-panel flex flex-col md:flex-row overflow-hidden relative min-h-[500px]">
+
+        {/* Close Button positioned absolutely */}
+        <button
+          type="button"
+          onClick={() => markOnboardingSeen(true)}
+          disabled={isSaving}
+          className="absolute top-4 right-4 z-50 p-2.5 rounded-full bg-black/20 hover:bg-black/40 text-white/70 hover:text-white backdrop-blur-md transition-all disabled:opacity-50"
+          aria-label="Skip onboarding"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        {/* Left Visual Area - Hidden on mobile, shown on md+ */}
+        <div className={`hidden md:flex flex-col relative w-2/5 p-8 transition-colors duration-700 bg-gradient-to-br ${currentStep.color}`}>
+          <div className="absolute inset-0 bg-black/10 backdrop-blur-2xl mix-blend-overlay" />
+          <div className="absolute -top-24 -left-24 w-64 h-64 bg-white/20 rounded-full blur-3xl" />
+          <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-black/40 rounded-full blur-3xl" />
+
+          <div className="relative z-10 flex-1 flex flex-col items-center justify-center gap-6 mt-4">
+            <div className="w-32 h-32 rounded-[2rem] bg-white/10 shadow-[0_0_40px_rgba(255,255,255,0.15)] backdrop-blur-xl flex items-center justify-center border border-white/20 transform transition-all duration-500 hover:rotate-6 hover:scale-105">
+              <currentStep.mainIcon className="h-16 w-16 text-white drop-shadow-md" strokeWidth={1.5} />
             </div>
-            <div className="min-w-0">
-              <p className="text-sm text-slate-300">First-time guide</p>
-              <p className="text-sm font-semibold truncate">
-                Step {stepIndex + 1} of {GUIDE_STEPS.length}
-              </p>
+            {/* Progress dots */}
+            <div className="flex gap-2 mt-8">
+              {GUIDE_STEPS.map((_, i) => (
+                <div key={i} className={`h-2 rounded-full transition-all duration-300 ${i === stepIndex ? 'w-8 bg-white' : 'w-2 bg-white/30'}`} />
+              ))}
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => markOnboardingSeen(true)}
-            disabled={isSaving}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/60 transition-colors disabled:opacity-50"
-            aria-label="Skip onboarding"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
 
-        <div className="px-5 pt-4">
-          <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-indigo-500 to-cyan-400 transition-all duration-300"
-              style={{ width: `${((stepIndex + 1) / GUIDE_STEPS.length) * 100}%` }}
-            />
+        {/* Mobile-only visual header */}
+        <div className={`md:hidden flex flex-col items-center justify-center h-48 w-full relative overflow-hidden bg-gradient-to-br ${currentStep.color} transition-colors duration-700`}>
+          <div className="absolute inset-0 bg-black/10 backdrop-blur-2xl mix-blend-overlay" />
+          <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/20 rounded-full blur-2xl" />
+          <div className="relative z-10 w-20 h-20 rounded-2xl bg-white/10 shadow-lg backdrop-blur-xl flex items-center justify-center border border-white/20">
+            <currentStep.mainIcon className="h-10 w-10 text-white drop-shadow-md" strokeWidth={1.5} />
           </div>
         </div>
 
-        <div className="px-5 py-6">
-          <h2 className="text-2xl font-bold">{currentStep.title}</h2>
-          <p className="mt-2 text-slate-300">{currentStep.subtitle}</p>
+        {/* Right Content Area */}
+        <div className="flex-1 flex flex-col relative w-full md:w-3/5 bg-slate-900 md:bg-transparent">
+          <div className="flex-1 px-6 py-8 md:p-12 flex flex-col justify-center">
 
-          <div className="mt-5 space-y-3">
-            {currentStep.points.map((point) => (
-              <div
-                key={point}
-                className="rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 text-sm text-slate-200"
+            {/* Mobile Progress Dots */}
+            <div className="flex md:hidden gap-1.5 mb-6">
+              {GUIDE_STEPS.map((_, i) => (
+                <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === stepIndex ? 'w-6 bg-indigo-500' : 'w-1.5 bg-slate-700'}`} />
+              ))}
+            </div>
+
+            <h2 className="text-3xl font-extrabold tracking-tight text-white mb-3">
+              {currentStep.title}
+            </h2>
+            <p className="text-slate-400 text-lg mb-8 max-w-sm">
+              {currentStep.subtitle}
+            </p>
+
+            <div className="space-y-4 mb-8">
+              {currentStep.points.map((point, idx) => (
+                <div key={idx} className="flex items-center gap-4 group">
+                  <div className="flex-shrink-0 p-3 rounded-2xl bg-white/5 border border-white/10 group-hover:bg-white/10 group-hover:scale-110 transition-all duration-300">
+                    <point.icon className="h-6 w-6 text-indigo-300 group-hover:text-indigo-200" strokeWidth={1.5} />
+                  </div>
+                  <span className="text-slate-200 font-medium text-lg leading-snug">
+                    {point.text}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-auto pt-8 flex items-center justify-between border-t border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setStepIndex((prev) => Math.max(0, prev - 1))}
+                disabled={stepIndex === 0 || isSaving}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all duration-300 ${stepIndex === 0
+                  ? 'opacity-0 pointer-events-none'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}
               >
-                {point}
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </button>
+
+              <div className="flex items-center gap-3">
+                {!isLastStep ? (
+                  <button
+                    type="button"
+                    onClick={() => setStepIndex((prev) => Math.min(GUIDE_STEPS.length - 1, prev + 1))}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-2 group rounded-xl bg-white text-black px-6 py-3 font-semibold hover:bg-slate-200 transition-all duration-300 disabled:opacity-50"
+                  >
+                    Next
+                    <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => markOnboardingSeen(false)}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-2 group rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 px-6 py-3 font-bold text-white shadow-lg shadow-indigo-500/25 hover:opacity-90 hover:scale-105 transition-all duration-300 disabled:opacity-50"
+                  >
+                    Finish Guide
+                    <CheckCircle2 className="h-5 w-5" />
+                  </button>
+                )}
               </div>
-            ))}
+            </div>
+
           </div>
         </div>
 
-        <div className="border-t border-slate-700 px-5 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setStepIndex((prev) => Math.max(0, prev - 1))}
-              disabled={stepIndex === 0 || isSaving}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-100 hover:bg-slate-700/50 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back
-            </button>
-
-            {currentStep.ctaHref && currentStep.ctaLabel && (
-              <button
-                type="button"
-                onClick={() => router.push(currentStep.ctaHref!)}
-                disabled={isSaving}
-                className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-sm text-cyan-100 hover:bg-cyan-500/20"
-              >
-                {currentStep.ctaLabel}
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => markOnboardingSeen(true)}
-              disabled={isSaving}
-              className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700/50 disabled:opacity-50"
-            >
-              Skip Tour
-            </button>
-
-            {!isLastStep ? (
-              <button
-                type="button"
-                onClick={() => setStepIndex((prev) => Math.min(GUIDE_STEPS.length - 1, prev + 1))}
-                disabled={isSaving}
-                className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-600 to-cyan-500 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
-              >
-                Next
-                <ArrowRight className="h-4 w-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => markOnboardingSeen(false)}
-                disabled={isSaving}
-                className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-50"
-              >
-                Finish Guide
-              </button>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   )
 }
 
 export default FirstTimeEducationModal
+
