@@ -1,14 +1,29 @@
 'use client'
 
-import { Suspense, useState, useEffect, useCallback } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { MessageCircle, Mail, MailOpen, Lock, Copy, Check, Zap } from 'lucide-react';
-import { useConversationsQuery, Conversation, DirectMessage, markConversationRead } from '@/lib/messaging';
+import { useConversationsQuery, Conversation, DirectMessage, markConversationReadWithReceipts } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
 import AppLoadingState from '@/components/ui/AppLoadingState';
 import MessageModal from '@/components/features/inbox/MessageModal';
 
 type TabType = 'all' | 'unread';
+
+const getConversationTimestamp = (conversation: Conversation) => {
+  return (
+    conversation.lastMessage?.createdAt ||
+    conversation.lastMessageAt ||
+    conversation.updatedAt ||
+    conversation.createdAt
+  );
+};
+
+const getConversationSortTime = (conversation: Conversation) => {
+  const timestamp = getConversationTimestamp(conversation);
+  const time = new Date(timestamp).getTime();
+  return Number.isNaN(time) ? 0 : time;
+};
 
 function InboxPageContent() {
   const router = useRouter();
@@ -61,10 +76,16 @@ function InboxPageContent() {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const filteredConversations = conversations.filter(conv => {
-    if (activeTab === 'unread') return (conv.unreadCount || 0) > 0;
-    return true;
-  });
+  const filteredConversations = useMemo(() => {
+    const scoped = conversations.filter((conv) => {
+      if (activeTab === 'unread') return (conv.unreadCount || 0) > 0;
+      return true;
+    });
+
+    return [...scoped].sort(
+      (a, b) => getConversationSortTime(b) - getConversationSortTime(a)
+    );
+  }, [activeTab, conversations]);
   const unreadCount = conversations.reduce((count, conversation) => {
     return count + (conversation.unreadCount || 0)
   }, 0);
@@ -99,7 +120,7 @@ function InboxPageContent() {
       setIsModalOpen(false);
     }
 
-    markConversationRead(conversation.id).then(() => {
+    markConversationReadWithReceipts(conversation.id).then(() => {
       refetchConversations();
     });
   }, [refetchConversations]);
@@ -166,8 +187,10 @@ function InboxPageContent() {
 
 
 
-  const formatTimestamp = (timestamp: string) => {
+  const formatTimestamp = (timestamp?: string) => {
+    if (!timestamp) return '';
     const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '';
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -367,7 +390,7 @@ function InboxPageContent() {
                             </div>
                             <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
                               <span className="text-[10px] md:text-xs text-gray-500">
-                                {formatTimestamp(conversation.lastMessageAt)}
+                                {formatTimestamp(getConversationTimestamp(conversation))}
                               </span>
                             </div>
                           </div>
@@ -439,7 +462,7 @@ function InboxPageContent() {
                             </div>
                             <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
                               <span className="text-[10px] md:text-xs text-gray-500">
-                                {formatTimestamp(conversation.lastMessageAt)}
+                                {formatTimestamp(getConversationTimestamp(conversation))}
                               </span>
                             </div>
                           </div>

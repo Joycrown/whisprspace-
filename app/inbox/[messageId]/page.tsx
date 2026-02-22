@@ -5,7 +5,7 @@ import type { ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter, useParams } from 'next/navigation';
 import { ArrowLeft, Send, Loader2, Check, CheckCheck, Clock, Image as ImageIcon, X } from 'lucide-react';
-import { createReadReceipt, markConversationDelivered, markConversationRead, useConversationQuery, useMessagesQuery, useSendMessageMutation } from '@/lib/messaging';
+import { markConversationDelivered, markConversationReadWithReceipts, useConversationQuery, useMessagesQuery, useSendMessageMutation } from '@/lib/messaging';
 import type { DirectMessage, MessageDeliveryReceipt, MessageReadReceipt } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
 import { uploadService } from '@/lib/utils/upload-service';
@@ -41,6 +41,10 @@ export default function ConversationPage() {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const readSyncInFlightRef = useRef(false);
+  const deliverySyncInFlightRef = useRef(false);
+  const syncedReadReceiptMessageIdsRef = useRef<Set<string>>(new Set());
+  const syncedDeliveryMessageIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!selectedImage) {
@@ -92,31 +96,59 @@ export default function ConversationPage() {
   }, [sessionValidated, session.user, isLoading, conversation, conversationId, router]);
 
   useEffect(() => {
+    readSyncInFlightRef.current = false;
+    deliverySyncInFlightRef.current = false;
+    syncedReadReceiptMessageIdsRef.current.clear();
+    syncedDeliveryMessageIdsRef.current.clear();
+  }, [conversationId]);
+
+  useEffect(() => {
     if (!session.user || !conversationId) return;
 
-    const hasUndelivered = orderedMessages.some((msg) =>
-      msg.senderId !== session.user?.id &&
-      !msg.deliveryReceipts?.some((receipt) => receipt.userId === session.user?.id)
-    );
-
-    if (hasUndelivered) {
-      markConversationDelivered(conversationId);
-    }
-
-    orderedMessages.forEach((msg) => {
-      if (msg.senderId === session.user?.id) return;
-
-      const alreadyRead = msg.readReceipts?.some(
-        (receipt) => receipt.userId === session.user?.id
-      );
-
-      if (!alreadyRead) {
-        createReadReceipt(msg.id);
-      }
+    const unreadIncoming = orderedMessages.filter((msg) => {
+      if (msg.senderId === session.user?.id) return false;
+      if (syncedReadReceiptMessageIdsRef.current.has(msg.id)) return false;
+      return !msg.readReceipts?.some((receipt) => receipt.userId === session.user?.id);
     });
 
-    if (orderedMessages.length > 0) {
-      markConversationRead(conversationId);
+    if (unreadIncoming.length > 0 && !readSyncInFlightRef.current) {
+      const pendingReadIds = unreadIncoming.map((msg) => msg.id);
+      pendingReadIds.forEach((messageId) => syncedReadReceiptMessageIdsRef.current.add(messageId));
+      readSyncInFlightRef.current = true;
+      void markConversationReadWithReceipts(conversationId)
+        .then((result) => {
+          if (result.success) return;
+          pendingReadIds.forEach((messageId) => syncedReadReceiptMessageIdsRef.current.delete(messageId));
+        })
+        .catch(() => {
+          pendingReadIds.forEach((messageId) => syncedReadReceiptMessageIdsRef.current.delete(messageId));
+        })
+        .finally(() => {
+          readSyncInFlightRef.current = false;
+        });
+    }
+
+    const undeliveredIncoming = orderedMessages.filter((msg) => {
+      if (msg.senderId === session.user?.id) return false;
+      if (syncedDeliveryMessageIdsRef.current.has(msg.id)) return false;
+      return !msg.deliveryReceipts?.some((receipt) => receipt.userId === session.user?.id);
+    });
+
+    if (undeliveredIncoming.length > 0 && !deliverySyncInFlightRef.current) {
+      const pendingDeliveryIds = undeliveredIncoming.map((msg) => msg.id);
+      pendingDeliveryIds.forEach((messageId) => syncedDeliveryMessageIdsRef.current.add(messageId));
+      deliverySyncInFlightRef.current = true;
+      void markConversationDelivered(conversationId)
+        .then((result) => {
+          if (result.success) return;
+          pendingDeliveryIds.forEach((messageId) => syncedDeliveryMessageIdsRef.current.delete(messageId));
+        })
+        .catch(() => {
+          pendingDeliveryIds.forEach((messageId) => syncedDeliveryMessageIdsRef.current.delete(messageId));
+        })
+        .finally(() => {
+          deliverySyncInFlightRef.current = false;
+        });
     }
   }, [orderedMessages, session.user, conversationId]);
 
