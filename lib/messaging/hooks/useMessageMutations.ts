@@ -67,10 +67,10 @@ export function useSendMessageMutation(conversationId: string) {
       // Resolve current user id for proper optimistic alignment
       let currentUserId = 'current-user'
       try {
-        const { getSession } = await import('@/lib/core/supabase/raw-auth')
-        const session = getSession()
-        if (session?.user?.id) {
-          currentUserId = session.user.id
+        const { useUserStore } = await import('@/store/userStore')
+        const user = useUserStore.getState().session.user
+        if (user?.id) {
+          currentUserId = user.id
         }
       } catch {
         // Keep fallback
@@ -211,12 +211,12 @@ export function useSendMessageMutation(conversationId: string) {
           })
 
           return [...updatedConversations].sort((a, b) => {
-            const aTime = new Date(
-              a.lastMessage?.createdAt || a.lastMessageAt || a.updatedAt || a.createdAt
-            ).getTime()
-            const bTime = new Date(
-              b.lastMessage?.createdAt || b.lastMessageAt || b.updatedAt || b.createdAt
-            ).getTime()
+            const aTimeStr = a.lastMessage?.createdAt || a.lastMessageAt || a.updatedAt || a.createdAt
+            const bTimeStr = b.lastMessage?.createdAt || b.lastMessageAt || b.updatedAt || b.createdAt
+            
+            const aTime = aTimeStr ? new Date(aTimeStr).getTime() : 0
+            const bTime = bTimeStr ? new Date(bTimeStr).getTime() : 0
+            
             return bTime - aTime
           })
         }

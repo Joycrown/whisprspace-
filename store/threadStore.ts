@@ -8,7 +8,7 @@ import * as reactionService from '@/lib/threads/reaction-service';
 import * as rawRealtime from '@/lib/core/supabase/raw-realtime';
 import * as rawDb from '@/lib/core/supabase/raw-db';
 // import { supabase } from '@/lib/core/supabase/client';
-// import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export interface ThreadStore {
   // State
@@ -21,7 +21,7 @@ export interface ThreadStore {
   page: number;
   limit: number;
   hasMore: boolean;
-  messagesSubscription: RealtimeChannel | null;
+  messagesSubscription: any | null;
   
   // Actions
   fetchThreads: (append?: boolean, filtersOverride?: Partial<ThreadFilters>) => Promise<void>;
@@ -301,11 +301,52 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
   },
 
   addMessage: async (threadId: string, messageData: Omit<Message, 'id' | 'timestamp' | 'replies'> & { attachments?: Attachment[] }) => {
-    const userId = useUserStore.getState().session.user?.id;
-    if (!userId) return false;
+    const user = useUserStore.getState().session.user;
+    if (!user) return false;
+    const userId = user.id;
     
     console.log('Adding message:', { threadId, content: messageData.content, replyToId: messageData.replyToId });
     
+    // Optimistic Update
+    const tempId = `temp-${Date.now()}`;
+    const authorName = user.username || user.anonymousId || 'You';
+    const optimisticMessage: Message = {
+      ...messageData,
+      id: tempId,
+      threadId,
+      authorId: userId,
+      authorName,
+      sender: {
+        id: userId,
+        anonymousId: user.anonymousId || 'anonymous',
+        name: authorName,
+        avatar: '#cccccc',
+        isPremium: user.isPremium,
+        status: 'online',
+      },
+      content: messageData.content,
+      type: messageData.type || 'text',
+      timestamp: new Date().toISOString(),
+      likes: 0,
+      hasLiked: false,
+      replies: [],
+      reactions: {},
+      attachments: messageData.attachments || [],
+      status: 'sending'
+    };
+
+    set(state => {
+      const { currentThread } = state;
+      if (!currentThread || currentThread.id !== threadId) return state;
+
+      return {
+        currentThread: {
+          ...currentThread,
+          messages: [...currentThread.messages, optimisticMessage],
+        }
+      };
+    });
+
     const success = await threadService.addMessage(
       threadId,
       messageData.content,
@@ -317,6 +358,18 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
     
     if (!success) {
       console.error('Failed to add message');
+      // Revert optimistic update
+      set(state => {
+        const { currentThread } = state;
+        if (!currentThread || currentThread.id !== threadId) return state;
+
+        return {
+          currentThread: {
+            ...currentThread,
+            messages: currentThread.messages.filter(m => m.id !== tempId),
+          }
+        };
+      });
       return false;
     }
     
@@ -447,7 +500,7 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
     // Update the thread to add user to removed list
     const removedUsers = [...(thread.removedUsers || []), userId];
     const participants = 'participants' in thread 
-      ? thread.participants.filter(p => p.id !== userId)
+      ? (thread as ThreadData).participants.filter((p: any) => p.id !== userId)
       : [];
     
     const updates: Partial<ThreadData> = {

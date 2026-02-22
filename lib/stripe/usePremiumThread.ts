@@ -158,7 +158,7 @@ export const useThreadPurchaseStats = (threadId: string | null) => {
   const [stats, setStats] = useState({
     totalRevenue: 0,
     purchaseCount: 0,
-    purchases: [],
+    purchases: [] as any[],
   })
   const [isLoading, setIsLoading] = useState(true)
 
