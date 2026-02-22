@@ -208,14 +208,14 @@ export default function ChatWindow({ conversationId }: ChatWindowProps) {
 
       {/* Input Area */}
       <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-2 w-full max-w-full">
           <textarea
             value={messageInput}
             onChange={(e) => setMessageInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="Type a message..."
             rows={1}
-            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white resize-none"
+            className="flex-1 min-w-0 w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white resize-none text-base md:text-sm"
             style={{ maxHeight: '120px' }}
           />
           <button

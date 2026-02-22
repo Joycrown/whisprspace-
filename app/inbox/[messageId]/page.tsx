@@ -506,8 +506,8 @@ export default function ConversationPage() {
 
       {/* Message Input - Fixed at bottom */}
       <div className="shrink-0 border-t border-gray-800 bg-gray-900/95 backdrop-blur-sm p-4 sticky bottom-0 z-20 pb-[calc(1rem+env(safe-area-inset-bottom))]">
-        <div className="max-w-4xl mx-auto flex items-end gap-2">
-          <div className="flex-1 flex flex-col space-y-2">
+        <div className="w-full max-w-4xl mx-auto flex items-end gap-2">
+          <div className="flex-1 min-w-0 flex flex-col space-y-2">
             {imagePreviewUrl && (
               <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-gray-700">
                 <img
@@ -528,7 +528,7 @@ export default function ConversationPage() {
               </div>
             )}
 
-            <div className="flex items-end bg-gray-800 border border-gray-700 rounded-xl focus-within:ring-2 focus-within:ring-purple-500 transition-all">
+            <div className="flex items-end w-full min-w-0 max-w-full bg-gray-800 border border-gray-700 rounded-xl focus-within:ring-2 focus-within:ring-purple-500 transition-all">
               <textarea
                 value={messageText}
                 onChange={(e) => handleTyping(e.target.value)}
@@ -541,7 +541,7 @@ export default function ConversationPage() {
                 }}
                 placeholder="Your message..."
                 rows={1}
-                className="flex-1 px-4 py-3 bg-transparent text-white text-sm placeholder-gray-500 focus:outline-none resize-none"
+                className="flex-1 min-w-0 w-full px-4 py-3 bg-transparent text-white text-base md:text-sm placeholder-gray-500 focus:outline-none resize-none"
               />
               <input
                 ref={imageInputRef}

@@ -293,8 +293,8 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
           </div>
         )}
 
-        <div className="flex items-end gap-2">
-          <div className="relative flex items-end bg-gray-800 rounded-2xl flex-1 min-h-[44px]">
+        <div className="flex items-end gap-2 w-full max-w-full">
+          <div className="relative flex items-end bg-gray-800 rounded-2xl flex-1 min-w-0 min-h-[44px] max-w-full">
             {isMentionMenuOpen && filteredMentionSuggestions.length > 0 && (
               <div className="absolute bottom-full left-0 right-0 mb-2 max-h-56 overflow-y-auto rounded-xl border border-gray-700 bg-[#111827] shadow-2xl z-30">
                 {filteredMentionSuggestions.map((candidate, index) => {
@@ -343,7 +343,7 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
                   closeMentionMenu();
                 }, 100);
               }}
-              className="w-full bg-transparent p-2 md:p-3 rounded-2xl focus:outline-none text-sm md:text-base resize-none overflow-y-auto"
+              className="w-full min-w-0 max-w-full bg-transparent p-2 md:p-3 rounded-2xl focus:outline-none text-base md:text-base resize-none overflow-y-auto"
               onKeyDown={(e) => {
                 if (isMentionMenuOpen && filteredMentionSuggestions.length > 0) {
                   if (e.key === 'ArrowDown') {
@@ -433,9 +433,9 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
           </button>
         </div>
 
-        <div className="mt-2 flex items-center gap-1.5 px-1 text-[11px] md:text-xs text-gray-400">
+        <div className="mt-2 flex items-start gap-1.5 px-1 text-[11px] md:text-xs text-gray-400 min-w-0">
           <FaAt className="w-3 h-3 text-indigo-300" />
-          <span>Type @ to pick a participant. Press Ctrl/Cmd + Enter to send.</span>
+          <span className="min-w-0 break-words leading-snug">Type @ to pick a participant. Press Ctrl/Cmd + Enter to send.</span>
         </div>
       </div>
     </div>
