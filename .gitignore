@@ -54,3 +54,6 @@ SUPASE_EMAIL_SETUP.md
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# docs
+/docs/

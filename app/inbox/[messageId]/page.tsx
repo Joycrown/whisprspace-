@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter, useParams } from 'next/navigation';
@@ -102,7 +102,7 @@ export default function ConversationPage() {
     syncedDeliveryMessageIdsRef.current.clear();
   }, [conversationId]);
 
-  useEffect(() => {
+  const syncIncomingReceiptState = useCallback(() => {
     if (!session.user || !conversationId) return;
 
     const unreadIncoming = orderedMessages.filter((msg) => {
@@ -150,7 +150,33 @@ export default function ConversationPage() {
           deliverySyncInFlightRef.current = false;
         });
     }
-  }, [orderedMessages, session.user, conversationId]);
+  }, [conversationId, orderedMessages, session.user]);
+
+  useEffect(() => {
+    syncIncomingReceiptState();
+  }, [syncIncomingReceiptState]);
+
+  useEffect(() => {
+    if (!session.user || !conversationId) return;
+
+    const handleFocusSync = () => {
+      syncIncomingReceiptState();
+    };
+
+    const handleVisibilitySync = () => {
+      if (document.visibilityState === 'visible') {
+        syncIncomingReceiptState();
+      }
+    };
+
+    window.addEventListener('focus', handleFocusSync);
+    document.addEventListener('visibilitychange', handleVisibilitySync);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleVisibilitySync);
+    };
+  }, [conversationId, session.user, syncIncomingReceiptState]);
 
   useEffect(() => {
     if (!session.user || !conversationId) return;
@@ -533,6 +559,7 @@ export default function ConversationPage() {
                 value={messageText}
                 onChange={(e) => handleTyping(e.target.value)}
                 onKeyPress={handleKeyPress}
+                onFocus={syncIncomingReceiptState}
                 onBlur={() => {
                   typingChannelRef.current?.broadcast('typing', {
                     userId: session.user?.id,
