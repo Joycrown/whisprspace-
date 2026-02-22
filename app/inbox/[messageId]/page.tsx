@@ -274,16 +274,24 @@ export default function ConversationPage() {
         if (imageInputRef.current) {
           imageInputRef.current.value = '';
         }
+        setMessageText('');
+        setIsUploadingImage(false);
       } else {
-        await sendMessageMutation.mutateAsync({
+        // Optimistically clear the input field instantly
+        setMessageText('');
+        sendMessageMutation.mutate({
           content: trimmedContent,
           messageType: 'text',
+        }, {
+          onError: (err) => {
+            // Optional: Restore message input if send failed without reloading
+            // setMessageText(trimmedContent);
+            console.error('Failed to send text message:', err);
+          }
         });
       }
-      setMessageText('');
     } catch (sendError) {
-      console.error('Failed to send message:', sendError);
-    } finally {
+      console.error('Failed to handle image upload/send:', sendError);
       setIsUploadingImage(false);
     }
   };
