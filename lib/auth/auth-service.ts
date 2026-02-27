@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as rawAuth from '@/lib/core/supabase/raw-auth'
 import * as rawDb from '@/lib/core/supabase/raw-db'
 import { supabase } from '@/lib/core/supabase/client'
 import type { User } from '@/types'
 
 // Generate anonymous user ID
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const generateAnonymousId = (): string => {
   const randomNum = Math.floor(Math.random() * 100000000)
   return `ANON_${randomNum.toString().padStart(8, '0')}`
