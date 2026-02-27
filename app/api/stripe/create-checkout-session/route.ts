@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { createClient as createSupabaseServerClient } from '@/lib/core/supabase/server'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
+import { buildThreadPath } from '@/lib/threads/thread-url'
 
 // Initialize Stripe - will need API key in .env
 const stripe = process.env.STRIPE_SECRET_KEY
@@ -143,6 +144,7 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+    const threadPath = buildThreadPath({ id: threadId, title: thread.title || undefined })
 
     // Create Stripe Checkout session
     const session = await stripe.checkout.sessions.create({
@@ -162,8 +164,8 @@ export async function POST(request: NextRequest) {
         },
       ],
       mode: 'payment',
-      success_url: `${baseUrl}/threads/${threadId}?purchased=true`,
-      cancel_url: `${baseUrl}/threads/${threadId}?purchased=false`,
+      success_url: `${baseUrl}${threadPath}?purchased=true`,
+      cancel_url: `${baseUrl}${threadPath}?purchased=false`,
       customer_email: user.email ?? undefined,
       client_reference_id: user.id,
       metadata: {

@@ -10,6 +10,7 @@ import ThreadSettingsPanel from './ThreadSettingsPanel'; // Import the new setti
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/components/ui/Toast'; // Import useToast
 import { createThreadInvite } from '@/lib/threads';
+import { buildThreadPath } from '@/lib/threads/thread-url';
 
 interface ThreadSidebarProps {
   thread: Thread & {
@@ -147,7 +148,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
     );
   };
 
-  const buildThreadLink = () => `${window.location.origin}/auth?redirect=${encodeURIComponent(`/threads/${thread.id}?from=share`)}`;
+  const buildThreadLink = () => `${window.location.origin}/auth?redirect=${encodeURIComponent(`${buildThreadPath({ id: thread.id, title: thread.title })}?from=share`)}`;
 
   const copyToClipboard = async (value: string) => {
     try {

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Send, MessageCircle, Zap } from 'lucide-react';
 import { createOneTimeConversation, getOrCreateConversation, sendMessage } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
+import * as rawAuth from '@/lib/core/supabase/raw-auth';
 
 interface PageProps {
   params: Promise<{
@@ -16,7 +17,7 @@ export default function DMPage({ params }: PageProps) {
   const resolvedParams = use(params);
   const { userId } = resolvedParams;
   const router = useRouter();
-  const { session, loginAnonymously } = useUserStore();
+  const { session } = useUserStore();
   
   const [message, setMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -59,7 +60,10 @@ export default function DMPage({ params }: PageProps) {
 
     try {
       if (!session?.user) {
-        await loginAnonymously();
+        const { error: authError } = await rawAuth.signInAnonymously({ requireLegalConsent: false });
+        if (authError) {
+          throw new Error(authError.message || 'Failed to create anonymous session');
+        }
       }
 
       let conversationId: string | null = null;

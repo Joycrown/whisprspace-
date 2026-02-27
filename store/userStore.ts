@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 import { User, UserSession, UserPreferences } from '@/types';
 import * as authService from '../lib/auth/auth-service';
 import { getAnonymousSessionExpiry, getRegisteredSessionExpiry } from '@/lib/utils/session-expiry';
+import { hasRequiredLegalConsent, LEGAL_CONSENT_REQUIRED_ERROR } from '@/lib/legal/consent';
 
 // Anonymous session for users who join anonymously (can interact but not create)
 export interface AnonymousSession {
@@ -105,6 +106,19 @@ export const useUserStore = create<UserStore>()(
 
       // Actions
       loginAnonymously: async () => {
+        if (!hasRequiredLegalConsent()) {
+          set({
+            error: LEGAL_CONSENT_REQUIRED_ERROR,
+            isLoading: false,
+          });
+
+          if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/auth')) {
+            const redirectPath = `${window.location.pathname}${window.location.search || ''}`;
+            window.location.href = `/auth?force=1&view=anonymous&redirect=${encodeURIComponent(redirectPath)}`;
+          }
+          return;
+        }
+
         set({ isLoading: true, error: null });
         
         try {
@@ -160,6 +174,14 @@ export const useUserStore = create<UserStore>()(
       },
 
       signup: async (email: string, password: string) => {
+        if (!hasRequiredLegalConsent()) {
+          set({
+            error: LEGAL_CONSENT_REQUIRED_ERROR,
+            isLoading: false,
+          });
+          return;
+        }
+
         set({ isLoading: true, error: null });
         
         try {

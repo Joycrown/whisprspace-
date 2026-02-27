@@ -40,6 +40,7 @@ import PremiumThreadComposer from './PremiumThreadComposer';
 import PremiumPaymentForm from '@/components/features/premium/PremiumPaymentForm';
 import SignupPromptModal from '@/components/auth/SignupPromptModal';
 import { getUserPollStats } from '@/lib/threads/thread-service';
+import { buildThreadPath } from '@/lib/threads/thread-url';
 
 interface ThreadComposerProps {
   isOpen: boolean;
@@ -243,7 +244,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft 
 
         // Navigate to the new thread or threads list
         setTimeout(() => {
-          router.push(`/threads/${threadId}`);
+          router.push(buildThreadPath({ id: threadId, title: formData.title }));
         }, 500);
       } else {
         throw new Error(storeError || 'Failed to create thread');

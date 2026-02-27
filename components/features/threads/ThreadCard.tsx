@@ -4,6 +4,7 @@
 import Link from 'next/link'
 import { Crown } from 'lucide-react'
 import { formatTimestamp } from '../utils/helpers/threadHelpers'
+import { buildThreadPath } from '@/lib/threads/thread-url'
 
 interface ThreadCardProps {
   id: string
@@ -33,8 +34,10 @@ export default function ThreadCard({
   isPremium = false,
   price
 }: ThreadCardProps) {
+  const threadPath = buildThreadPath({ id, title })
+
   return (
-    <Link href={`/threads/${id}`} className="block">
+    <Link href={threadPath} className="block">
       <div className={`rounded-lg p-3 md:p-4 mb-3 md:mb-4 hover:bg-[#2A2A2A] transition-colors ${isPremium
           ? 'bg-gradient-to-br from-purple-900/30 to-orange-900/30 border border-purple-500/30'
           : 'bg-[#1E1E1E]'

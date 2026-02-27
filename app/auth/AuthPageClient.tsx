@@ -2,17 +2,20 @@
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useUserStore } from '@/store/userStore';
 import { motion } from 'framer-motion';
 import { UserCheck, Shield, Zap, Copy, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import AppLoadingState from '@/components/ui/AppLoadingState';
+import { LEGAL_CONSENT_REQUIRED_ERROR, hasRequiredLegalConsent, recordLegalConsent } from '@/lib/legal/consent';
 
 const AuthPage = () => {
   const [view, setView] = useState<'main' | 'anonymous' | 'login' | 'signup' | 'forgot' | 'welcome'>('main');
   const [copiedId, setCopiedId] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [legalConsentChecked, setLegalConsentChecked] = useState(false);
 
   // Form states
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
@@ -51,6 +54,10 @@ const AuthPage = () => {
     }
   }, [viewParam]);
 
+  useEffect(() => {
+    setLegalConsentChecked(hasRequiredLegalConsent());
+  }, []);
+
   // CRITICAL: Immediate redirect check using useLayoutEffect (runs synchronously before paint)
   // This executes before any other effects and before the component fully renders
   useLayoutEffect(() => {
@@ -75,6 +82,16 @@ const AuthPage = () => {
 
   const handleAnonymousJoin = async () => {
     clearError(); // Clear previous errors
+    if (!legalConsentChecked) {
+      showToast({
+        type: 'error',
+        title: 'Consent Required',
+        message: LEGAL_CONSENT_REQUIRED_ERROR,
+        duration: 5000,
+      });
+      return;
+    }
+    recordLegalConsent();
     await loginAnonymously();
   };
 
@@ -169,6 +186,16 @@ const AuthPage = () => {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError(); // Clear previous errors
+    if (!legalConsentChecked) {
+      showToast({
+        type: 'error',
+        title: 'Consent Required',
+        message: LEGAL_CONSENT_REQUIRED_ERROR,
+        duration: 5000,
+      });
+      return;
+    }
+    recordLegalConsent();
     await signup(signupForm.email, signupForm.password);
   };
 
@@ -376,6 +403,26 @@ const AuthPage = () => {
               )}
             </button>
 
+            <label className="flex items-start gap-2 text-xs text-gray-600 text-left">
+              <input
+                type="checkbox"
+                checked={legalConsentChecked}
+                onChange={(e) => setLegalConsentChecked(e.target.checked)}
+                className="mt-0.5 rounded border-gray-300 text-purple-600 focus:ring-purple-600"
+              />
+              <span>
+                I agree to the{' '}
+                <Link href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-orange-500">
+                  Privacy Policy
+                </Link>{' '}
+                and{' '}
+                <Link href="/community-guidelines" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-orange-500">
+                  Community Guidelines
+                </Link>
+                .
+              </span>
+            </label>
+
             <div className="pt-4 border-t border-gray-200">
               <button
                 onClick={() => setView('main')}
@@ -576,7 +623,7 @@ const AuthPage = () => {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !legalConsentChecked}
               className="w-full h-11 rounded-md bg-gradient-to-r from-purple-500 to-orange-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLoading ? (
@@ -630,6 +677,27 @@ const AuthPage = () => {
                 </button>
               </div>
             </div>
+
+            <label className="flex items-start gap-2 text-xs text-gray-600 text-left">
+              <input
+                type="checkbox"
+                checked={legalConsentChecked}
+                onChange={(e) => setLegalConsentChecked(e.target.checked)}
+                className="mt-0.5 rounded border-gray-300 text-purple-600 focus:ring-purple-600"
+                required
+              />
+              <span>
+                I agree to the{' '}
+                <Link href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-orange-500">
+                  Privacy Policy
+                </Link>{' '}
+                and{' '}
+                <Link href="/community-guidelines" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-orange-500">
+                  Community Guidelines
+                </Link>
+                .
+              </span>
+            </label>
 
             <button
               type="submit"

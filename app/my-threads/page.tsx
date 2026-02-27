@@ -8,6 +8,7 @@ import { useUserStore } from '@/store/userStore';
 import { Thread } from '@/types';
 import Link from 'next/link';
 import { fetchInvitedThreads, joinThread } from '@/lib/threads';
+import { buildThreadManagePath, buildThreadPath } from '@/lib/threads/thread-url';
 import { useToast } from '@/components/ui/Toast';
 import * as rawDb from '@/lib/core/supabase/raw-db';
 import AppLoadingState from '@/components/ui/AppLoadingState';
@@ -53,6 +54,8 @@ export default function MyThreadsPage() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewCache, setPreviewCache] = useState<Record<string, ThreadPreviewData>>({});
   const activePreviewThreadRef = useRef<string | null>(null);
+  const getThreadPath = (thread: Pick<Thread, 'id' | 'title'>) =>
+    buildThreadPath({ id: thread.id, title: thread.title });
 
   // Check if user is allowed to create threads
   const canCreate = canCreateThread();
@@ -236,7 +239,7 @@ export default function MyThreadsPage() {
   const handleJoinThread = async (thread: Thread) => {
     const userId = session?.user?.id;
     if (!userId) {
-      router.push(`/auth?redirect=${encodeURIComponent(`/threads/${thread.id}`)}`);
+      router.push(`/auth?redirect=${encodeURIComponent(getThreadPath(thread))}`);
       return;
     }
 
@@ -245,7 +248,7 @@ export default function MyThreadsPage() {
       await joinThread(thread.id, userId);
       setInvitedThreads((prev) => prev.filter((invitedThread) => invitedThread.id !== thread.id));
       fetchThreads(false, { privacy: 'all' }).catch(() => null);
-      router.push(`/threads/${thread.id}`);
+      router.push(getThreadPath(thread));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Could not join this thread. Ask the creator to re-send your invite.';
       showToast({
@@ -280,7 +283,7 @@ export default function MyThreadsPage() {
       return;
     }
 
-    router.push(`/threads/${selectedThread.id}`);
+    router.push(getThreadPath(selectedThread));
   };
 
   const activePreviewData = previewThread ? previewCache[previewThread.id] : null;
@@ -498,7 +501,7 @@ export default function MyThreadsPage() {
                         <button
                           onClick={(event) => {
                             event.stopPropagation();
-                            router.push(`/threads/${thread.id}/manage`);
+                            router.push(buildThreadManagePath({ id: thread.id, title: thread.title }));
                           }}
                           className="flex items-center justify-center gap-2 px-3 md:px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-white text-xs md:text-sm font-medium transition-colors w-full md:w-auto"
                           title="Manage Access"

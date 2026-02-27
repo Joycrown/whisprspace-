@@ -41,7 +41,7 @@ const MessageDrop = ({ recipientId, recipientName }: MessageDropProps) => {
       }
 
       if (mode === 'one-time' && !user) {
-        const { error: authError } = await rawAuth.signInAnonymously();
+        const { error: authError } = await rawAuth.signInAnonymously({ requireLegalConsent: false });
         if (authError) {
           throw new Error('Unable to send message right now. Please try again.');
         }
@@ -67,8 +67,9 @@ const MessageDrop = ({ recipientId, recipientName }: MessageDropProps) => {
       } else {
         router.push(`/inbox/${conversationId}`);
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to send message');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to send message';
+      setError(message);
     } finally {
       setIsSending(false);
     }

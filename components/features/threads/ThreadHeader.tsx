@@ -14,6 +14,7 @@ import { formatTimeRemaining } from '@/lib/utils/utils/helpers/threadHelpers';
 import { ThreadData } from '@/types';
 import { createThreadInvite } from '@/lib/threads';
 import { useToast } from '@/components/ui/Toast';
+import { buildThreadPath } from '@/lib/threads/thread-url';
 
 interface ThreadHeaderProps {
   thread: ThreadData | null;
@@ -79,7 +80,7 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showShareDropdown]);
 
-  const threadPath = thread ? `/threads/${thread.id}` : '';
+  const threadPath = thread ? buildThreadPath({ id: thread.id, title: thread.title }) : '';
   const buildThreadShareUrl = useCallback(() =>
     typeof window !== 'undefined'
       ? `${window.location.origin}/auth?redirect=${encodeURIComponent(`${threadPath}?from=share`)}`

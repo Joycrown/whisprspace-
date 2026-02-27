@@ -14,6 +14,7 @@ import {
   fetchThreadAccessCodes,
   createThreadAccessCode,
 } from '@/lib/threads/thread-service';
+import { buildThreadPath, extractThreadIdFromRef } from '@/lib/threads/thread-url';
 
 interface PageProps {
   params: Promise<{
@@ -28,7 +29,8 @@ interface SalesRow {
 
 export default function ThreadManagePage({ params }: PageProps) {
   const resolvedParams = use(params);
-  const { threadId } = resolvedParams;
+  const threadRef = resolvedParams.threadId;
+  const threadId = extractThreadIdFromRef(threadRef);
   const router = useRouter();
   const { currentThread, fetchThreadById } = useThreadStore();
   const { session } = useUserStore();
@@ -44,9 +46,18 @@ export default function ThreadManagePage({ params }: PageProps) {
     (!currentThread.expiresAt || new Date(currentThread.expiresAt) > new Date())
   );
   const freeAccessCount = accessCodes.reduce((sum, code) => sum + code.currentUses, 0);
+  const threadPath = currentThread
+    ? buildThreadPath({ id: currentThread.id, title: currentThread.title })
+    : threadId
+      ? `/threads/${threadId}`
+      : '/threads';
 
   useEffect(() => {
     const loadThread = async () => {
+      if (!threadId) {
+        setIsLoading(false);
+        return;
+      }
       setIsLoading(true);
       await fetchThreadById(threadId);
       setIsLoading(false);
@@ -56,7 +67,7 @@ export default function ThreadManagePage({ params }: PageProps) {
 
   useEffect(() => {
     const loadCodes = async () => {
-      if (!currentThread) return;
+      if (!currentThread || !threadId) return;
       setCodesLoading(true);
       const { data, error } = await fetchThreadAccessCodes(threadId);
       if (error) {
@@ -113,6 +124,22 @@ export default function ThreadManagePage({ params }: PageProps) {
     return <AppLoadingState title="Preparing thread controls..." />;
   }
 
+  if (!threadId) {
+    return (
+      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-white mb-4">Thread Not Found</h1>
+          <button
+            onClick={() => router.push('/threads')}
+            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          >
+            Back to Threads
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!currentThread) {
     return (
       <div className="min-h-screen bg-[#121212] flex items-center justify-center">
@@ -138,7 +165,7 @@ export default function ThreadManagePage({ params }: PageProps) {
             Access management is only available for premium threads.
           </p>
           <button
-            onClick={() => router.push(`/threads/${threadId}`)}
+            onClick={() => router.push(threadPath)}
             className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
           >
             Back to Thread
@@ -157,7 +184,7 @@ export default function ThreadManagePage({ params }: PageProps) {
             Only the thread creator can manage access codes and settings.
           </p>
           <button
-            onClick={() => router.push(`/threads/${threadId}`)}
+            onClick={() => router.push(threadPath)}
             className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
           >
             Back to Thread
@@ -168,6 +195,7 @@ export default function ThreadManagePage({ params }: PageProps) {
   }
 
   const handleGenerateCode = async () => {
+    if (!threadId) return;
     setIsGenerating(true);
     const { data, error } = await createThreadAccessCode(threadId);
     if (error || !data) {
@@ -187,7 +215,7 @@ export default function ThreadManagePage({ params }: PageProps) {
         {/* Header */}
         <div className="mb-8">
           <button
-            onClick={() => router.push(`/threads/${threadId}`)}
+            onClick={() => router.push(threadPath)}
             className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-4"
           >
             <ArrowLeft className="w-5 h-5" />

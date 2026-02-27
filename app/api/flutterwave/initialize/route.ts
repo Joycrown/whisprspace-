@@ -3,6 +3,7 @@ import { createClient as createSupabaseServerClient } from '@/lib/core/supabase/
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { convertPrice, formatCurrency, SupportedCurrency, SUPPORTED_CURRENCIES } from '@/lib/payments/currency'
+import { buildThreadPath } from '@/lib/threads/thread-url'
 
 const supabaseAdmin = createSupabaseAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -222,6 +223,7 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+    const threadPath = buildThreadPath({ id: threadId, title: thread.title || undefined })
 
     const txRef = `whispr_${threadId}_${crypto.randomUUID()}`
     const email = user.email || `${user.id}@anonymous.whisprspace.com`
@@ -248,7 +250,7 @@ export async function POST(request: NextRequest) {
         tx_ref: txRef,
         amount: finalAmount,
         currency: currency,
-        redirect_url: `${baseUrl}/threads/${threadId}?purchased=true&gateway=flutterwave`,
+        redirect_url: `${baseUrl}${threadPath}?purchased=true&gateway=flutterwave`,
         payment_options: 'card, mobilemoney, ussd, banktransfer, account, credit, nqr',
         customer: {
           email,

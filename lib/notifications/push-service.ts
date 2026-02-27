@@ -1,5 +1,6 @@
 import webpush from 'web-push'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
+import { buildThreadPath } from '@/lib/threads/thread-url'
 
 type PushSubscriptionRow = {
   id: string
@@ -81,13 +82,17 @@ const buildNotificationUrl = (notification: NotificationDispatchRecord) => {
     (typeof data.thread_id === 'string' && data.thread_id) ||
     (typeof data.threadId === 'string' && data.threadId) ||
     null
+  const threadTitle =
+    (typeof data.thread_title === 'string' && data.thread_title) ||
+    (typeof data.threadTitle === 'string' && data.threadTitle) ||
+    undefined
   const conversationId =
     (typeof data.conversation_id === 'string' && data.conversation_id) ||
     (typeof data.conversationId === 'string' && data.conversationId) ||
     null
 
   if (threadId) {
-    return `/threads/${threadId}`
+    return buildThreadPath({ id: threadId, title: threadTitle })
   }
 
   if (conversationId) {

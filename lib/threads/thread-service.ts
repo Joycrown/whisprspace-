@@ -4,6 +4,7 @@ import { Thread, ThreadData, ThreadFilters, CreateThreadForm, Participant, Messa
 import { calculateThreadExpiration } from '../utils/utils/helpers/threadHelpers';
 import { uploadService } from '@/lib/utils/upload-service';
 import { MESSAGE_CONFIG } from '@/lib/core/constants';
+import { buildThreadPath } from './thread-url';
 
 export interface ThreadInviteItem {
   inviteId: string;
@@ -1272,7 +1273,7 @@ export const inviteUserToThread = async (
       const emailEnabled = userData?.preferences?.notifications?.email !== false;
 
       if (email && emailEnabled && typeof window !== 'undefined') {
-        const threadPath = `/threads/${threadId}`;
+        const threadPath = buildThreadPath({ id: threadId, title: threadTitle });
         const inviteUrl = `${window.location.origin}/auth?redirect=${encodeURIComponent(threadPath)}`;
         await fetch('/api/threads/send-invite', {
           method: 'POST',

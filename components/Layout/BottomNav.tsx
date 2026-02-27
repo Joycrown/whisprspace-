@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, FolderOpen, MessageCircle, User, Plus, Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useNotificationStore } from '@/store/notificationStore';
 import { useMessageBadge } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
 import SessionPanel from '../SessionPanel';
@@ -14,7 +13,8 @@ const BottomNav = () => {
   const pathname = usePathname();
   const [isSessionPanelOpen, setIsSessionPanelOpen] = useState(false);
   const { session } = useUserStore();
-  const { unreadCount } = useNotificationStore();
+  const isAnonymous = session.user?.isAnonymous ?? true;
+  const canCreateThread = session.isAuthenticated && !isAnonymous;
   const { unreadCount: unreadMessageCount } = useMessageBadge({
     enableRealtime: false,
     refetchInterval: 30000,
@@ -104,19 +104,36 @@ const BottomNav = () => {
           </div>
 
           <div className="relative flex items-center justify-center w-14">
-            <Link
-              href="/threads/create"
-              className="relative flex flex-col items-center"
-            >
-              <motion.div
-                className="absolute -top-5 w-12 h-12 bg-gradient-to-br from-purple-600 to-orange-500 rounded-full flex items-center justify-center shadow-lg shadow-purple-500/50"
-                whileTap={{ scale: 0.9 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+            {canCreateThread ? (
+              <Link
+                href="/threads/create"
+                className="relative flex flex-col items-center"
               >
-                <Plus className="w-5 h-5 text-white" />
-              </motion.div>
-              <span className="text-[9px] text-gray-500 mt-3">Create</span>
-            </Link>
+                <motion.div
+                  className="absolute -top-5 w-12 h-12 bg-gradient-to-br from-purple-600 to-orange-500 rounded-full flex items-center justify-center shadow-lg shadow-purple-500/50"
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                >
+                  <Plus className="w-5 h-5 text-white" />
+                </motion.div>
+                <span className="text-[9px] text-gray-500 mt-3">Create</span>
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled
+                aria-label="Create thread disabled for guest users"
+                className="relative flex flex-col items-center cursor-not-allowed"
+              >
+                <motion.div
+                  className="absolute -top-5 w-12 h-12 bg-gray-800 border border-gray-700 rounded-full flex items-center justify-center"
+                  transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                >
+                  <Plus className="w-5 h-5 text-gray-500" />
+                </motion.div>
+                <span className="text-[9px] text-gray-600 mt-3 line-through opacity-70">Create</span>
+              </button>
+            )}
           </div>
 
           <div className="flex flex-1 items-center justify-around">
