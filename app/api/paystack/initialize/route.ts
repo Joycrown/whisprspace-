@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseServerClient } from '@/lib/core/supabase/server'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
+import { buildThreadPath } from '@/lib/threads/thread-url'
 
 const supabaseAdmin = createSupabaseAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,6 +11,7 @@ const supabaseAdmin = createSupabaseAdminClient(
 
 type PurchasableThread = {
   id: string
+  title: string | null
   creator_id: string
   is_premium: boolean
   price: number | string | null
@@ -44,7 +46,7 @@ const convertUsdToLocal = (usdAmount: number, currency: string): number => {
 const getThreadForPurchase = async (threadId: string) => {
   const { data, error } = await supabaseAdmin
     .from('threads')
-    .select('id,creator_id,is_premium,price,deleted_at,expires_at')
+    .select('id,title,creator_id,is_premium,price,deleted_at,expires_at')
     .eq('id', threadId)
     .single()
 
@@ -160,6 +162,7 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+    const threadPath = buildThreadPath({ id: threadId, title: thread.title || undefined })
 
     const currency = getPaystackCurrency(country)
     const localAmount = convertUsdToLocal(price, currency)
@@ -176,7 +179,7 @@ export async function POST(request: NextRequest) {
         email,
         amount: amountInKobo,
         currency,
-        callback_url: `${baseUrl}/threads/${threadId}?purchased=true&gateway=paystack`,
+        callback_url: `${baseUrl}${threadPath}?purchased=true&gateway=paystack`,
         metadata: {
           threadId,
           userId: user.id,

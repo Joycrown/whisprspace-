@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import * as rawAuth from '@/lib/core/supabase/raw-auth'
 import { useUserStore } from '@/store/userStore'
@@ -13,21 +13,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
   // Helper function to check if session is expired
-  const isSessionExpired = (sessionExpiry: string | null): boolean => {
+  const isSessionExpired = useCallback((sessionExpiry: string | null): boolean => {
     if (!sessionExpiry) return false
     return new Date() >= new Date(sessionExpiry)
-  }
+  }, [])
 
   const isPublicRoute = (path: string) => {
     return (
       path === '/' ||
       path === '/auth' ||
       path.startsWith('/auth') ||
+      path === '/privacy-policy' ||
+      path === '/community-guidelines' ||
       path.startsWith('/profile') ||
       path.startsWith('/invite') ||
       path.startsWith('/message')
     )
   }
+
+  const redirectToAuth = useCallback(() => {
+    const safePath = pathname && pathname.startsWith('/') ? pathname : '/threads'
+    if (safePath.startsWith('/auth')) {
+      router.replace('/auth')
+      return
+    }
+    router.replace(`/auth?redirect=${encodeURIComponent(safePath)}`)
+  }, [pathname, router])
 
   useEffect(() => {
     // Initialize storage and cleanup old mock data BEFORE checking session
@@ -53,7 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             })
 
             if (!isPublicRoute(pathname)) {
-              router.push('/')
+              redirectToAuth()
             }
             return
           }
@@ -96,9 +107,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             sessionValidated: true,
           })
 
-          // Redirect to landing page if not already on public routes
+          // Redirect to auth page if not already on public routes
           if (!isPublicRoute(pathname)) {
-            router.push('/')
+            redirectToAuth()
           }
           return
         }
@@ -125,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           })
 
           if (!isPublicRoute(pathname)) {
-            router.push('/')
+            redirectToAuth()
           }
           return
         }
@@ -188,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!isPublicRoute(pathname)) {
           const session = rawAuth.getSession()
           if (!session) {
-            router.push('/')
+            redirectToAuth()
           } else {
             console.error('[AuthProvider] Backend validation error, but session token exists. Staying on page.')
           }
@@ -252,9 +263,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
           sessionInfo: null,
         })
-        // Redirect to landing page on sign out
+        // Redirect to auth page on sign out
         if (!isPublicRoute(pathname)) {
-          router.push('/')
+          redirectToAuth()
         }
       } else if (event === 'TOKEN_REFRESHED') {
         // Proactively update cached token when it refreshes
@@ -288,12 +299,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       unsubscribe()
     }
-  }, [pathname, router])
+  }, [pathname, router, redirectToAuth, isSessionExpired])
 
   // Periodic session validation (every 5 minutes)
   useEffect(() => {
     const validateSession = async () => {
-      const { session, sessionInfo, sessionValidated } = useUserStore.getState()
+      const { session, sessionValidated } = useUserStore.getState()
 
       // Don't do periodic checks until initial validation is complete
       if (!sessionValidated) {
@@ -318,7 +329,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
 
         if (!isPublicRoute(pathname)) {
-          router.push('/')
+          redirectToAuth()
         }
       }
     }
@@ -330,7 +341,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const interval = setInterval(validateSession, 5 * 60 * 1000)
 
     return () => clearInterval(interval)
-  }, [pathname, router, isSessionExpired])
+  }, [pathname, router, isSessionExpired, redirectToAuth])
 
   return <>{children}</>
 }

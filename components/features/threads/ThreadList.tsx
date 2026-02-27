@@ -12,6 +12,7 @@ import { useUserStore } from "@/store/userStore";
 import { redeemThreadAccessCode } from "@/lib/threads/thread-service";
 import { useJoinThreadMutation } from "@/lib/threads/hooks/useThreadMutations";
 import { Loader2 } from "lucide-react";
+import { buildThreadPath } from "@/lib/threads/thread-url";
 
 type ThreadPreviewMessage = {
   id: string;
@@ -50,6 +51,7 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const joinMutation = useJoinThreadMutation();
+  const threadPath = buildThreadPath({ id: thread.id, title: thread.title });
 
   // Check if current user is the thread creator
   const isCreator = session?.user?.id === thread.author.id;
@@ -108,7 +110,7 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
     setHasAccess(true);
     setShowPaymentModal(false);
     // Navigate to thread after successful payment
-    router.push(`/threads/${thread.id}`);
+    router.push(threadPath);
   };
 
   const handleValidateCode = async (code: string): Promise<boolean> => {
@@ -132,7 +134,7 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
 
     // If already the creator, just navigate
     if (isCreator) {
-      router.push(`/threads/${thread.id}`);
+      router.push(threadPath);
       return;
     }
 
@@ -142,11 +144,11 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
         threadId: thread.id,
         userId: session.user.id
       });
-      router.push(`/threads/${thread.id}`);
+      router.push(threadPath);
     } catch {
       // If it fails (e.g. RLS or other issue), still try to navigate
       // The thread page will handle access control
-      router.push(`/threads/${thread.id}`);
+      router.push(threadPath);
     } finally {
       setIsJoining(false);
     }

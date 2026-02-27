@@ -316,7 +316,7 @@ const WhisprSpaceLanding = () => {
               <ul className="space-y-2 text-sm text-gray-600">
                 <li><a href="#" className="hover:text-purple-600">Features</a></li>
                 <li><a href="#" className="hover:text-purple-600">Security</a></li>
-                <li><a href="#" className="hover:text-purple-600">Privacy</a></li>
+                <li><a href="/privacy-policy" className="hover:text-purple-600">Privacy Policy</a></li>
               </ul>
             </div>
             <div>
@@ -331,7 +331,7 @@ const WhisprSpaceLanding = () => {
               <h4 className="font-semibold mb-4 text-gray-900">Support</h4>
               <ul className="space-y-2 text-sm text-gray-600">
                 <li><a href="#" className="hover:text-purple-600">Help Center</a></li>
-                <li><a href="#" className="hover:text-purple-600">Guidelines</a></li>
+                <li><a href="/community-guidelines" className="hover:text-purple-600">Guidelines</a></li>
                 <li><a href="#" className="hover:text-purple-600">Report</a></li>
               </ul>
             </div>

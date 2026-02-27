@@ -2,6 +2,7 @@
  * Raw Supabase Authentication API
  * Replaces @supabase/supabase-js auth methods with direct API calls
  */
+import { hasRequiredLegalConsent, LEGAL_CONSENT_REQUIRED_ERROR } from '@/lib/legal/consent'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -23,6 +24,10 @@ interface AuthResponse {
   session: Session | null;
   user: Session['user'] | null;
   error: Error | null;
+}
+
+interface AnonymousSignInOptions {
+  requireLegalConsent?: boolean;
 }
 
 const SESSION_KEY = 'supabase.auth.session';
@@ -142,6 +147,10 @@ export async function signIn(email: string, password: string): Promise<AuthRespo
  */
 export async function signUp(email: string, password: string): Promise<AuthResponse> {
   try {
+    if (!hasRequiredLegalConsent()) {
+      throw new Error(LEGAL_CONSENT_REQUIRED_ERROR)
+    }
+
     const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -187,8 +196,13 @@ export async function signUp(email: string, password: string): Promise<AuthRespo
 /**
  * Sign in anonymously
  */
-export async function signInAnonymously(): Promise<AuthResponse> {
+export async function signInAnonymously(options: AnonymousSignInOptions = {}): Promise<AuthResponse> {
   try {
+    const requireLegalConsent = options.requireLegalConsent !== false;
+    if (requireLegalConsent && !hasRequiredLegalConsent()) {
+      throw new Error(LEGAL_CONSENT_REQUIRED_ERROR)
+    }
+
     // Supabase anonymous auth - creates an anonymous user/session
     // Mirrors supabase-js signInAnonymously implementation
     const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {

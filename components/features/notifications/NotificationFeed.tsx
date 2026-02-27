@@ -5,6 +5,7 @@ import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
 import { FaCheckCircle, FaHeart, FaUsers, FaBell, FaAt, FaReply, FaClock, FaTrophy, FaTrash, FaEnvelopeOpenText } from 'react-icons/fa';
 import AppLoadingState from '@/components/ui/AppLoadingState';
+import { buildThreadPath } from '@/lib/threads/thread-url';
 
 const NotificationFeed: React.FC = () => {
   const { session } = useUserStore();
@@ -79,7 +80,13 @@ const NotificationFeed: React.FC = () => {
       (typeof data.conversation_id === 'string' && data.conversation_id) ||
       (typeof data.conversationId === 'string' && data.conversationId) ||
       null;
-    if (typeof data.thread_id === 'string') return `/threads/${data.thread_id}`;
+    if (typeof data.thread_id === 'string') {
+      const threadTitle =
+        (typeof data.thread_title === 'string' && data.thread_title) ||
+        (typeof data.threadTitle === 'string' && data.threadTitle) ||
+        undefined;
+      return buildThreadPath({ id: data.thread_id, title: threadTitle });
+    }
     if (conversationId) return `/inbox?conversationId=${encodeURIComponent(conversationId)}`;
     if (typeof data.group_id === 'string') return `/groups/${data.group_id}`;
     return null;

@@ -2,6 +2,7 @@
 
 import { Notification, getNotificationIcon, formatNotificationTime } from '@/lib/notifications'
 import { useRouter } from 'next/navigation'
+import { buildThreadPath } from '@/lib/threads/thread-url'
 
 interface NotificationItemProps {
   notification: Notification
@@ -29,10 +30,14 @@ export default function NotificationItem({
       (typeof data.conversationId === 'string' && data.conversationId) ||
       null
     const threadId = typeof data.thread_id === 'string' ? data.thread_id : null
+    const threadTitle =
+      (typeof data.thread_title === 'string' && data.thread_title) ||
+      (typeof data.threadTitle === 'string' && data.threadTitle) ||
+      undefined
     const groupId = typeof data.group_id === 'string' ? data.group_id : null
 
     if (threadId) {
-      router.push(`/threads/${threadId}`)
+      router.push(buildThreadPath({ id: threadId, title: threadTitle }))
     } else if (conversationId) {
       router.push(`/inbox?conversationId=${encodeURIComponent(conversationId)}`)
     } else if (groupId) {

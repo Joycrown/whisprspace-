@@ -1,13 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Send, MessageSquare, Zap, Check, AlertCircle } from 'lucide-react';
+import { Send, MessageSquare, Zap, AlertCircle } from 'lucide-react';
 // import { supabase } from '@/lib/core/supabase/client'; // REMOVED
 import * as rawAuth from '@/lib/core/supabase/raw-auth';
 import { getOrCreateConversation, sendMessage, createOneTimeConversation } from '@/lib/messaging/messaging-service';
 import SignupPromptModal from '@/components/auth/SignupPromptModal';
 import { useRouter } from 'next/navigation';
-import { User } from '@/types';
 
 interface MessageFormProps {
   recipientId: string;
@@ -47,7 +46,7 @@ const MessageForm: React.FC<MessageFormProps> = ({ recipientId, recipientName })
       // Case 2: One-time Message (Anonymous allowed)
       // If not logged in, sign in anonymously first
       if (!user) {
-        const { error: authError } = await rawAuth.signInAnonymously();
+        const { error: authError } = await rawAuth.signInAnonymously({ requireLegalConsent: false });
         if (authError) throw new Error('Failed to establish anonymous session: ' + authError.message);
       }
 
@@ -81,9 +80,10 @@ const MessageForm: React.FC<MessageFormProps> = ({ recipientId, recipientName })
         setTimeout(() => router.push('/inbox'), 1500);
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Message failed:', err);
-      setError(err.message || 'Failed to send message');
+      const message = err instanceof Error ? err.message : 'Failed to send message';
+      setError(message);
     } finally {
       setIsSending(false);
     }
