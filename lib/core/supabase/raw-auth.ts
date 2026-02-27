@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Raw Supabase Authentication API
  * Replaces @supabase/supabase-js auth methods with direct API calls
@@ -6,6 +7,7 @@ import { hasRequiredLegalConsent, LEGAL_CONSENT_REQUIRED_ERROR } from '@/lib/leg
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const ACCOUNT_EXISTS_ERROR = 'Account already exsit';
 
 interface Session {
   access_token: string;
@@ -82,6 +84,43 @@ export function getSession(): Session | null {
   return session;
 }
 
+const parseAuthErrorMessage = async (res: Response, fallback: string): Promise<string> => {
+  let payload: Record<string, unknown> | null = null;
+
+  try {
+    payload = await res.json();
+  } catch {
+    // Ignore parse errors and fall back below.
+  }
+
+  const rawMessage = String(
+    payload?.error_description ??
+      payload?.message ??
+      payload?.msg ??
+      payload?.error ??
+      ''
+  );
+
+  const normalized = rawMessage.toLowerCase();
+  const code = String(payload?.error_code || payload?.code || '').toLowerCase();
+
+  if (
+    res.status === 422 &&
+    (
+      normalized.includes('already') ||
+      normalized.includes('registered') ||
+      normalized.includes('exists') ||
+      code.includes('already') ||
+      code.includes('registered') ||
+      code.includes('exists')
+    )
+  ) {
+    return ACCOUNT_EXISTS_ERROR;
+  }
+
+  return rawMessage || fallback;
+};
+
 /**
  * Get stored session (even if expired).
  * Useful for refresh flows.
@@ -115,8 +154,8 @@ export async function signIn(email: string, password: string): Promise<AuthRespo
     });
 
     if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error_description || error.message || 'Sign in failed');
+      const errorMessage = await parseAuthErrorMessage(res, 'Sign in failed');
+      throw new Error(errorMessage);
     }
 
     const data = await res.json();
@@ -158,8 +197,8 @@ export async function signUp(email: string, password: string): Promise<AuthRespo
     });
 
     if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error_description || error.message || 'Sign up failed');
+      const errorMessage = await parseAuthErrorMessage(res, 'Sign up failed');
+      throw new Error(errorMessage);
     }
 
     const data = await res.json();
@@ -214,8 +253,8 @@ export async function signInAnonymously(options: AnonymousSignInOptions = {}): P
     });
 
     if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error_description || error.message || 'Anonymous sign in failed');
+      const errorMessage = await parseAuthErrorMessage(res, 'Anonymous sign in failed');
+      throw new Error(errorMessage);
     }
 
     const data = await res.json();
@@ -292,8 +331,8 @@ export async function refreshToken(): Promise<AuthResponse> {
     });
 
     if (!res.ok) {
-      const error = await res.json();
-      throw new Error(error.error_description || error.message || 'Token refresh failed');
+      const errorMessage = await parseAuthErrorMessage(res, 'Token refresh failed');
+      throw new Error(errorMessage);
     }
 
     const data = await res.json();
@@ -380,3 +419,4 @@ if (typeof window !== 'undefined') {
     }
   }
 }
+
