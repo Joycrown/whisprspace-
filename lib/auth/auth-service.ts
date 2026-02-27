@@ -41,6 +41,28 @@ const convertAuthUserToUser = async (userId: string): Promise<User> => {
   }
 }
 
+const ACCOUNT_EXISTS_ERROR = 'Account already exsit'
+
+const emailAlreadyExists = async (email: string): Promise<boolean> => {
+  const normalizedEmail = email.trim().toLowerCase()
+  if (!normalizedEmail) return false
+
+  const { data, error } = await rawDb.select<{ id: string }>('users', {
+    select: 'id',
+    filters: {
+      email: rawDb.filter.ilike(normalizedEmail),
+    },
+    limit: 1,
+  })
+
+  if (error) {
+    console.warn('[AuthService] Email pre-check failed, continuing with signup request:', error)
+    return false
+  }
+
+  return Array.isArray(data) ? data.length > 0 : !!data
+}
+
 /**
  * Sign in anonymously
  * Creates both Supabase auth session and user record
@@ -82,6 +104,12 @@ export const signUpWithEmail = async (
   password: string
 ): Promise<User> => {
   try {
+    const normalizedEmail = email.trim().toLowerCase()
+    const emailExists = await emailAlreadyExists(normalizedEmail)
+    if (emailExists) {
+      throw new Error(ACCOUNT_EXISTS_ERROR)
+    }
+
     // Check if user is currently anonymous
     const currentSession = rawAuth.getSession()
     
@@ -92,7 +120,7 @@ export const signUpWithEmail = async (
     }
 
     // Create new account (auto-confirm without email verification)
-    const { session, error: signUpError } = await rawAuth.signUp(email, password)
+    const { session, error: signUpError } = await rawAuth.signUp(normalizedEmail, password)
 
     if (signUpError) throw signUpError
     if (!session) throw new Error('No session returned')
@@ -267,3 +295,4 @@ export const updatePassword = async (newPassword: string): Promise<{
     }
   }
 }
+

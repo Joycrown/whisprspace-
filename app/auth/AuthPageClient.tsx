@@ -623,7 +623,11 @@ const AuthPage = () => {
 
             <button
               type="submit"
-              disabled={isLoading || !legalConsentChecked}
+              disabled={
+                isLoading ||
+                !loginForm.email.trim() ||
+                !loginForm.password.trim()
+              }
               className="w-full h-11 rounded-md bg-gradient-to-r from-purple-500 to-orange-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLoading ? (
@@ -701,7 +705,12 @@ const AuthPage = () => {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={
+                isLoading ||
+                !signupForm.email.trim() ||
+                !signupForm.password.trim() ||
+                !legalConsentChecked
+              }
               className="w-full h-11 rounded-md bg-gradient-to-r from-purple-500 to-orange-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {isLoading ? (
