@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createSupabaseServerClient } from '@/lib/core/supabase/server'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { getTrustedAppBaseUrl } from '@/lib/security/app-url'
+import { enforceRateLimit, withRateLimitHeaders } from '@/lib/security/rate-limit'
+import { resolveUserFromRequest } from '@/lib/security/request-auth'
 
 const supabaseAdmin = createSupabaseAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
   { auth: { persistSession: false } }
 )
-
-type ResolvedRequestUser = {
-  id: string
-}
 
 type FlutterwaveBank = {
   id?: number | string
@@ -90,20 +88,6 @@ const sanitizeTransferMetadata = (metadata: Record<string, unknown>) => {
   return cleaned
 }
 
-const normalizeBaseUrl = (rawUrl: string) => {
-  const trimmed = String(rawUrl || '').trim().replace(/\/+$/, '')
-  if (!trimmed) return ''
-  if (/^https?:\/\//i.test(trimmed)) return trimmed
-  return `https://${trimmed}`
-}
-
-const getBaseUrl = (request: NextRequest) => {
-  const origin = request.headers.get('origin') || ''
-  const envUrl = process.env.NEXT_PUBLIC_APP_URL || ''
-  const raw = origin || envUrl
-  return normalizeBaseUrl(raw)
-}
-
 const extractFlutterwaveError = (payload: unknown) => {
   if (!payload || typeof payload !== 'object') return null
   const record = payload as Record<string, unknown>
@@ -142,69 +126,6 @@ const extractFlutterwaveError = (payload: unknown) => {
   }
 
   return null
-}
-
-const decodeJwtPayload = (token: string): Record<string, unknown> | null => {
-  try {
-    const payload = token.split('.')[1]
-    if (!payload) return null
-    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
-    const padded = normalized.padEnd(normalized.length + (4 - (normalized.length % 4)) % 4, '=')
-    return JSON.parse(Buffer.from(padded, 'base64').toString('utf-8')) as Record<string, unknown>
-  } catch {
-    return null
-  }
-}
-
-const resolveUserFromRequest = async (request: NextRequest) => {
-  let user: ResolvedRequestUser | null = null
-
-  const authHeader = request.headers.get('authorization')
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice('Bearer '.length)
-    if (process.env.NODE_ENV === 'production') {
-      try {
-        const { data, error } = await supabaseAdmin.auth.getUser(token)
-        if (!error && data?.user?.id) {
-          user = { id: data.user.id }
-        }
-      } catch (error) {
-        console.error('Supabase auth getUser failed for payout:', error)
-      }
-    } else {
-      const payload = decodeJwtPayload(token)
-      const userId =
-        (typeof payload?.sub === 'string' && payload.sub) ||
-        (typeof payload?.user_id === 'string' && payload.user_id) ||
-        null
-
-      if (userId) {
-        const { data: userRow } = await supabaseAdmin
-          .from('users')
-          .select('id')
-          .eq('id', userId)
-          .maybeSingle()
-
-        if (userRow?.id) {
-          user = { id: userRow.id }
-        }
-      }
-    }
-  }
-
-  if (!user) {
-    const supabase = await createSupabaseServerClient()
-    const {
-      data: { user: cookieUser },
-      error: userError,
-    } = await supabase.auth.getUser()
-
-    if (!userError && cookieUser?.id) {
-      user = { id: cookieUser.id }
-    }
-  }
-
-  return user
 }
 
 const resolveCurrency = (raw: unknown): PayoutCurrency => {
@@ -247,6 +168,16 @@ const fetchFlutterwaveBanks = async (secretKey: string, country: string) => {
 }
 
 export async function GET(request: NextRequest) {
+  const rateLimit = enforceRateLimit({
+    request,
+    namespace: 'payments:flutterwave:transfer-options',
+    max: 15,
+    windowMs: 60_000,
+  })
+  if (!rateLimit.allowed) {
+    return rateLimit.response
+  }
+
   try {
     const flutterwaveSecretKey = process.env.FLW_SECRET_KEY
     if (!flutterwaveSecretKey) {
@@ -267,23 +198,33 @@ export async function GET(request: NextRequest) {
       console.error('Failed to fetch Flutterwave banks:', error)
     }
 
-    return NextResponse.json({
+    return withRateLimitHeaders(NextResponse.json({
       currency,
       country,
       supportedCurrencies: SUPPORTED_PAYOUT_CURRENCIES,
       banks,
       requiresBankCode: true,
-    })
+    }), rateLimit.headers)
   } catch (error) {
     console.error('Flutterwave payout options error:', error)
-    return NextResponse.json(
+    return withRateLimitHeaders(NextResponse.json(
       { error: 'Failed to load payout options' },
       { status: 500 }
-    )
+    ), rateLimit.headers)
   }
 }
 
 export async function POST(request: NextRequest) {
+  const rateLimit = enforceRateLimit({
+    request,
+    namespace: 'payments:flutterwave:transfer-initiate',
+    max: 5,
+    windowMs: 60_000,
+  })
+  if (!rateLimit.allowed) {
+    return rateLimit.response
+  }
+
   try {
     const flutterwaveSecretKey = process.env.FLW_SECRET_KEY
     if (!flutterwaveSecretKey) {
@@ -325,7 +266,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const baseUrl = getBaseUrl(request)
+    const baseUrl = getTrustedAppBaseUrl(request)
     if (!baseUrl) {
       return NextResponse.json(
         { error: 'Missing app URL configuration' },
@@ -514,14 +455,14 @@ export async function POST(request: NextRequest) {
       .eq('payment_provider', 'flutterwave')
       .eq('tx_ref', txRef)
 
-    return NextResponse.json({
+    return withRateLimitHeaders(NextResponse.json({
       reference: txRef,
       status: providerStatus,
       providerTransactionId,
-    })
+    }), rateLimit.headers)
   } catch (error) {
     console.error('Flutterwave transfer initiation error:', error)
-    return NextResponse.json(
+    return withRateLimitHeaders(NextResponse.json(
       {
         error:
           error instanceof Error && error.message
@@ -529,6 +470,6 @@ export async function POST(request: NextRequest) {
             : 'Failed to initiate payout',
       },
       { status: 500 }
-    )
+    ), rateLimit.headers)
   }
 }

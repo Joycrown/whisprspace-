@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
+import { safeCompare, sha256Hex } from '@/lib/security/crypto'
+import { claimWebhookEvent, completeWebhookEvent } from '@/lib/security/webhook-replay'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,7 +41,7 @@ const verifyFlutterwaveSignature = (rawBody: string, request: NextRequest) => {
 
   const signatureHeader = request.headers.get('flutterwave-signature')
   if (signatureHeader) {
-    if (signatureHeader === secretHash) {
+    if (safeCompare(signatureHeader, secretHash)) {
       return true
     }
 
@@ -48,12 +50,12 @@ const verifyFlutterwaveSignature = (rawBody: string, request: NextRequest) => {
       .update(rawBody)
       .digest('base64')
 
-    return hash === signatureHeader
+    return safeCompare(hash, signatureHeader)
   }
 
   const legacyHash = request.headers.get('verif-hash')
   if (legacyHash) {
-    return legacyHash === secretHash
+    return safeCompare(legacyHash, secretHash)
   }
 
   return false
@@ -119,25 +121,63 @@ export async function POST(request: NextRequest) {
 
     const event = JSON.parse(rawBody)
     const eventType = String(event?.type || event?.event || '').toLowerCase()
+    const eventIdentity =
+      String(event?.id || event?.data?.id || event?.data?.tx_ref || event?.data?.reference || '').trim() ||
+      sha256Hex(rawBody).slice(0, 32)
+    const eventKey = `${eventType || 'unknown'}:${eventIdentity}`
+    const payloadHash = sha256Hex(rawBody)
 
-    if (eventType === 'charge.completed' || eventType === 'payment.completed') {
-      await handleChargeCompleted(event?.data, flutterwaveSecretKey)
+    const claim = await claimWebhookEvent({
+      supabase,
+      provider: 'flutterwave',
+      eventKey,
+      eventType,
+      payloadHash,
+    })
+
+    if (claim.duplicate) {
+      return NextResponse.json({ received: true, duplicate: true })
     }
 
-    if (eventType === 'charge.failed' || eventType === 'payment.failed') {
-      await handleChargeFailed(event?.data)
-    }
+    try {
+      if (eventType === 'charge.completed' || eventType === 'payment.completed') {
+        await handleChargeCompleted(event?.data, flutterwaveSecretKey)
+      }
 
-    if (eventType === 'refund.completed' || eventType === 'refund.failed') {
-      await handleRefundEvent(event?.data, eventType)
-    }
+      if (eventType === 'charge.failed' || eventType === 'payment.failed') {
+        await handleChargeFailed(event?.data)
+      }
 
-    if (
-      eventType === 'transfer.disburse' ||
-      eventType === 'transfer.completed' ||
-      eventType === 'transfer.failed'
-    ) {
-      await handleTransferEvent(event?.data, eventType)
+      if (eventType === 'refund.completed' || eventType === 'refund.failed') {
+        await handleRefundEvent(event?.data, eventType)
+      }
+
+      if (
+        eventType === 'transfer.disburse' ||
+        eventType === 'transfer.completed' ||
+        eventType === 'transfer.failed'
+      ) {
+        await handleTransferEvent(event?.data, eventType)
+      }
+
+      if (claim.receiptId) {
+        await completeWebhookEvent({
+          supabase,
+          receiptId: claim.receiptId,
+          status: 'processed',
+        })
+      }
+    } catch (processingError) {
+      if (claim.receiptId) {
+        await completeWebhookEvent({
+          supabase,
+          receiptId: claim.receiptId,
+          status: 'failed',
+          errorMessage:
+            processingError instanceof Error ? processingError.message : 'Webhook processing failed',
+        })
+      }
+      throw processingError
     }
 
     return NextResponse.json({ received: true })

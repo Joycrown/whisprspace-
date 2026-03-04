@@ -1,7 +1,18 @@
 import { MetadataRoute } from 'next';
+import { siteConfig } from '@/lib/seo';
 
 export default function robots(): MetadataRoute.Robots {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://whisprspace.com';
+  if (!siteConfig.indexingEnabled) {
+    return {
+      rules: [
+        {
+          userAgent: '*',
+          disallow: '/',
+        },
+      ],
+      host: siteConfig.url,
+    };
+  }
 
   return {
     rules: [
@@ -10,12 +21,22 @@ export default function robots(): MetadataRoute.Robots {
         allow: '/',
         disallow: [
           '/api/',
-          '/admin/',
           '/_next/',
-          '/private/',
+          '/auth',
+          '/inbox',
+          '/message/',
+          '/dm/',
+          '/my-threads',
+          '/notifications',
+          '/profile',
+          '/groups',
+          '/threads',
+          '/invite/',
+          '/anonymous-messages',
         ],
       },
     ],
-    sitemap: `${baseUrl}/sitemap.xml`,
+    sitemap: `${siteConfig.url}/sitemap.xml`,
+    host: siteConfig.url,
   };
 }
