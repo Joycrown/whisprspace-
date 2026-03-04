@@ -5,6 +5,13 @@ import { calculateThreadExpiration } from '../utils/utils/helpers/threadHelpers'
 import { uploadService } from '@/lib/utils/upload-service';
 import { MESSAGE_CONFIG } from '@/lib/core/constants';
 import { buildThreadPath } from './thread-url';
+import {
+  sanitizeEmailAddress,
+  sanitizeEnumValue,
+  sanitizeMultilineInput,
+  sanitizeSingleLineInput,
+  sanitizeUuid,
+} from '@/lib/security/input-sanitization';
 
 export interface ThreadInviteItem {
   inviteId: string;
@@ -12,6 +19,20 @@ export interface ThreadInviteItem {
   createdAt: string;
   thread: Thread;
 }
+
+const THREAD_TYPE_VALUES = ['text', 'poll', 'premium'] as const;
+const THREAD_CATEGORY_VALUES = [
+  'general',
+  'tech',
+  'lifestyle',
+  'politics',
+  'entertainment',
+  'education',
+  'business',
+  'health',
+] as const;
+const THREAD_PRIVACY_VALUES = ['public', 'private', 'invite_only'] as const;
+const THREAD_MESSAGE_TYPE_VALUES = ['text', 'voice', 'image', 'file', 'link'] as const;
 
 /**
  * Fetch threads with filters, search, and pagination
@@ -24,6 +45,8 @@ export const fetchThreads = async (
   userId?: string
 ): Promise<{ threads: Thread[]; hasMore: boolean }> => {
   try {
+    const safeUserId = userId ? sanitizeUuid(userId) : null
+
     // Build filter object for rawDb
     const queryFilters: Record<string, string> = {};
     
@@ -34,10 +57,10 @@ export const fetchThreads = async (
     queryFilters['deleted_at'] = 'is.null';
 
     const sanitizeSearch = (value: string) =>
-      value.replace(/[(),]/g, ' ').trim();
+      sanitizeSingleLineInput(value, { maxLength: 120 }).replace(/[^a-zA-Z0-9\s_-]/g, '').trim();
 
-    const savedOrConditions = userId
-      ? `is_saved.is.null,is_saved.eq.false,and(is_saved.eq.true,creator_id.eq.${userId})`
+    const savedOrConditions = safeUserId
+      ? `is_saved.is.null,is_saved.eq.false,and(is_saved.eq.true,creator_id.eq.${safeUserId})`
       : 'is_saved.is.null,is_saved.eq.false';
 
     const nowIso = new Date().toISOString();
@@ -52,13 +75,19 @@ export const fetchThreads = async (
     // Search + visibility + expiration are composed as grouped logical expressions.
     if (searchQuery) {
       const safeSearch = sanitizeSearch(searchQuery);
-      const savedLogic = `or(${savedOrConditions})`;
-      const searchLogic = `or(title.ilike.*${safeSearch}*,content.ilike.*${safeSearch}*)`;
-      const andConditions = [savedLogic, searchLogic];
-      if (expirationLogic) {
-        andConditions.push(expirationLogic);
+      if (safeSearch) {
+        const savedLogic = `or(${savedOrConditions})`;
+        const searchLogic = `or(title.ilike.*${safeSearch}*,content.ilike.*${safeSearch}*)`;
+        const andConditions = [savedLogic, searchLogic];
+        if (expirationLogic) {
+          andConditions.push(expirationLogic);
+        }
+        queryFilters['and'] = `(${andConditions.join(',')})`;
+      } else if (expirationLogic) {
+        queryFilters['and'] = `(or(${savedOrConditions}),${expirationLogic})`;
+      } else {
+        queryFilters['or'] = `(${savedOrConditions})`;
       }
-      queryFilters['and'] = `(${andConditions.join(',')})`;
     } else if (expirationLogic) {
       queryFilters['and'] = `(or(${savedOrConditions}),${expirationLogic})`;
     } else {
@@ -68,17 +97,22 @@ export const fetchThreads = async (
 
     // Category
     if (filters.category && filters.category !== 'all') {
-      queryFilters['category'] = `eq.${filters.category}`;
+      const safeCategory = sanitizeEnumValue(filters.category, THREAD_CATEGORY_VALUES, 'general');
+      queryFilters['category'] = `eq.${safeCategory}`;
     }
 
     // Type
     if (filters.type && filters.type !== 'all') {
-      queryFilters['type'] = `eq.${filters.type}`;
+      const safeType = sanitizeEnumValue(filters.type, THREAD_TYPE_VALUES, 'text');
+      queryFilters['type'] = `eq.${safeType}`;
     }
 
     // Group
     if (filters.groupId) {
-      queryFilters['group_id'] = `eq.${filters.groupId}`;
+      const safeGroupId = sanitizeUuid(filters.groupId);
+      if (safeGroupId) {
+        queryFilters['group_id'] = `eq.${safeGroupId}`;
+      }
     }
 
     // Premium
@@ -88,11 +122,8 @@ export const fetchThreads = async (
 
     // Privacy
     if (filters.privacy && filters.privacy !== 'all') {
-      if (filters.privacy === 'public') {
-        queryFilters['privacy'] = 'eq.public';
-      } else {
-        queryFilters['privacy'] = `eq.${filters.privacy}`;
-      }
+      const safePrivacy = sanitizeEnumValue(filters.privacy, THREAD_PRIVACY_VALUES, 'public');
+      queryFilters['privacy'] = `eq.${safePrivacy}`;
     } else if (!filters.privacy) {
       queryFilters['privacy'] = 'eq.public';
     }
@@ -136,11 +167,11 @@ export const fetchThreads = async (
     const threadIds = threadRows.map((thread: any) => thread.id).filter(Boolean)
     let purchasedThreadIds = new Set<string>()
 
-    if (userId && threadIds.length > 0) {
+    if (safeUserId && threadIds.length > 0) {
       const { data: purchases, error: purchaseError } = await rawDb.select<any[]>('thread_purchases', {
         select: 'thread_id',
         filters: {
-          'user_id': rawDb.filter.eq(userId),
+          'user_id': rawDb.filter.eq(safeUserId),
           'thread_id': rawDb.filter.in(threadIds),
         },
       })
@@ -153,7 +184,7 @@ export const fetchThreads = async (
     }
 
     // Transform database records to Thread type
-    const threads: Thread[] = threadRows.map(thread => transformThread(thread, userId, purchasedThreadIds))
+    const threads: Thread[] = threadRows.map(thread => transformThread(thread, safeUserId || undefined, purchasedThreadIds))
 
     // Check if there are more threads
     const hasMore = (data || []).length === limit
@@ -175,6 +206,10 @@ export const fetchThreadById = async (
   userId?: string
 ): Promise<ThreadData | null> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId)
+    if (!safeThreadId) return null
+    const safeUserId = userId ? sanitizeUuid(userId) : null
+
     const select = `
       *,
       creator:users!threads_creator_id_fkey(id, username, anonymous_id, is_premium, avatar_url),
@@ -206,7 +241,7 @@ export const fetchThreadById = async (
     const { data, error } = await rawDb.select<any>('threads', {
       select,
       filters: {
-        'id': rawDb.filter.eq(threadId),
+        'id': rawDb.filter.eq(safeThreadId),
         'deleted_at': 'is.null',
         // Nested ordering/limits for messages
         'messages.order': 'created_at.desc',
@@ -219,12 +254,12 @@ export const fetchThreadById = async (
     if (!data) return null
 
     let purchasedThreadIds: Set<string> | undefined;
-    if (userId) {
+    if (safeUserId) {
       const { data: purchases, error: purchaseError } = await rawDb.select<any[]>('thread_purchases', {
         select: 'thread_id',
         filters: {
-          'thread_id': rawDb.filter.eq(threadId),
-          'user_id': rawDb.filter.eq(userId),
+          'thread_id': rawDb.filter.eq(safeThreadId),
+          'user_id': rawDb.filter.eq(safeUserId),
         },
       });
 
@@ -235,7 +270,7 @@ export const fetchThreadById = async (
       }
     }
 
-    return transformThreadData(data, userId, purchasedThreadIds)
+    return transformThreadData(data, safeUserId || undefined, purchasedThreadIds)
   } catch (error) {
     console.error('fetchThreadById error:', error)
     return null
@@ -252,8 +287,41 @@ export const createThread = async (
   try {
       console.log('Service: Creating thread', { threadData, userId });
 
-      const title = threadData.title?.trim() || '';
-      const content = threadData.content?.trim() || '';
+      const safeUserId = sanitizeUuid(userId);
+      if (!safeUserId) {
+        throw new Error('Invalid user context');
+      }
+
+      const title = sanitizeSingleLineInput(threadData.title, {
+        maxLength: CHARACTER_LIMITS.title,
+      });
+      const content = sanitizeMultilineInput(threadData.content, {
+        maxLength: CHARACTER_LIMITS.content,
+      });
+      const type = sanitizeEnumValue(threadData.type, THREAD_TYPE_VALUES, 'text');
+      const category = sanitizeEnumValue(threadData.category, THREAD_CATEGORY_VALUES, 'general');
+      const privacy = sanitizeEnumValue(threadData.privacy, THREAD_PRIVACY_VALUES, 'public');
+      const pollDurationRaw = Number(threadData.pollDuration);
+      const pollDuration =
+        Number.isFinite(pollDurationRaw) && pollDurationRaw > 0
+          ? Math.min(168, Math.floor(pollDurationRaw))
+          : 24;
+      const sanitizedPollOptions = (threadData.pollOptions || [])
+        .map((option) =>
+          sanitizeSingleLineInput(option, {
+            maxLength: CHARACTER_LIMITS.pollOption,
+          })
+        )
+        .filter(Boolean);
+      const priceRaw = Number(threadData.price);
+      const sanitizedPrice =
+        Number.isFinite(priceRaw) ? Math.round(priceRaw * 100) / 100 : null;
+      const memberLimitRaw = Number(threadData.memberLimit);
+      const sanitizedMemberLimit =
+        Number.isFinite(memberLimitRaw) && memberLimitRaw > 0
+          ? Math.min(1000, Math.floor(memberLimitRaw))
+          : null;
+      const isPremiumThread = type === 'premium' || threadData.isPremium === true;
 
       if (!title) {
         throw new Error('Thread title is required');
@@ -270,20 +338,22 @@ export const createThread = async (
       if (content.length > CHARACTER_LIMITS.content) {
         throw new Error(`Thread content must be ${CHARACTER_LIMITS.content} characters or fewer.`);
       }
+
+      if (type === 'poll' && sanitizedPollOptions.length < 2) {
+        throw new Error('Poll threads require at least 2 options.');
+      }
     
     // Get user's premium status
     const { data: userData } = await rawDb.select('users', {
       select: 'is_premium',
-      filters: { 'id': rawDb.filter.eq(userId) },
+      filters: { 'id': rawDb.filter.eq(safeUserId) },
       single: true
     });
     
       const isUserPremium = (userData as any)?.is_premium || false;
 
-      const isPremiumThread = threadData.type === 'premium' || threadData.isPremium === true;
-
       if (isPremiumThread) {
-        const price = Number(threadData.price);
+        const price = Number(sanitizedPrice);
         if (!price || Number.isNaN(price) || price <= 0) {
           throw new Error('Premium threads require a valid price');
         }
@@ -301,14 +371,14 @@ export const createThread = async (
         }
       }
 
-      if (threadData.type === 'poll' && !isUserPremium) {
+      if (type === 'poll' && !isUserPremium) {
         const now = new Date();
         const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
         const { data: recentPolls, error: recentError } = await rawDb.select<any[]>('threads', {
           select: 'id',
           filters: {
-            'creator_id': rawDb.filter.eq(userId),
+            'creator_id': rawDb.filter.eq(safeUserId),
             'type': rawDb.filter.eq('poll'),
             'deleted_at': 'is.null',
             'created_at': rawDb.filter.gte(weekAgo),
@@ -327,7 +397,7 @@ export const createThread = async (
         const { data: activePolls, error: activeError } = await rawDb.select<any[]>('threads', {
           select: 'id',
           filters: {
-            'creator_id': rawDb.filter.eq(userId),
+            'creator_id': rawDb.filter.eq(safeUserId),
             'type': rawDb.filter.eq('poll'),
             'deleted_at': 'is.null',
             'expires_at': rawDb.filter.gt(now.toISOString()),
@@ -346,20 +416,20 @@ export const createThread = async (
 
     // Create the thread
     const { data: threadDataResult, error: threadError } = await rawDb.insert('threads', {
-      creator_id: userId,
+      creator_id: safeUserId,
       title,
       content,
-      type: threadData.type,
-      category: threadData.category,
-      privacy: threadData.privacy || 'public',
-      member_limit: threadData.privacy === 'invite_only'
-        ? (threadData.memberLimit ?? 10)
+      type,
+      category,
+      privacy,
+      member_limit: privacy === 'invite_only'
+        ? (sanitizedMemberLimit ?? 10)
         : null,
-      is_premium: threadData.isPremium || false,
-      price: threadData.price,
-      expires_at: threadData.type === 'poll' 
-        ? new Date(Date.now() + (threadData.pollDuration || 24) * 60 * 60 * 1000).toISOString()
-        : calculateThreadExpiration(threadData.isPremium || false), // Use thread premium status
+      is_premium: isPremiumThread,
+      price: isPremiumThread ? sanitizedPrice : null,
+      expires_at: type === 'poll' 
+        ? new Date(Date.now() + pollDuration * 60 * 60 * 1000).toISOString()
+        : calculateThreadExpiration(isPremiumThread), // Use thread premium status
     });
 
     const thread = threadDataResult?.[0]; // Insert returns array
@@ -375,20 +445,20 @@ export const createThread = async (
     // Auto-join creator to thread_participants
     await rawDb.insert('thread_participants', {
       thread_id: thread.id,
-      user_id: userId
+      user_id: safeUserId
     }, { returning: false }).catch(err => {
       console.warn('⚠️ Service: Failed to auto-join creator:', err);
     });
 
       // If it's a poll, create poll and options
-      if (threadData.type === 'poll' && threadData.pollOptions) {
+      if (type === 'poll' && sanitizedPollOptions.length > 0) {
         console.log('Service: Creating poll for thread', thread.id);
       const { data: pollData, error: pollError } = await rawDb.insert('polls', {
         thread_id: thread.id,
-        question: threadData.title,
-        duration_hours: threadData.pollDuration || 24,
+        question: title,
+        duration_hours: pollDuration,
         allow_multiple_votes: false,
-        expires_at: new Date(Date.now() + (threadData.pollDuration || 24) * 60 * 60 * 1000).toISOString(),
+        expires_at: new Date(Date.now() + pollDuration * 60 * 60 * 1000).toISOString(),
       });
 
       const poll = pollData?.[0];
@@ -397,8 +467,7 @@ export const createThread = async (
       if (!poll) throw new Error('Poll creation failed')
 
       // Create poll options
-      const options = threadData.pollOptions
-        .filter(opt => opt.trim())
+      const options = sanitizedPollOptions
         .map((text, index) => ({
           poll_id: poll.id,
           text,
@@ -426,13 +495,18 @@ export const getUserPollStats = async (
   userId: string
 ): Promise<{ weeklyCount: number; activeCount: number }> => {
   try {
+    const safeUserId = sanitizeUuid(userId)
+    if (!safeUserId) {
+      throw new Error('Invalid user context')
+    }
+
     const now = new Date()
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
     const { data: weeklyPolls, error: weeklyError } = await rawDb.select<any[]>('threads', {
       select: 'id',
       filters: {
-        'creator_id': rawDb.filter.eq(userId),
+        'creator_id': rawDb.filter.eq(safeUserId),
         'type': rawDb.filter.eq('poll'),
         'deleted_at': 'is.null',
         'created_at': rawDb.filter.gte(weekAgo),
@@ -447,7 +521,7 @@ export const getUserPollStats = async (
     const { data: activePolls, error: activeError } = await rawDb.select<any[]>('threads', {
       select: 'id',
       filters: {
-        'creator_id': rawDb.filter.eq(userId),
+        'creator_id': rawDb.filter.eq(safeUserId),
         'type': rawDb.filter.eq('poll'),
         'deleted_at': 'is.null',
         'expires_at': rawDb.filter.gt(now.toISOString()),
@@ -476,9 +550,13 @@ export const getUserPollStats = async (
  */
 export const likeThread = async (threadId: string, userId: string): Promise<boolean> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId)
+    const safeUserId = sanitizeUuid(userId)
+    if (!safeThreadId || !safeUserId) return false
+
     const { error } = await rawDb.insert('thread_likes', {
-      thread_id: threadId,
-      user_id: userId,
+      thread_id: safeThreadId,
+      user_id: safeUserId,
     }, { returning: false });
 
     if (error) throw error
@@ -495,9 +573,13 @@ export const likeThread = async (threadId: string, userId: string): Promise<bool
  */
 export const unlikeThread = async (threadId: string, userId: string): Promise<boolean> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId)
+    const safeUserId = sanitizeUuid(userId)
+    if (!safeThreadId || !safeUserId) return false
+
     const { error } = await rawDb.remove('thread_likes', {
-      'thread_id': rawDb.filter.eq(threadId),
-      'user_id': rawDb.filter.eq(userId)
+      'thread_id': rawDb.filter.eq(safeThreadId),
+      'user_id': rawDb.filter.eq(safeUserId)
     });
 
     if (error) throw error
@@ -513,9 +595,13 @@ export const unlikeThread = async (threadId: string, userId: string): Promise<bo
  */
 export const likeMessage = async (messageId: string, userId: string): Promise<boolean> => {
   try {
+    const safeMessageId = sanitizeUuid(messageId)
+    const safeUserId = sanitizeUuid(userId)
+    if (!safeMessageId || !safeUserId) return false
+
     const { error } = await rawDb.insert('message_likes', {
-      message_id: messageId,
-      user_id: userId,
+      message_id: safeMessageId,
+      user_id: safeUserId,
     }, { returning: false });
 
     if (error) throw error
@@ -532,9 +618,13 @@ export const likeMessage = async (messageId: string, userId: string): Promise<bo
  */
 export const unlikeMessage = async (messageId: string, userId: string): Promise<boolean> => {
   try {
+    const safeMessageId = sanitizeUuid(messageId)
+    const safeUserId = sanitizeUuid(userId)
+    if (!safeMessageId || !safeUserId) return false
+
     const { error } = await rawDb.remove('message_likes', {
-      'message_id': rawDb.filter.eq(messageId),
-      'user_id': rawDb.filter.eq(userId)
+      'message_id': rawDb.filter.eq(safeMessageId),
+      'user_id': rawDb.filter.eq(safeUserId)
     });
 
     if (error) throw error
@@ -554,10 +644,17 @@ export const addMessageReaction = async (
   reaction: string
 ): Promise<boolean> => {
   try {
+    const safeMessageId = sanitizeUuid(messageId)
+    const safeUserId = sanitizeUuid(userId)
+    if (!safeMessageId || !safeUserId) return false
+
+    const safeReaction = sanitizeSingleLineInput(reaction, { maxLength: 64 })
+    if (!safeReaction) return false
+
     const { error } = await rawDb.insert('message_reactions', {
-      message_id: messageId,
-      user_id: userId,
-      reaction_type: reaction,
+      message_id: safeMessageId,
+      user_id: safeUserId,
+      reaction_type: safeReaction,
     }, { returning: false });
 
     if (error) {
@@ -584,10 +681,17 @@ export const removeMessageReaction = async (
   reaction: string
 ): Promise<boolean> => {
   try {
+    const safeMessageId = sanitizeUuid(messageId)
+    const safeUserId = sanitizeUuid(userId)
+    if (!safeMessageId || !safeUserId) return false
+
+    const safeReaction = sanitizeSingleLineInput(reaction, { maxLength: 64 })
+    if (!safeReaction) return false
+
     const { error } = await rawDb.remove('message_reactions', {
-      'message_id': rawDb.filter.eq(messageId),
-      'user_id': rawDb.filter.eq(userId),
-      'reaction_type': rawDb.filter.eq(reaction)
+      'message_id': rawDb.filter.eq(safeMessageId),
+      'user_id': rawDb.filter.eq(safeUserId),
+      'reaction_type': rawDb.filter.eq(safeReaction)
     });
 
     if (error) throw error
@@ -607,10 +711,15 @@ export const voteOnPoll = async (
   userId: string
 ): Promise<boolean> => {
   try {
+    const safePollId = sanitizeUuid(pollId)
+    const safeOptionId = sanitizeUuid(optionId)
+    const safeUserId = sanitizeUuid(userId)
+    if (!safePollId || !safeOptionId || !safeUserId) return false
+
     const { error } = await rawDb.insert('poll_votes', {
-      poll_id: pollId,
-      option_id: optionId,
-      user_id: userId,
+      poll_id: safePollId,
+      option_id: safeOptionId,
+      user_id: safeUserId,
     }, { returning: false });
 
     if (error) throw error
@@ -636,13 +745,38 @@ export const addMessage = async (
   attachments?: unknown[],
   replyToId?: string
 ): Promise<Message> => {
+  const safeThreadId = sanitizeUuid(threadId);
+  if (!safeThreadId) {
+    throw new Error('Invalid thread reference');
+  }
+
+  const safeUserId = sanitizeUuid(userId);
+  if (!safeUserId) {
+    throw new Error('Invalid user context');
+  }
+
+  const safeParentMessageId = replyToId ? sanitizeUuid(replyToId) : null;
+  if (replyToId && !safeParentMessageId) {
+    throw new Error('Invalid parent message reference');
+  }
+
+  const safeType = sanitizeEnumValue(type, THREAD_MESSAGE_TYPE_VALUES, 'text');
+  const safeContent = sanitizeMultilineInput(content, {
+    maxLength: MESSAGE_CONFIG.maxLength,
+  });
+  const safeAttachments = Array.isArray(attachments) ? attachments : [];
+
+  if (safeType === 'text' && !safeContent && safeAttachments.length === 0) {
+    throw new Error('Message cannot be empty');
+  }
+
   const { data: insertedData, error: insertError } = await rawDb.insert('messages', {
-    thread_id: threadId,
-    sender_id: userId,
-    content,
-    type,
-    attachments: attachments || [],
-    parent_message_id: replyToId || null,
+    thread_id: safeThreadId,
+    sender_id: safeUserId,
+    content: safeContent,
+    type: safeType,
+    attachments: safeAttachments,
+    parent_message_id: safeParentMessageId,
   }, { returning: true });
 
   const inserted = insertedData?.[0];
@@ -659,7 +793,7 @@ export const addMessage = async (
     {
       ...inserted,
       sender: {
-        id: userId,
+        id: safeUserId,
         username: 'You',
         anonymous_id: 'You',
         avatar_url: '#cccccc',
@@ -667,15 +801,15 @@ export const addMessage = async (
       },
       message_likes: [],
       message_reactions: [],
-      parent_message: replyToId
+      parent_message: safeParentMessageId
         ? {
-            id: replyToId,
+            id: safeParentMessageId,
             content: '',
             sender: null,
           }
         : null,
     },
-    userId
+    safeUserId
   );
 }
 
@@ -687,7 +821,19 @@ export const editThreadMessage = async (
   content: string,
   userId: string
 ): Promise<Message> => {
-  const nextContent = content.trim();
+  const safeMessageId = sanitizeUuid(messageId);
+  if (!safeMessageId) {
+    throw new Error('Invalid message reference');
+  }
+
+  const safeUserId = sanitizeUuid(userId);
+  if (!safeUserId) {
+    throw new Error('Invalid user context');
+  }
+
+  const nextContent = sanitizeMultilineInput(content, {
+    maxLength: MESSAGE_CONFIG.maxLength,
+  });
   if (!nextContent) {
     throw new Error('Message cannot be empty');
   }
@@ -703,8 +849,8 @@ export const editThreadMessage = async (
       edited_at: new Date().toISOString(),
     },
     {
-      'id': rawDb.filter.eq(messageId),
-      'sender_id': rawDb.filter.eq(userId),
+      'id': rawDb.filter.eq(safeMessageId),
+      'sender_id': rawDb.filter.eq(safeUserId),
       'deleted_at': 'is.null',
     }
   );
@@ -740,7 +886,7 @@ export const editThreadMessage = async (
     throw fetchError || new Error('Message updated but could not be retrieved');
   }
 
-  return transformMessage(fetchedData, userId);
+  return transformMessage(fetchedData, safeUserId);
 }
 
 /**
@@ -752,25 +898,45 @@ export const updateThread = async (
   userId: string
 ): Promise<Thread | null> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId)
+    const safeUserId = sanitizeUuid(userId)
+    if (!safeThreadId || !safeUserId) {
+      throw new Error('Invalid thread or user reference')
+    }
+
     // Map Thread types to DB columns
     const dbUpdates: any = {
       updated_at: new Date().toISOString()
     };
     
-    if (updates.title) dbUpdates.title = updates.title;
-    if (updates.content) dbUpdates.content = updates.content;
+    if (updates.title) {
+      const safeTitle = sanitizeSingleLineInput(updates.title, { maxLength: CHARACTER_LIMITS.title });
+      if (!safeTitle) throw new Error('Thread title is required');
+      dbUpdates.title = safeTitle;
+    }
+    if (updates.content) {
+      const safeContent = sanitizeMultilineInput(updates.content, { maxLength: CHARACTER_LIMITS.content });
+      if (!safeContent) throw new Error('Thread content is required');
+      dbUpdates.content = safeContent;
+    }
     if (updates.isLocked !== undefined) dbUpdates.is_locked = updates.isLocked;
     if (updates.isPinned !== undefined) dbUpdates.is_pinned = updates.isPinned;
-    if (updates.privacy) dbUpdates.privacy = updates.privacy;
+    if (updates.privacy) {
+      dbUpdates.privacy = sanitizeEnumValue(updates.privacy, THREAD_PRIVACY_VALUES, 'public');
+    }
     if (updates.memberLimit !== undefined) {
-      dbUpdates.member_limit = updates.memberLimit;
+      const nextLimitRaw = Number(updates.memberLimit);
+      dbUpdates.member_limit =
+        Number.isFinite(nextLimitRaw) && nextLimitRaw > 0
+          ? Math.min(1000, Math.floor(nextLimitRaw))
+          : null;
     } else if (updates.privacy === 'public') {
       dbUpdates.member_limit = null;
     }
     
     const { data: updatedData, error } = await rawDb.update<any>('threads', dbUpdates, {
-      'id': rawDb.filter.eq(threadId),
-      'creator_id': rawDb.filter.eq(userId)
+      'id': rawDb.filter.eq(safeThreadId),
+      'creator_id': rawDb.filter.eq(safeUserId)
     });
 
     if (error) throw error;
@@ -779,7 +945,7 @@ export const updateThread = async (
     // Fetch full thread details to return strict Thread object
     // Or just return simplistic version if acceptable?
     // Using fetchThreadById logic to ensure consistent return type
-    return fetchThreadById(threadId, userId);
+    return fetchThreadById(safeThreadId, safeUserId);
   } catch (error) {
     console.error('updateThread error:', error);
     return null;
@@ -792,11 +958,17 @@ export const updateThread = async (
  */
 export const deleteThread = async (threadId: string, userId: string): Promise<boolean> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId);
+    const safeUserId = sanitizeUuid(userId);
+    if (!safeThreadId || !safeUserId) {
+      throw new Error('Invalid thread or user reference');
+    }
+
     console.log(`🗑️ Starting hard delete for thread: ${threadId} (User: ${userId})`);
 
     // 1. Storage Cleanup: Delete all attachments for this thread
     // Typical folder structure: messages/{threadId}
-    const storageFolder = `messages/${threadId}`;
+    const storageFolder = `messages/${safeThreadId}`;
     try {
        await uploadService.deleteFolder('thread-attachments', storageFolder);
     } catch (storageError) {
@@ -809,20 +981,20 @@ export const deleteThread = async (threadId: string, userId: string): Promise<bo
     // but typically payments should be kept for audit/history, just disconnect from thread.
     
     // Nullify references in payments
-    await rawDb.update('payments', { thread_id: null }, { 'thread_id': rawDb.filter.eq(threadId) }, { returning: false }).catch(err => {
+    await rawDb.update('payments', { thread_id: null }, { 'thread_id': rawDb.filter.eq(safeThreadId) }, { returning: false }).catch(err => {
       console.warn('⚠️ Failed to nullify payment references:', err);
     });
 
     // Nullify references in creator_earnings
-    await rawDb.update('creator_earnings', { thread_id: null }, { 'thread_id': rawDb.filter.eq(threadId) }, { returning: false }).catch(err => {
+    await rawDb.update('creator_earnings', { thread_id: null }, { 'thread_id': rawDb.filter.eq(safeThreadId) }, { returning: false }).catch(err => {
       console.warn('⚠️ Failed to nullify earnings references:', err);
     });
 
     // 3. Hard Delete the thread record
     // Cascading deletes will handle messages, reactions, likes etc. if configured in DB
     const { error: deleteError } = await rawDb.remove('threads', {
-      'id': rawDb.filter.eq(threadId),
-      'creator_id': rawDb.filter.eq(userId)
+      'id': rawDb.filter.eq(safeThreadId),
+      'creator_id': rawDb.filter.eq(safeUserId)
     });
 
     if (deleteError) {
@@ -852,10 +1024,16 @@ export const extendThreadExpiration = async (
   userId: string
 ): Promise<{ success: boolean; newExpiresAt?: string; error?: string }> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId)
+    const safeUserId = sanitizeUuid(userId)
+    if (!safeThreadId || !safeUserId) {
+      return { success: false, error: 'Invalid thread or user reference' }
+    }
+
     // Fetch the thread to verify ownership
     const { data: threadData, error: fetchError } = await rawDb.select<any>('threads', {
       select: 'id, creator_id, expires_at',
-      filters: { 'id': rawDb.filter.eq(threadId) },
+      filters: { 'id': rawDb.filter.eq(safeThreadId) },
       single: true
     })
 
@@ -866,14 +1044,14 @@ export const extendThreadExpiration = async (
     }
 
     // Verify user is the creator
-    if (thread.creator_id !== userId) {
+    if (thread.creator_id !== safeUserId) {
       return { success: false, error: 'Only the thread creator can extend expiration' }
     }
 
     // Verify user is premium (premium creators can extend any thread type)
     const { data: userData, error: userError } = await rawDb.select<any>('users', {
       select: 'is_premium',
-      filters: { 'id': rawDb.filter.eq(userId) },
+      filters: { 'id': rawDb.filter.eq(safeUserId) },
       single: true
     })
 
@@ -888,8 +1066,8 @@ export const extendThreadExpiration = async (
 
     // Update expiration
     const { error: updateError } = await rawDb.update('threads', { expires_at: newExpiresAt }, {
-      'id': rawDb.filter.eq(threadId),
-      'creator_id': rawDb.filter.eq(userId)
+      'id': rawDb.filter.eq(safeThreadId),
+      'creator_id': rawDb.filter.eq(safeUserId)
     }, { returning: false });
 
     if (updateError) {
@@ -913,10 +1091,16 @@ export const saveThread = async (
   userId: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId)
+    const safeUserId = sanitizeUuid(userId)
+    if (!safeThreadId || !safeUserId) {
+      return { success: false, error: 'Invalid thread or user reference' }
+    }
+
     // Fetch the thread to verify ownership
     const { data: threadData, error: fetchError } = await rawDb.select<any>('threads', {
       select: 'id, creator_id, is_saved',
-      filters: { 'id': rawDb.filter.eq(threadId) },
+      filters: { 'id': rawDb.filter.eq(safeThreadId) },
       single: true
     })
 
@@ -927,7 +1111,7 @@ export const saveThread = async (
     }
 
     // Verify user is the creator
-    if (thread.creator_id !== userId) {
+    if (thread.creator_id !== safeUserId) {
       return { success: false, error: 'Only the thread creator can save threads' }
     }
 
@@ -941,8 +1125,8 @@ export const saveThread = async (
         is_saved: true,
         expires_at: null  // Remove expiration
       }, {
-        'id': rawDb.filter.eq(threadId),
-        'creator_id': rawDb.filter.eq(userId)
+        'id': rawDb.filter.eq(safeThreadId),
+        'creator_id': rawDb.filter.eq(safeUserId)
       }, { returning: false });
 
     if (updateError) {
@@ -960,14 +1144,15 @@ export const saveThread = async (
  * Join a thread
  */
 export const joinThread = async (threadId: string, userId: string): Promise<boolean> => {
+  const safeThreadId = sanitizeUuid(threadId)
+  const safeUserId = sanitizeUuid(userId)
 
-  if (!userId) {
-
+  if (!safeThreadId || !safeUserId) {
     return false;
   }
   try {
     const { data, error } = await rawDb.rpc('join_thread', {
-      p_thread_id: threadId
+      p_thread_id: safeThreadId
     });
 
     if (error) {
@@ -1034,8 +1219,24 @@ export const createThreadInvite = async (
   forceNew: boolean = false
 ): Promise<{ code: string | null; error?: string }> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId);
+    if (!safeThreadId) {
+      return { code: null, error: 'Invalid thread reference' };
+    }
+
+    const safeMaxUsesRaw = Number(maxUses);
+    const safeMaxUses =
+      Number.isFinite(safeMaxUsesRaw) && safeMaxUsesRaw > 0
+        ? Math.min(1000, Math.floor(safeMaxUsesRaw))
+        : null;
+    const safeExpiresInDaysRaw = Number(expiresInDays);
+    const safeExpiresInDays =
+      Number.isFinite(safeExpiresInDaysRaw) && safeExpiresInDaysRaw > 0
+        ? Math.min(365, Math.floor(safeExpiresInDaysRaw))
+        : 7;
+
     const session = rawAuth.getSession();
-    const userId = session?.user?.id;
+    const userId = sanitizeUuid(session?.user?.id);
     if (!userId) return { code: null, error: 'Not authenticated' };
 
     const now = new Date();
@@ -1043,7 +1244,7 @@ export const createThreadInvite = async (
     if (!forceNew) {
       const { data: existing, error: existingError } = await rawDb.select<any[]>('thread_invites', {
         select: 'id, code, expires_at, max_uses, current_uses',
-        filters: { 'thread_id': rawDb.filter.eq(threadId) },
+        filters: { 'thread_id': rawDb.filter.eq(safeThreadId) },
         limit: 1,
       });
 
@@ -1063,12 +1264,12 @@ export const createThreadInvite = async (
 
     const code = Math.random().toString(36).substring(2, 10).toUpperCase();
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + expiresInDays);
+    expiresAt.setDate(expiresAt.getDate() + safeExpiresInDays);
 
     const payload = {
       code,
       created_by: userId,
-      max_uses: maxUses,
+      max_uses: safeMaxUses,
       current_uses: 0,
       expires_at: expiresAt.toISOString(),
       created_at: now.toISOString(),
@@ -1077,7 +1278,7 @@ export const createThreadInvite = async (
     const { data: updated, error: updateError } = await rawDb.update<any>(
       'thread_invites',
       payload,
-      { 'thread_id': rawDb.filter.eq(threadId) }
+      { 'thread_id': rawDb.filter.eq(safeThreadId) }
     );
 
     if (updateError) {
@@ -1089,7 +1290,7 @@ export const createThreadInvite = async (
     }
 
     const { data, error } = await rawDb.insert<any>('thread_invites', {
-      thread_id: threadId,
+      thread_id: safeThreadId,
       ...payload,
     });
 
@@ -1111,8 +1312,13 @@ export const redeemThreadInvite = async (
   code: string
 ): Promise<{ threadId: string | null; error?: string }> => {
   try {
+    const safeCode = sanitizeSingleLineInput(code, { maxLength: 64 }).toUpperCase();
+    if (!safeCode) {
+      return { threadId: null, error: 'Invite code is required' };
+    }
+
     const { data, error } = await rawDb.rpc<string>('redeem_thread_invite', {
-      p_code: code,
+      p_code: safeCode,
     });
 
     if (error) {
@@ -1133,8 +1339,13 @@ export const fetchThreadAccessCodes = async (
   threadId: string
 ): Promise<{ data: AccessCode[]; error?: string }> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId);
+    if (!safeThreadId) {
+      return { data: [], error: 'Invalid thread reference' };
+    }
+
     const { data, error } = await rawDb.select<any[]>('thread_access_codes', {
-      filters: { 'thread_id': rawDb.filter.eq(threadId) },
+      filters: { 'thread_id': rawDb.filter.eq(safeThreadId) },
       order: { column: 'created_at', ascending: false },
     });
 
@@ -1164,8 +1375,13 @@ export const createThreadAccessCode = async (
   threadId: string
 ): Promise<{ data: AccessCode | null; error?: string }> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId);
+    if (!safeThreadId) {
+      return { data: null, error: 'Invalid thread reference' };
+    }
+
     const { data, error } = await rawDb.rpc<any>('create_thread_access_code', {
-      p_thread_id: threadId,
+      p_thread_id: safeThreadId,
     });
 
     if (error) {
@@ -1200,9 +1416,19 @@ export const revokeThreadAccessCode = async (
   code: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId);
+    if (!safeThreadId) {
+      return { success: false, error: 'Invalid thread reference' };
+    }
+
+    const safeCode = sanitizeSingleLineInput(code, { maxLength: 64 }).toUpperCase();
+    if (!safeCode) {
+      return { success: false, error: 'Access code is required' };
+    }
+
     const { data, error } = await rawDb.rpc<any>('revoke_thread_access_code', {
-      p_thread_id: threadId,
-      p_code: code,
+      p_thread_id: safeThreadId,
+      p_code: safeCode,
     });
 
     if (error) {
@@ -1223,9 +1449,19 @@ export const redeemThreadAccessCode = async (
   code: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId);
+    if (!safeThreadId) {
+      return { success: false, error: 'Invalid thread reference' };
+    }
+
+    const safeCode = sanitizeSingleLineInput(code, { maxLength: 64 }).toUpperCase();
+    if (!safeCode) {
+      return { success: false, error: 'Access code is required' };
+    }
+
     const { data, error } = await rawDb.rpc<any>('redeem_thread_access_code', {
-      p_thread_id: threadId,
-      p_code: code,
+      p_thread_id: safeThreadId,
+      p_code: safeCode,
     });
 
     if (error) {
@@ -1247,9 +1483,23 @@ export const inviteUserToThread = async (
   threadTitle?: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId);
+    if (!safeThreadId) {
+      return { success: false, error: 'Invalid thread reference' };
+    }
+
+    const safeUsername = sanitizeSingleLineInput(username, { maxLength: 64 });
+    if (!safeUsername) {
+      return { success: false, error: 'Username is required' };
+    }
+
+    const safeThreadTitle = sanitizeSingleLineInput(threadTitle || '', {
+      maxLength: CHARACTER_LIMITS.title,
+    });
+
     const { data, error } = await rawDb.rpc<any>('invite_user_to_thread', {
-      p_thread_id: threadId,
-      p_username: username,
+      p_thread_id: safeThreadId,
+      p_username: safeUsername,
     });
 
     if (error) {
@@ -1269,11 +1519,11 @@ export const inviteUserToThread = async (
         single: true,
       });
 
-      const email = userData?.email;
+      const email = sanitizeEmailAddress(userData?.email);
       const emailEnabled = userData?.preferences?.notifications?.email !== false;
 
       if (email && emailEnabled && typeof window !== 'undefined') {
-        const threadPath = buildThreadPath({ id: threadId, title: threadTitle });
+        const threadPath = buildThreadPath({ id: safeThreadId, title: safeThreadTitle });
         const inviteUrl = `${window.location.origin}/auth?redirect=${encodeURIComponent(threadPath)}`;
         await fetch('/api/threads/send-invite', {
           method: 'POST',
@@ -1281,7 +1531,7 @@ export const inviteUserToThread = async (
           body: JSON.stringify({
             email,
             inviteUrl,
-            threadTitle: threadTitle || 'a thread',
+            threadTitle: safeThreadTitle || 'a thread',
           }),
         }).catch(() => null);
       }
@@ -1300,6 +1550,11 @@ export const fetchInvitedThreads = async (
   userId: string
 ): Promise<{ data: ThreadInviteItem[]; error?: string }> => {
   try {
+    const safeUserId = sanitizeUuid(userId);
+    if (!safeUserId) {
+      return { data: [], error: 'Invalid user context' };
+    }
+
     const select = `
       id,
       status,
@@ -1315,7 +1570,7 @@ export const fetchInvitedThreads = async (
     const { data, error } = await rawDb.select<any[]>('thread_user_invites', {
       select,
       filters: {
-        'invited_user_id': rawDb.filter.eq(userId),
+        'invited_user_id': rawDb.filter.eq(safeUserId),
         'status': rawDb.filter.eq('pending'),
       },
       order: { column: 'created_at', ascending: false },
@@ -1331,7 +1586,7 @@ export const fetchInvitedThreads = async (
         inviteId: row.id,
         status: row.status,
         createdAt: row.created_at,
-        thread: transformThread(row.thread, userId),
+        thread: transformThread(row.thread, safeUserId),
       }));
 
     return { data: invites };
@@ -1345,8 +1600,14 @@ export const fetchInvitedThreads = async (
  */
 export const leaveThread = async (threadId: string, userId: string): Promise<boolean> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId);
+    const safeUserId = sanitizeUuid(userId);
+    if (!safeThreadId || !safeUserId) {
+      throw new Error('Invalid thread or user reference');
+    }
+
     const { data, error } = await rawDb.rpc('leave_thread', {
-      p_thread_id: threadId
+      p_thread_id: safeThreadId,
     });
 
     if (error) {
@@ -1369,9 +1630,15 @@ export const checkThreadBan = async (
   userId: string
 ): Promise<{ isBanned: boolean; error?: string }> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId);
+    const safeUserId = sanitizeUuid(userId);
+    if (!safeThreadId || !safeUserId) {
+      return { isBanned: false, error: 'Invalid thread or user reference' };
+    }
+
     const { data, error } = await rawDb.rpc<boolean>('is_thread_banned', {
-      p_thread_id: threadId,
-      p_user_id: userId,
+      p_thread_id: safeThreadId,
+      p_user_id: safeUserId,
     });
 
     if (error) {
@@ -1391,7 +1658,7 @@ interface PostgrestErrorPayload {
   hint?: string;
 }
 
-const REPORT_REASON_VALUES = new Set([
+const REPORT_REASON_VALUES = [
   'spam',
   'harassment',
   'hate_speech',
@@ -1400,7 +1667,7 @@ const REPORT_REASON_VALUES = new Set([
   'misinformation',
   'copyright',
   'other',
-]);
+] as const;
 
 function parsePostgrestErrorPayload(error: unknown): PostgrestErrorPayload | null {
   if (!(error instanceof Error)) return null;
@@ -1447,16 +1714,24 @@ const reportThreadWithoutRpc = async (
   error?: string;
 }> => {
   const session = rawAuth.getSession();
-  const reporterId = session?.user?.id;
+  const reporterId = sanitizeUuid(session?.user?.id);
   if (!reporterId) {
     return { success: false, error: 'Not authenticated' };
   }
 
-  const safeReason = REPORT_REASON_VALUES.has(reason) ? reason : 'other';
+  const safeThreadId = sanitizeUuid(threadId);
+  if (!safeThreadId) {
+    return { success: false, error: 'Invalid thread reference' };
+  }
+
+  const safeReason = sanitizeEnumValue(reason, REPORT_REASON_VALUES, 'other');
+  const safeDescription = description
+    ? sanitizeMultilineInput(description, { maxLength: 1000 })
+    : null;
 
   const { data: threadRows, error: threadError } = await rawDb.select<any[]>('threads', {
     select: 'id,creator_id,participant_count',
-    filters: { id: rawDb.filter.eq(threadId) },
+    filters: { id: rawDb.filter.eq(safeThreadId) },
     limit: 1,
   });
 
@@ -1474,7 +1749,7 @@ const reportThreadWithoutRpc = async (
     filters: {
       reporter_id: rawDb.filter.eq(reporterId),
       content_type: rawDb.filter.eq('thread'),
-      content_id: rawDb.filter.eq(threadId),
+      content_id: rawDb.filter.eq(safeThreadId),
     },
     limit: 1,
   });
@@ -1492,9 +1767,9 @@ const reportThreadWithoutRpc = async (
         reporter_id: reporterId,
         reported_user_id: thread.creator_id,
         content_type: 'thread',
-        content_id: threadId,
+        content_id: safeThreadId,
         reason: safeReason,
-        description: description?.trim() ? description.trim() : null,
+        description: safeDescription || null,
       },
       { returning: false }
     );
@@ -1512,7 +1787,7 @@ const reportThreadWithoutRpc = async (
     select: 'reporter_id',
     filters: {
       content_type: rawDb.filter.eq('thread'),
-      content_id: rawDb.filter.eq(threadId),
+      content_id: rawDb.filter.eq(safeThreadId),
     },
   });
 
@@ -1534,7 +1809,7 @@ const reportThreadWithoutRpc = async (
   if (participantCount <= 0) {
     const { data: participantRows, error: participantError } = await rawDb.select<any[]>('thread_participants', {
       select: 'user_id',
-      filters: { thread_id: rawDb.filter.eq(threadId) },
+      filters: { thread_id: rawDb.filter.eq(safeThreadId) },
     });
 
     if (!participantError && participantRows) {
@@ -1561,7 +1836,7 @@ const reportThreadWithoutRpc = async (
   const { error: updateError } = await rawDb.update(
     'threads',
     threadUpdate,
-    { id: rawDb.filter.eq(threadId) },
+    { id: rawDb.filter.eq(safeThreadId) },
     { returning: false }
   );
 
@@ -1600,16 +1875,26 @@ export const reportThread = async (
   error?: string;
 }> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId);
+    if (!safeThreadId) {
+      return { success: false, error: 'Invalid thread reference' };
+    }
+
+    const safeReason = sanitizeEnumValue(reason, REPORT_REASON_VALUES, 'other');
+    const safeDescription = description
+      ? sanitizeMultilineInput(description, { maxLength: 1000 })
+      : null;
+
     const { data, error } = await rawDb.rpc<any>('report_thread', {
-      p_thread_id: threadId,
-      p_reason: reason,
-      p_description: description ?? null,
+      p_thread_id: safeThreadId,
+      p_reason: safeReason,
+      p_description: safeDescription,
     });
 
     if (error) {
       if (isMissingReportThreadRpc(error)) {
         console.warn('[ThreadService] report_thread RPC is unavailable, using fallback report flow.');
-        return reportThreadWithoutRpc(threadId, reason, description);
+        return reportThreadWithoutRpc(safeThreadId, safeReason, safeDescription ?? undefined);
       }
 
       const friendly = parseRpcErrorMessage(error);
@@ -1641,10 +1926,18 @@ export const removeThreadParticipant = async (
   reason?: string
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId);
+    const safeParticipantId = sanitizeUuid(participantId);
+    if (!safeThreadId || !safeParticipantId) {
+      return { success: false, error: 'Invalid thread or user reference' };
+    }
+
+    const safeReason = reason ? sanitizeSingleLineInput(reason, { maxLength: 255 }) : null;
+
     const { data, error } = await rawDb.rpc<boolean>('remove_thread_participant', {
-      p_thread_id: threadId,
-      p_user_id: participantId,
-      p_reason: reason || null,
+      p_thread_id: safeThreadId,
+      p_user_id: safeParticipantId,
+      p_reason: safeReason,
     });
 
     if (error) {

@@ -3,6 +3,11 @@ import * as rawAuth from '@/lib/core/supabase/raw-auth'
 import * as rawDb from '@/lib/core/supabase/raw-db'
 import { supabase } from '@/lib/core/supabase/client'
 import type { User } from '@/types'
+import {
+  sanitizeEmailAddress,
+  sanitizePasswordInput,
+  sanitizeUuid,
+} from '@/lib/security/input-sanitization'
 
 // Generate anonymous user ID
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -46,7 +51,7 @@ const convertAuthUserToUser = async (userId: string): Promise<User> => {
 const ACCOUNT_EXISTS_ERROR = 'Account already exsit'
 
 const emailAlreadyExists = async (email: string): Promise<boolean> => {
-  const normalizedEmail = email.trim().toLowerCase()
+  const normalizedEmail = sanitizeEmailAddress(email)
   if (!normalizedEmail) return false
 
   const { data, error } = await rawDb.select<{ id: string }>('users', {
@@ -106,7 +111,15 @@ export const signUpWithEmail = async (
   password: string
 ): Promise<User> => {
   try {
-    const normalizedEmail = email.trim().toLowerCase()
+    const normalizedEmail = sanitizeEmailAddress(email)
+    if (!normalizedEmail) {
+      throw new Error('Please enter a valid email address')
+    }
+    const sanitizedPassword = sanitizePasswordInput(password)
+    if (!sanitizedPassword) {
+      throw new Error('Password is required')
+    }
+
     const emailExists = await emailAlreadyExists(normalizedEmail)
     if (emailExists) {
       throw new Error(ACCOUNT_EXISTS_ERROR)
@@ -122,7 +135,7 @@ export const signUpWithEmail = async (
     }
 
     // Create new account (auto-confirm without email verification)
-    const { session, error: signUpError } = await rawAuth.signUp(normalizedEmail, password)
+    const { session, error: signUpError } = await rawAuth.signUp(normalizedEmail, sanitizedPassword)
 
     if (signUpError) throw signUpError
     if (!session) throw new Error('No session returned')
@@ -146,7 +159,17 @@ export const signInWithEmail = async (
   password: string
 ): Promise<User> => {
   try {
-    const { session, error: signInError } = await rawAuth.signIn(email, password)
+    const normalizedEmail = sanitizeEmailAddress(email)
+    if (!normalizedEmail) {
+      throw new Error('Please enter a valid email address')
+    }
+
+    const sanitizedPassword = sanitizePasswordInput(password)
+    if (!sanitizedPassword) {
+      throw new Error('Password is required')
+    }
+
+    const { session, error: signInError } = await rawAuth.signIn(normalizedEmail, sanitizedPassword)
 
     if (signInError) throw signInError
     if (!session) throw new Error('No session returned')
@@ -193,10 +216,15 @@ export const updateUserPreferences = async (
   userId: string,
   preferences: Partial<User['preferences']>
 ): Promise<void> => {
+  const safeUserId = sanitizeUuid(userId)
+  if (!safeUserId) {
+    throw new Error('Invalid user context')
+  }
+
   const { error } = await rawDb.update(
     'users',
     { preferences },
-    { 'id': rawDb.filter.eq(userId) },
+    { 'id': rawDb.filter.eq(safeUserId) },
     { returning: false }
   )
 
@@ -207,10 +235,15 @@ export const updateUserPreferences = async (
  * Update user activity
  */
 export const updateUserActivity = async (userId: string): Promise<void> => {
+  const safeUserId = sanitizeUuid(userId)
+  if (!safeUserId) {
+    throw new Error('Invalid user context')
+  }
+
   const { error } = await rawDb.update(
     'users',
     { last_active_at: new Date().toISOString() },
-    { 'id': rawDb.filter.eq(userId) },
+    { 'id': rawDb.filter.eq(safeUserId) },
     { returning: false }
   )
 
@@ -227,12 +260,20 @@ export const requestPasswordReset = async (email: string): Promise<{
   message: string
 }> => {
   try {
+    const normalizedEmail = sanitizeEmailAddress(email)
+    if (!normalizedEmail) {
+      return {
+        success: false,
+        message: 'Please enter a valid email address.',
+      }
+    }
+
     const response = await fetch('/api/auth/request-password-reset', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email: normalizedEmail }),
     });
 
     const data = await response.json();
@@ -263,6 +304,14 @@ export const updatePassword = async (newPassword: string): Promise<{
   message: string
 }> => {
   try {
+    const sanitizedPassword = sanitizePasswordInput(newPassword)
+    if (!sanitizedPassword) {
+      return {
+        success: false,
+        message: 'Password is required.'
+      }
+    }
+
     // Requires the user to be authenticated with a valid reset token.
     // The reset token flow is handled client-side (implicit grant).
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -277,7 +326,7 @@ export const updatePassword = async (newPassword: string): Promise<{
       }
     }
 
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    const { error } = await supabase.auth.updateUser({ password: sanitizedPassword });
     if (error) {
       return {
         success: false,

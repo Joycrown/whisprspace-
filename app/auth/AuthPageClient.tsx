@@ -9,6 +9,10 @@ import { UserCheck, Shield, Zap, Copy, CheckCircle, Eye, EyeOff } from 'lucide-r
 import { useToast } from '@/components/ui/Toast';
 import AppLoadingState from '@/components/ui/AppLoadingState';
 import { LEGAL_CONSENT_REQUIRED_ERROR, hasRequiredLegalConsent, recordLegalConsent } from '@/lib/legal/consent';
+import {
+  sanitizeEmailAddress,
+  sanitizePasswordInput,
+} from '@/lib/security/input-sanitization';
 
 const AuthPage = () => {
   const [view, setView] = useState<'main' | 'anonymous' | 'login' | 'signup' | 'forgot' | 'welcome'>('main');
@@ -180,12 +184,36 @@ const AuthPage = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError(); // Clear previous errors
-    await login(loginForm.email, loginForm.password, rememberMe);
+    const email = sanitizeEmailAddress(loginForm.email);
+    const password = sanitizePasswordInput(loginForm.password);
+    if (!email || !password.trim()) {
+      showToast({
+        type: 'error',
+        title: 'Invalid Credentials',
+        message: 'Please provide a valid email and password.',
+        duration: 3000,
+      });
+      return;
+    }
+
+    await login(email, password, rememberMe);
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError(); // Clear previous errors
+    const email = sanitizeEmailAddress(signupForm.email);
+    const password = sanitizePasswordInput(signupForm.password);
+    if (!email || !password.trim()) {
+      showToast({
+        type: 'error',
+        title: 'Invalid Input',
+        message: 'Please provide a valid email and password.',
+        duration: 3000,
+      });
+      return;
+    }
+
     if (!legalConsentChecked) {
       showToast({
         type: 'error',
@@ -196,25 +224,14 @@ const AuthPage = () => {
       return;
     }
     recordLegalConsent();
-    await signup(signupForm.email, signupForm.password);
+    await signup(email, password);
   };
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!forgotEmail.trim()) {
-      showToast({
-        type: 'error',
-        title: 'Email Required',
-        message: 'Please enter your email address',
-        duration: 3000,
-      });
-      return;
-    }
-
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(forgotEmail)) {
+    const email = sanitizeEmailAddress(forgotEmail);
+    if (!email) {
       showToast({
         type: 'error',
         title: 'Invalid Email',
@@ -229,7 +246,7 @@ const AuthPage = () => {
     try {
 
       const { requestPasswordReset } = await import('@/lib/auth/auth-service');
-      const result = await requestPasswordReset(forgotEmail);
+      const result = await requestPasswordReset(email);
 
       if (result.success) {
         showToast({
