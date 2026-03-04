@@ -19,6 +19,30 @@ import { findDirectConversationWithUser } from '@/lib/messaging';
 import { confirmThreadPurchase } from '@/lib/flutterwave/flutterwave-service';
 import { DualGatewayPremiumGate } from '@/components/features/premium/DualGatewayPremiumGate';
 import { buildThreadPath, extractThreadIdFromRef } from '@/lib/threads/thread-url';
+import { Loader2, X } from 'lucide-react';
+
+type ThreadPreviewMessage = {
+  id: string;
+  content: string;
+  createdAt: string;
+  senderName: string;
+};
+
+type ThreadPreviewData = {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  type: string;
+  privacy: string;
+  isPremium: boolean;
+  price: number | null;
+  messageCount: number;
+  participantCount: number;
+  likes: number;
+  expiresAt: string | null;
+  messages: ThreadPreviewMessage[];
+};
 
 
 const normalizeReportReason = (reason: string) => {
@@ -92,6 +116,10 @@ const ThreadPage = () => {
   const [showMessageOptions, setShowMessageOptions] = useState(false);
   const [messageTarget, setMessageTarget] = useState<Participant | null>(null);
   const [isPollCollapsed, setIsPollCollapsed] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewData, setPreviewData] = useState<ThreadPreviewData | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const lastScrollIntentRef = useRef(0);
 
   // Realtime hooks
@@ -108,6 +136,40 @@ const ThreadPage = () => {
     }
     return '/threads';
   }, [currentThread?.id, currentThread?.title, threadId]);
+
+  const loadThreadPreview = async (force = false) => {
+    if (!threadId || previewLoading) return;
+    if (previewData && !force) return;
+
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      const response = await fetch(`/api/threads/${threadId}/preview`, {
+        method: 'GET',
+        cache: 'no-store',
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (!response.ok || !payload?.data) {
+        throw new Error(payload?.error || 'Failed to load thread preview');
+      }
+
+      setPreviewData(payload.data as ThreadPreviewData);
+    } catch (previewLoadError) {
+      setPreviewError(previewLoadError instanceof Error ? previewLoadError.message : 'Failed to load thread preview');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleOpenThreadPreview = () => {
+    setShowPreviewModal(true);
+    void loadThreadPreview();
+  };
+
+  const handleCloseThreadPreview = () => {
+    setShowPreviewModal(false);
+  };
 
   // Prevent body scroll when drawer is open
   useEffect(() => {
@@ -131,6 +193,26 @@ const ThreadPage = () => {
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, [isSidebarOpen]);
+
+  useEffect(() => {
+    setShowPreviewModal(false);
+    setPreviewData(null);
+    setPreviewError(null);
+    setPreviewLoading(false);
+  }, [threadId]);
+
+  useEffect(() => {
+    if (!showPreviewModal) return;
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowPreviewModal(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [showPreviewModal]);
 
   const currentUserId = useMemo(() => session.user?.id || '', [session.user?.id]);
   const isThreadLocked = Boolean(currentThread?.isLocked);
@@ -856,6 +938,31 @@ const ThreadPage = () => {
     return <div className="text-white p-4">Thread not found.</div>;
   }
 
+  const previewFallbackData: ThreadPreviewData = {
+    id: currentThread.id,
+    title: currentThread.title,
+    content: currentThread.content,
+    category: currentThread.category || 'general',
+    type: currentThread.type || 'text',
+    privacy: currentThread.privacy || 'public',
+    isPremium: currentThread.isPremium,
+    price: currentThread.price ?? null,
+    messageCount: currentThread.messageCount ?? messages.length,
+    participantCount: currentThread.participantCount ?? participants.length,
+    likes: currentThread.likes ?? 0,
+    expiresAt: currentThread.expiresAt || null,
+    messages: (messages.slice(-3) || [])
+      .reverse()
+      .map((message) => ({
+        id: message.id,
+        content: (message.content || '').trim(),
+        createdAt: message.createdAt,
+        senderName: message.sender?.name || message.sender?.anonymousId || message.authorName || 'Anonymous',
+      })),
+  };
+
+  const preview = previewData || previewFallbackData;
+
   const isPrivateBlocked = isPrivateThread && !isCreator && !isJoined;
 
   const contentBlock = (
@@ -1002,6 +1109,7 @@ const ThreadPage = () => {
             onLike={handleLike}
             onToggleSidebar={() => setIsSidebarOpen(true)}
             currentUserId={currentUserId}
+            onOpenPreview={handleOpenThreadPreview}
           />
         </div>
         {isPrivateBlocked ? (
@@ -1153,6 +1261,102 @@ const ThreadPage = () => {
             />
           </div>
         </>
+      )}
+
+      {showPreviewModal && (
+        <div
+          className="fixed inset-0 z-[90] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 modal-safe-overlay"
+          onClick={handleCloseThreadPreview}
+        >
+          <div
+            className="w-full max-w-2xl rounded-2xl border border-gray-700 bg-[#151515] text-white shadow-2xl modal-safe-panel overflow-y-auto max-h-[calc(var(--app-viewport-height)-2rem)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-gray-800 px-5 py-4">
+              <div className="min-w-0">
+                <p className="text-xs uppercase tracking-wider text-gray-400">{preview.category}</p>
+                <h3 className="mt-1 text-lg md:text-xl font-semibold text-white break-words">{preview.title}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseThreadPreview}
+                className="rounded-md p-1.5 text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                aria-label="Close preview"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="px-5 py-4 space-y-4">
+              {previewLoading && !previewData ? (
+                <div className="py-8 text-center text-sm text-gray-300">Loading preview...</div>
+              ) : previewError && !previewData ? (
+                <div className="rounded-lg border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-200">
+                  {previewError}
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-200 whitespace-pre-wrap break-words">{preview.content}</p>
+
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    <div className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
+                      <p className="text-[11px] uppercase text-gray-400">Messages</p>
+                      <p className="text-sm font-semibold">{preview.messageCount}</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
+                      <p className="text-[11px] uppercase text-gray-400">Participants</p>
+                      <p className="text-sm font-semibold">{preview.participantCount}</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
+                      <p className="text-[11px] uppercase text-gray-400">Likes</p>
+                      <p className="text-sm font-semibold">{preview.likes}</p>
+                    </div>
+                    <div className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
+                      <p className="text-[11px] uppercase text-gray-400">Type</p>
+                      <p className="text-sm font-semibold">
+                        {preview.isPremium ? `Premium${preview.price ? ` $${preview.price.toFixed(2)}` : ''}` : 'Standard'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-100 mb-2">Message Preview</h4>
+                    {currentThread.isLocked && (
+                      <p className="mb-2 text-xs text-red-300">
+                        This thread is blocked due to community reports.
+                      </p>
+                    )}
+                    {preview.messages.length === 0 ? (
+                      <p className="text-xs text-gray-400">No messages available yet.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {preview.messages.map((message) => (
+                          <div key={message.id} className="rounded-lg border border-gray-800 bg-gray-900/50 px-3 py-2">
+                            <p className="text-[11px] text-gray-400">{message.senderName}</p>
+                            <p className="text-sm text-gray-200 break-words">{message.content}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-gray-800 px-5 py-4">
+              {previewLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-gray-300" />
+              ) : null}
+              <button
+                type="button"
+                onClick={handleCloseThreadPreview}
+                className="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-200 hover:bg-gray-800/70 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <MessageOptionsModal

@@ -3,25 +3,69 @@
  * Centralized SEO settings for WhisprSpace
  */
 
+const DEFAULT_SITE_URL = 'https://whisprspace.com';
+const DEFAULT_APP_URL = 'https://app.whisprspace.com';
+
+const trimTrailingSlash = (value: string): string => value.replace(/\/+$/, '');
+
+const toAbsoluteUrl = (value: string, fallback: string): string => {
+  try {
+    return new URL(value, fallback).toString();
+  } catch {
+    return fallback;
+  }
+};
+
+const parseBooleanEnv = (value: string | undefined, fallback: boolean): boolean => {
+  if (typeof value !== 'string') return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+};
+
+const siteUrl = trimTrailingSlash(
+  toAbsoluteUrl(process.env.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL, DEFAULT_SITE_URL)
+);
+const appUrl = trimTrailingSlash(
+  toAbsoluteUrl(process.env.NEXT_PUBLIC_APP_URL || siteUrl || DEFAULT_APP_URL, DEFAULT_APP_URL)
+);
+const indexingEnabled = parseBooleanEnv(process.env.NEXT_PUBLIC_ENABLE_INDEXING, false);
+
+export const seoKeywords = {
+  home: [
+    'anonymous social platform',
+    'anonymous community app',
+    'private discussion platform',
+    'safe anonymous conversations',
+    'judgment-free expression',
+    'anonymous threads',
+    'secure anonymous messaging',
+  ],
+  privacyPolicy: [
+    'anonymous platform privacy policy',
+    'how anonymous apps protect data',
+    'whisprspace privacy',
+  ],
+  communityGuidelines: [
+    'anonymous community guidelines',
+    'social platform safety rules',
+    'whisprspace moderation policy',
+  ],
+} as const;
+
 export const siteConfig = {
   name: 'WhisprSpace',
-  title: 'WhisprSpace - Anonymous Platform for Free Expression',
-  description: 'A digital sanctuary for honest expression without identity-based judgment. Share thoughts, join discussions, and connect anonymously on topics that matter.',
-  url: process.env.NEXT_PUBLIC_SITE_URL || 'https://whisprspace.com',
-  ogImage: '/og-image.png',
+  title: 'WhisprSpace | Anonymous Social Platform for Honest Conversations',
+  description:
+    'WhisprSpace is an anonymous social platform for honest conversations, private communities, and judgment-free expression.',
+  url: siteUrl,
+  appUrl,
+  authUrl: `${appUrl}/auth`,
+  indexingEnabled,
+  ogImage: '/assets/whisprspaceLogoExICON.png',
   twitterHandle: '@whisprspace',
-  keywords: [
-    'anonymous chat',
-    'anonymous threads',
-    'free expression',
-    'anonymous messaging',
-    'private discussions',
-    'anonymous polls',
-    'safe space',
-    'judgment-free',
-    'anonymous community',
-    'whisper platform',
-  ],
+  keywords: [...seoKeywords.home],
 };
 
 export interface SEOProps {
@@ -37,6 +81,21 @@ export interface SEOProps {
   noindex?: boolean;
 }
 
+type StructuredDataInput = {
+  title?: string;
+  content?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  author?: {
+    anonymousId?: string;
+  };
+  messageCount?: number;
+  likes?: number;
+  anonymousId?: string;
+  bio?: string;
+  id?: string;
+};
+
 export function generateMetadata({
   title,
   description,
@@ -51,18 +110,58 @@ export function generateMetadata({
 }: SEOProps = {}) {
   const pageTitle = title ? `${title} | ${siteConfig.name}` : siteConfig.title;
   const pageDescription = description || siteConfig.description;
-  const pageImage = image || `${siteConfig.url}${siteConfig.ogImage}`;
-  const pageUrl = url || siteConfig.url;
+  const pageImage = toAbsoluteUrl(image || siteConfig.ogImage, siteConfig.url);
+  const pageUrl = toAbsoluteUrl(url || siteConfig.url, siteConfig.url);
+  const keywords = [...new Set([...siteConfig.keywords, ...(tags || [])])];
+  const shouldIndex = siteConfig.indexingEnabled && !noindex;
+
+  const googleSiteVerification = process.env.GOOGLE_SITE_VERIFICATION?.trim();
+  const bingSiteVerification = process.env.BING_SITE_VERIFICATION?.trim();
+  const verification =
+    googleSiteVerification || bingSiteVerification
+      ? {
+          ...(googleSiteVerification ? { google: googleSiteVerification } : {}),
+          ...(bingSiteVerification
+            ? {
+                other: {
+                  'msvalidate.01': bingSiteVerification,
+                },
+              }
+            : {}),
+        }
+      : undefined;
 
   return {
     title: pageTitle,
     description: pageDescription,
-    keywords: [...siteConfig.keywords, ...(tags || [])].join(', '),
+    keywords: keywords.join(', '),
     authors: [{ name: author || siteConfig.name }],
     creator: siteConfig.name,
     publisher: siteConfig.name,
-    robots: noindex ? 'noindex, nofollow' : 'index, follow',
-    
+    robots: shouldIndex
+      ? {
+          index: true,
+          follow: true,
+          nocache: false,
+          googleBot: {
+            index: true,
+            follow: true,
+            'max-image-preview': 'large',
+            'max-snippet': -1,
+            'max-video-preview': -1,
+          },
+        }
+      : {
+          index: false,
+          follow: false,
+          nocache: true,
+          googleBot: {
+            index: false,
+            follow: false,
+            noimageindex: true,
+          },
+        },
+
     // Open Graph
     openGraph: {
       type,
@@ -98,6 +197,7 @@ export function generateMetadata({
     alternates: {
       canonical: pageUrl,
     },
+    verification,
     
     // App-specific
     applicationName: siteConfig.name,
@@ -113,7 +213,10 @@ export function generateMetadata({
 }
 
 // Generate structured data (JSON-LD)
-export function generateStructuredData(type: 'website' | 'thread' | 'profile', data: any) {
+export function generateStructuredData(
+  type: 'website' | 'thread' | 'profile',
+  data: StructuredDataInput = {}
+) {
   const baseStructure = {
     '@context': 'https://schema.org',
   };
@@ -143,18 +246,18 @@ export function generateStructuredData(type: 'website' | 'thread' | 'profile', d
         dateModified: data.updatedAt,
         author: {
           '@type': 'Person',
-          name: data.author.anonymousId,
+          name: data.author?.anonymousId || 'Anonymous',
         },
         interactionStatistic: [
           {
             '@type': 'InteractionCounter',
             interactionType: 'https://schema.org/CommentAction',
-            userInteractionCount: data.messageCount,
+            userInteractionCount: data.messageCount || 0,
           },
           {
             '@type': 'InteractionCounter',
             interactionType: 'https://schema.org/LikeAction',
-            userInteractionCount: data.likes,
+            userInteractionCount: data.likes || 0,
           },
         ],
       };

@@ -18,15 +18,27 @@ ON CONFLICT (id) DO NOTHING;
 -- ============================================
 
 -- Enable RLS on storage.objects (if not already enabled)
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+DO $$
+BEGIN
+  BEGIN
+    ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      -- On hosted Supabase, storage ownership may not allow this statement.
+      RAISE NOTICE 'Skipping ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY (insufficient privilege).';
+  END;
+END
+$$;
 
 -- 1. Anyone can view/download attachments (Public bucket)
+DROP POLICY IF EXISTS "Public Read Access" ON storage.objects;
 CREATE POLICY "Public Read Access"
 ON storage.objects FOR SELECT
 USING ( bucket_id = 'thread-attachments' );
 
 -- 2. Authenticated and Anonymous users can upload files
 -- We allow both 'authenticated' and 'anon' roles because WhisprSpace supports anonymous threads
+DROP POLICY IF EXISTS "Users can upload attachments" ON storage.objects;
 CREATE POLICY "Users can upload attachments"
 ON storage.objects FOR INSERT
 WITH CHECK (
@@ -35,6 +47,7 @@ WITH CHECK (
 );
 
 -- 3. Users can update their own attachments
+DROP POLICY IF EXISTS "Users can update own attachments" ON storage.objects;
 CREATE POLICY "Users can update own attachments"
 ON storage.objects FOR UPDATE
 USING (
@@ -43,6 +56,7 @@ USING (
 );
 
 -- 4. Users can delete their own attachments
+DROP POLICY IF EXISTS "Users can delete own attachments" ON storage.objects;
 CREATE POLICY "Users can delete own attachments"
 ON storage.objects FOR DELETE
 USING (
