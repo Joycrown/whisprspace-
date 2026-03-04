@@ -7,12 +7,13 @@ const withPWA = withPWAFactory({
   cacheOnFrontEndNav: true,
   aggressiveFrontEndNavCaching: true,
   reloadOnOnline: true,
-  swcMinify: true,
   disable: process.env.NODE_ENV === "development",
   workboxOptions: {
     disableDevLogs: true,
   },
 });
+
+const isAppDeployment = process.env.DEPLOYMENT_TARGET?.trim().toLowerCase() === "app";
 
 const nextConfig: NextConfig = {
   eslint: {
@@ -20,6 +21,19 @@ const nextConfig: NextConfig = {
   },
   typescript: {
     ignoreBuildErrors: true,
+  },
+  async redirects() {
+    if (!isAppDeployment) {
+      return [];
+    }
+
+    return [
+      {
+        source: '/',
+        destination: '/auth',
+        permanent: false,
+      },
+    ];
   },
   async headers() {
     return [
@@ -58,18 +72,15 @@ const sentryProject = process.env.SENTRY_PROJECT?.trim();
 const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN?.trim();
 const sentryEnabled = Boolean(sentryOrg && sentryProject && sentryAuthToken);
 
-const sentryWebpackPluginOptions = {
+const sentryBuildOptions = {
   silent: true,
   org: sentryOrg,
   project: sentryProject,
   authToken: sentryAuthToken,
-};
-
-const sentryBuildOptions = {
   hideSourceMaps: true,
   disableLogger: true,
 };
 
 export default sentryEnabled
-  ? withSentryConfig(pwaConfig, sentryWebpackPluginOptions, sentryBuildOptions)
+  ? withSentryConfig(pwaConfig, sentryBuildOptions)
   : pwaConfig;
