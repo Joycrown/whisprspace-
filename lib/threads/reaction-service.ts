@@ -1,4 +1,5 @@
 import * as rawDb from '@/lib/core/supabase/raw-db'
+import { sanitizeSingleLineInput, sanitizeUuid } from '@/lib/security/input-sanitization'
 
 /**
  * Add a reaction to a message
@@ -8,6 +9,13 @@ export const addMessageReaction = async (
   userId: string,
   reactionType: string
 ): Promise<boolean> => {
+  const safeMessageId = sanitizeUuid(messageId)
+  const safeUserId = sanitizeUuid(userId)
+  const safeReactionType = sanitizeSingleLineInput(reactionType, { maxLength: 64 })
+  if (!safeMessageId || !safeUserId || !safeReactionType) {
+    return false
+  }
+
   try {
 
     
@@ -15,9 +23,9 @@ export const addMessageReaction = async (
     const { data: existing, error: checkError } = await rawDb.select<any>('message_reactions', {
       select: 'id',
       filters: { 
-        'message_id': rawDb.filter.eq(messageId),
-        'user_id': rawDb.filter.eq(userId),
-        'reaction_type': rawDb.filter.eq(reactionType)
+        'message_id': rawDb.filter.eq(safeMessageId),
+        'user_id': rawDb.filter.eq(safeUserId),
+        'reaction_type': rawDb.filter.eq(safeReactionType)
       },
       single: true
     })
@@ -46,9 +54,9 @@ export const addMessageReaction = async (
       const { data } = await rawDb.select<any>('message_reactions', {
         select: 'id',
         filters: { 
-          'message_id': rawDb.filter.eq(messageId),
-          'user_id': rawDb.filter.eq(userId),
-          'reaction_type': rawDb.filter.eq(reactionType)
+          'message_id': rawDb.filter.eq(safeMessageId),
+          'user_id': rawDb.filter.eq(safeUserId),
+          'reaction_type': rawDb.filter.eq(safeReactionType)
         },
         single: true
       });
@@ -61,9 +69,9 @@ export const addMessageReaction = async (
       // Remove reaction if it already exists (toggle off)
 
       await rawDb.remove('message_reactions', {
-        'message_id': rawDb.filter.eq(messageId),
-        'user_id': rawDb.filter.eq(userId),
-        'reaction_type': rawDb.filter.eq(reactionType)
+        'message_id': rawDb.filter.eq(safeMessageId),
+        'user_id': rawDb.filter.eq(safeUserId),
+        'reaction_type': rawDb.filter.eq(safeReactionType)
       });
 
       return true
@@ -74,16 +82,16 @@ export const addMessageReaction = async (
     // "Remove any other reactions from this user on this message"
 
     await rawDb.remove('message_reactions', {
-      'message_id': rawDb.filter.eq(messageId),
-      'user_id': rawDb.filter.eq(userId)
+      'message_id': rawDb.filter.eq(safeMessageId),
+      'user_id': rawDb.filter.eq(safeUserId)
     });
 
     // Add new reaction
 
     const { error, data } = await rawDb.insert('message_reactions', {
-      message_id: messageId,
-      user_id: userId,
-      reaction_type: reactionType,
+      message_id: safeMessageId,
+      user_id: safeUserId,
+      reaction_type: safeReactionType,
     });
 
     if (error) throw error
@@ -102,9 +110,15 @@ export const getMessageReactions = async (
   userId?: string
 ): Promise<{ [key: string]: { count: number; users: string[]; hasReacted: boolean } }> => {
   try {
+    const safeMessageId = sanitizeUuid(messageId)
+    if (!safeMessageId) {
+      return {}
+    }
+    const safeUserId = userId ? sanitizeUuid(userId) : null
+
     const { data, error } = await rawDb.select<any>('message_reactions', {
       select: 'reaction_type, user_id',
-      filters: { 'message_id': rawDb.filter.eq(messageId) },
+      filters: { 'message_id': rawDb.filter.eq(safeMessageId) },
       order: { column: 'created_at', ascending: true }
     });
 
@@ -131,7 +145,7 @@ export const getMessageReactions = async (
       reactions[type].count++
       reactions[type].users.push(reaction.user_id)
 
-      if (userId && reaction.user_id === userId) {
+      if (safeUserId && reaction.user_id === safeUserId) {
         reactions[type].hasReacted = true
       }
     })

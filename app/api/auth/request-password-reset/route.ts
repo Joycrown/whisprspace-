@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { getTrustedAppBaseUrl } from '@/lib/security/app-url';
 import { enforceRateLimit, getClientIp, withRateLimitHeaders } from '@/lib/security/rate-limit';
+import { sanitizeEmailAddress } from '@/lib/security/input-sanitization';
 
 // Initialize Supabase Admin Client
 const supabaseAdmin = createClient(
@@ -28,9 +29,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { email } = await request.json();
+    const body = await request.json().catch(() => null);
+    const normalizedEmail = sanitizeEmailAddress((body as { email?: unknown } | null)?.email);
 
-    if (!email) {
+    if (!normalizedEmail) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
 
@@ -40,7 +42,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing app URL configuration' }, { status: 500 });
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
     const compositeLimit = enforceRateLimit({
       request: typedRequest,
       namespace: 'auth:password-reset:email',
@@ -56,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery',
-      email,
+      email: normalizedEmail,
       options: {
         // Redirect directly to the reset password page.
         // The project uses Implicit Grant (hash fragment), so we must handle session client-side.
@@ -102,7 +103,7 @@ export async function POST(request: NextRequest) {
           name: process.env.EMAIL_SENDER_NAME || 'WhisprSpace',
           email: process.env.EMAIL_SENDER || 'admin@whisprspace.com',
         },
-        to: [{ email: email }],
+        to: [{ email: normalizedEmail }],
         subject: 'Reset Your Password - WhisprSpace',
         htmlContent: `
 <!DOCTYPE html>
