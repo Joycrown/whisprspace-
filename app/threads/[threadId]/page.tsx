@@ -134,7 +134,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
   const canonicalUrl = new URL(canonicalPath, siteConfig.url).toString()
   const title = thread.title?.trim() || 'Untitled Thread'
   const description = buildThreadDescription(thread)
-  const isIndexable = isPublicIndexableThread(thread)
+  const isIndexable = siteConfig.indexingEnabled && isPublicIndexableThread(thread)
 
   return {
     title: `${title} | WhisprSpace`,
@@ -183,7 +183,7 @@ export default async function ThreadPage({ params, searchParams }: PageProps) {
     notFound()
   }
 
-  const isIndexable = isPublicIndexableThread(thread)
+  const isIndexable = siteConfig.indexingEnabled && isPublicIndexableThread(thread)
   const canonicalPath = buildThreadPath({ id: thread.id, title: thread.title || undefined })
 
   if (isIndexable && !isCanonicalThreadRef(threadRef, { id: thread.id, title: thread.title || undefined })) {

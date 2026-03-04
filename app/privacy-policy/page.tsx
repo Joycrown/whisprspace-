@@ -1,9 +1,12 @@
 import type { Metadata } from 'next'
+import { generateMetadata as generateSEO, seoKeywords } from '@/lib/seo'
 
-export const metadata: Metadata = {
-  title: 'Privacy Policy | WhisprSpace',
-  description: 'How WhisprSpace collects, uses, stores, and protects your data.',
-}
+export const metadata: Metadata = generateSEO({
+  title: 'Privacy Policy',
+  description: 'Learn how WhisprSpace collects, stores, and protects your data on our anonymous social platform.',
+  url: '/privacy-policy',
+  tags: [...seoKeywords.privacyPolicy],
+})
 
 const sections: Array<{ heading: string; paragraphs: string[]; bullets?: string[] }> = [
   {

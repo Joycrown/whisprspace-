@@ -3,6 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { MessageCircle, Users, Vote, Shield, EyeOff, Heart, Send } from 'lucide-react';
 
 
+const appBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/+$/, '') || '';
+const authHref = appBaseUrl ? `${appBaseUrl}/auth` : '/auth';
+
 const WhisprSpaceLanding = () => {
   const [isVisible, setIsVisible] = useState(false);
   const [currentTestimonial, setCurrentTestimonial] = useState(0);
@@ -63,7 +66,7 @@ const WhisprSpaceLanding = () => {
           <div className="hidden md:flex items-center space-x-8">
             <a href="#features" className="text-gray-600 hover:text-purple-600 transition-colors">Features</a>
             <a href="#how-it-works" className="text-gray-600 hover:text-purple-600 transition-colors">How it Works</a>
-            <a href="/auth">
+            <a href={authHref}>
               <button className="bg-gradient-to-r from-purple-500 to-orange-500 text-white px-6 py-2 rounded-full hover:from-purple-600 hover:to-orange-600 transition-all duration-300 transform hover:scale-105">
                 Get Started
               </button>
@@ -90,7 +93,7 @@ const WhisprSpaceLanding = () => {
               </div>
               
               <div className="flex flex-col sm:flex-row gap-4">
-                <a href="/auth">
+                <a href={authHref}>
                   <button className="bg-gradient-to-r from-purple-500 to-orange-500 text-white px-8 py-4 rounded-full text-lg font-semibold hover:from-purple-600 hover:to-orange-600 transition-all duration-300 transform hover:scale-105 flex items-center justify-center space-x-2 w-full sm:w-auto">
                     <span>Start Whispering</span>
                     <Send className="w-5 h-5" />
@@ -286,7 +289,7 @@ const WhisprSpaceLanding = () => {
           <p className="text-xl text-gray-600 mb-8">
             Join thousands who have already discovered the freedom of anonymous expression
           </p>
-          <a href="/auth">
+          <a href={authHref}>
             <button className="bg-gradient-to-r from-purple-500 to-orange-500 text-white px-12 py-4 rounded-full text-xl font-semibold hover:from-purple-600 hover:to-orange-600 transition-all duration-300 transform hover:scale-105">
               Start Your Journey
             </button>

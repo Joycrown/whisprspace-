@@ -39,15 +39,6 @@ yarn-error.log*
 .env.production
 .env.test
 
-BackendTechDoc.md
-PHASE1_COMPLETED.md
-TechDoc.md
-README.md
-overview.md
-
-SUPASE_EMAIL_SETUP.md
-
-
 # vercel
 .vercel
 
@@ -55,5 +46,6 @@ SUPASE_EMAIL_SETUP.md
 *.tsbuildinfo
 next-env.d.ts
 
-# docs
-/docs/
+# local operational artifacts
+/artifacts/
+*_PLAYBOOK.md
