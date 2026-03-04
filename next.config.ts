@@ -81,6 +81,7 @@ const sentryBuildOptions = {
   disableLogger: true,
 };
 
+
 export default sentryEnabled
   ? withSentryConfig(pwaConfig, sentryBuildOptions)
   : pwaConfig;
