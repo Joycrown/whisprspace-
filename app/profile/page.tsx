@@ -107,7 +107,7 @@ const ProfilePage = () => {
   return (
     <div className="flex flex-col app-full-height bg-[#121212]">
       <div className="flex items-center justify-between p-4 border-b border-gray-800">
-        <button onClick={() => router.back()} className="text-gray-400 hover:text-white"><ArrowLeft className="w-5 h-5" /></button>
+        <button onClick={() => router.push('/threads')} className="text-gray-400 hover:text-white"><ArrowLeft className="w-5 h-5" /></button>
         <h1 className="text-xl font-bold text-white">My Profile</h1>
         <button onClick={() => setShowPreferencesModal(true)} className="text-gray-400 hover:text-white">
           <Settings className="w-5 h-5" />

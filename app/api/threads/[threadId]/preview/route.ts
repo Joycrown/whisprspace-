@@ -25,6 +25,7 @@ type ThreadPreviewRow = {
   expires_at: string | null
   deleted_at: string | null
   creator_id: string
+  thread_participants?: Array<{ user_id: string | null }>
 }
 
 type ThreadPreviewMessageRow = {
@@ -60,7 +61,7 @@ export async function GET(
 
     const { data: thread, error: threadError } = await supabaseAdmin
       .from('threads')
-      .select('id,title,content,category,type,privacy,is_premium,price,message_count,participant_count,likes_count,expires_at,deleted_at,creator_id')
+      .select('id,title,content,category,type,privacy,is_premium,price,message_count,participant_count,likes_count,expires_at,deleted_at,creator_id,thread_participants(user_id)')
       .eq('id', threadId)
       .maybeSingle<ThreadPreviewRow>()
 
@@ -99,6 +100,18 @@ export async function GET(
       }
     })
 
+    const participantCountFromJoinTable = Array.isArray(thread.thread_participants)
+      ? new Set(
+          thread.thread_participants
+            .map((participant) => participant.user_id)
+            .filter((participantId): participantId is string => Boolean(participantId))
+        ).size
+      : null
+
+    const participantCount = participantCountFromJoinTable !== null
+      ? participantCountFromJoinTable
+      : toNumber(thread.participant_count, 0)
+
     return NextResponse.json(
       {
         success: true,
@@ -112,7 +125,7 @@ export async function GET(
           isPremium: thread.is_premium === true,
           price: thread.price !== null ? toNumber(thread.price, 0) : null,
           messageCount: toNumber(thread.message_count, 0),
-          participantCount: toNumber(thread.participant_count, 0),
+          participantCount,
           likes: toNumber(thread.likes_count, 0),
           expiresAt: thread.expires_at,
           messages,

@@ -1,5 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { getTrustedAppBaseUrl } from '@/lib/security/app-url';
+import { enforceRateLimit, getClientIp, withRateLimitHeaders } from '@/lib/security/rate-limit';
 
 // Initialize Supabase Admin Client
 const supabaseAdmin = createClient(
@@ -13,7 +15,18 @@ const supabaseAdmin = createClient(
   }
 );
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const typedRequest = request
+  const bodyRateLimit = enforceRateLimit({
+    request: typedRequest,
+    namespace: 'auth:password-reset:ip',
+    max: 6,
+    windowMs: 10 * 60_000,
+  })
+  if (!bodyRateLimit.allowed) {
+    return bodyRateLimit.response
+  }
+
   try {
     const { email } = await request.json();
 
@@ -22,27 +35,24 @@ export async function POST(request: Request) {
     }
 
     // Generate recovery link
-    const getBaseUrl = (req: Request) => {
-      const envUrl =
-        process.env.NEXT_PUBLIC_APP_URL ||
-        process.env.APP_URL ||
-        process.env.SITE_URL ||
-        (process.env.NEXT_PUBLIC_APP_URL ? `https://${process.env.NEXT_PUBLIC_APP_URL}` : '');
-      if (envUrl) {
-        return envUrl.replace(/\/+$/, '');
-      }
+    const baseUrl = getTrustedAppBaseUrl(typedRequest);
+    if (!baseUrl) {
+      return NextResponse.json({ error: 'Missing app URL configuration' }, { status: 500 });
+    }
 
-      const forwardedHost = req.headers.get('x-forwarded-host');
-      const host = forwardedHost || req.headers.get('host');
-      const proto = req.headers.get('x-forwarded-proto') || 'http';
-      if (host) {
-        return `${proto}://${host}`;
-      }
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const compositeLimit = enforceRateLimit({
+      request: typedRequest,
+      namespace: 'auth:password-reset:email',
+      max: 3,
+      windowMs: 10 * 60_000,
+      identifier: `${normalizedEmail}:${getClientIp(typedRequest)}`,
+    });
+    if (!compositeLimit.allowed) {
+      return compositeLimit.response
+    }
 
-      return 'http://localhost:3000';
-    };
-
-    const redirectTo = new URL('/auth/reset-password', getBaseUrl(request)).toString();
+    const redirectTo = new URL('/auth/reset-password', baseUrl).toString();
 
     const { data, error } = await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery',
@@ -59,7 +69,10 @@ export async function POST(request: Request) {
       console.error('Error generating recovery link via admin:', error);
       if (error.message.includes('User not found')) {
          // User not found, just return success to prevent enumeration
-         return NextResponse.json({ message: 'If an account exists, a reset link has been sent.' });
+         return withRateLimitHeaders(
+           NextResponse.json({ message: 'If an account exists, a reset link has been sent.' }),
+           bodyRateLimit.headers
+         );
       }
       return NextResponse.json({ error: 'Failed to generate reset link' }, { status: 500 });
     }
@@ -173,10 +186,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to send email' }, { status: 500 });
     }
 
-    return NextResponse.json({ message: 'If an account exists, a reset link has been sent.' });
+    return withRateLimitHeaders(
+      NextResponse.json({ message: 'If an account exists, a reset link has been sent.' }),
+      bodyRateLimit.headers
+    );
 
   } catch (error) {
     console.error('Request password reset API error:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return withRateLimitHeaders(
+      NextResponse.json({ error: 'Internal Server Error' }, { status: 500 }),
+      bodyRateLimit.headers
+    );
   }
 }

@@ -9,7 +9,7 @@ import { RealtimeNotificationProvider } from "@/components/providers/RealtimeNot
 import AnalyticsProvider from "@/components/providers/AnalyticsProvider";
 import ServiceWorkerGuard from "@/components/providers/ServiceWorkerGuard";
 import { QueryProvider } from "@/lib/react-query";
-import { generateMetadata as generateSEO } from "@/lib/seo";
+import { generateMetadata as generateSEO, seoKeywords, siteConfig } from "@/lib/seo";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,8 +42,11 @@ export const viewport: Viewport = {
 // Add apple-mobile-web-app-capable and other PWA specific meta tags
 export const metadata: Metadata = {
   ...generateSEO({
-    title: "WhisprSpace - Anonymous Platform for Free Expression",
-    description: "A digital sanctuary for honest expression without identity-based judgment. Share thoughts, join discussions, and connect anonymously on topics that matter.",
+    title: "WhisprSpace | Anonymous Social Platform",
+    description:
+      "Join WhisprSpace to share honest thoughts anonymously, join private communities, and connect without identity pressure.",
+    tags: [...seoKeywords.home],
+    noindex: !siteConfig.indexingEnabled,
   }),
   applicationName: 'WhisprSpace',
   manifest: "/manifest.json",

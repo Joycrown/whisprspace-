@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createSupabaseServerClient } from '@/lib/core/supabase/server'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
+import { enforceRateLimit, withRateLimitHeaders } from '@/lib/security/rate-limit'
+import { resolveUserFromRequest } from '@/lib/security/request-auth'
 
 const supabaseAdmin = createSupabaseAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -8,64 +9,17 @@ const supabaseAdmin = createSupabaseAdminClient(
   { auth: { persistSession: false } }
 )
 
-const decodeJwtPayload = (token: string) => {
-  try {
-    const payload = token.split('.')[1]
-    if (!payload) return null
-    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
-    const padded = normalized.padEnd(normalized.length + (4 - (normalized.length % 4)) % 4, '=')
-    return JSON.parse(Buffer.from(padded, 'base64').toString('utf-8'))
-  } catch {
-    return null
-  }
-}
-
-const resolveUserFromRequest = async (request: NextRequest) => {
-  let user: any = null
-  const authHeader = request.headers.get('authorization')
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice('Bearer '.length)
-    if (process.env.NODE_ENV === 'production') {
-      try {
-        const { data, error } = await supabaseAdmin.auth.getUser(token)
-        if (!error && data?.user) {
-          return data.user
-        }
-      } catch (error) {
-        console.error('Supabase auth getUser failed:', error)
-      }
-    } else {
-      const payload = decodeJwtPayload(token)
-      const userId = payload?.sub || payload?.user_id
-      if (userId) {
-        const { data: userRow } = await supabaseAdmin
-          .from('users')
-          .select('id,email')
-          .eq('id', userId)
-          .maybeSingle()
-        if (userRow) {
-          user = {
-            id: userRow.id,
-            email: userRow.email || payload?.email,
-            user_metadata: payload?.user_metadata || {},
-          }
-        }
-      }
-    }
-  }
-
-  if (!user) {
-    const supabase = await createSupabaseServerClient()
-    const { data } = await supabase.auth.getUser()
-    if (data?.user) {
-      user = data.user
-    }
-  }
-
-  return user
-}
-
 export async function POST(request: NextRequest) {
+  const rateLimit = enforceRateLimit({
+    request,
+    namespace: 'payments:flutterwave:confirm-upgrade',
+    max: 10,
+    windowMs: 60_000,
+  })
+  if (!rateLimit.allowed) {
+    return rateLimit.response
+  }
+
   try {
     const flutterwaveSecretKey = process.env.FLW_SECRET_KEY
     if (!flutterwaveSecretKey) {
@@ -75,7 +29,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { transactionId, txRef } = await request.json().catch(() => ({}))
+    const body = await request.json().catch(() => ({}))
+    const transactionId = body.transactionId
+    const txRef = typeof body.txRef === 'string' ? body.txRef.trim() : body.txRef
     if (!transactionId && !txRef) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
@@ -127,27 +83,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const normalizeMeta = (raw: any) => {
+    const normalizeMeta = (raw: unknown) => {
       if (!raw) return {}
       if (Array.isArray(raw)) {
-        return raw.reduce<Record<string, any>>((acc, item) => {
+        return raw.reduce<Record<string, unknown>>((acc, item) => {
           if (!item || typeof item !== 'object') return acc
+          const metaItem = item as Record<string, unknown>
           const key =
-            item.metaname ||
-            item.meta_name ||
-            item.name ||
-            item.key
+            metaItem.metaname ||
+            metaItem.meta_name ||
+            metaItem.name ||
+            metaItem.key
           const value =
-            item.metavalue ||
-            item.meta_value ||
-            item.value
+            metaItem.metavalue ||
+            metaItem.meta_value ||
+            metaItem.value
           if (key !== undefined) {
             acc[String(key)] = value
           }
           return acc
         }, {})
       }
-      if (typeof raw === 'object') return raw
+      if (typeof raw === 'object') return raw as Record<string, unknown>
       return {}
     }
 
@@ -300,12 +257,15 @@ export async function POST(request: NextRequest) {
       data: { plan },
     })
 
-    return NextResponse.json({ success: true, premiumExpiresAt: newExpiry.toISOString() })
+    return withRateLimitHeaders(
+      NextResponse.json({ success: true, premiumExpiresAt: newExpiry.toISOString() }),
+      rateLimit.headers
+    )
   } catch (error) {
     console.error('Flutterwave confirm upgrade error:', error)
-    return NextResponse.json(
+    return withRateLimitHeaders(NextResponse.json(
       { error: 'Failed to confirm premium upgrade' },
       { status: 500 }
-    )
+    ), rateLimit.headers)
   }
 }

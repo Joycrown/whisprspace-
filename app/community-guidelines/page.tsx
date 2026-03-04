@@ -1,9 +1,12 @@
 import type { Metadata } from 'next'
+import { generateMetadata as generateSEO, seoKeywords } from '@/lib/seo'
 
-export const metadata: Metadata = {
-  title: 'Community Guidelines | WhisprSpace',
-  description: 'Behavior and safety rules for participating on WhisprSpace.',
-}
+export const metadata: Metadata = generateSEO({
+  title: 'Community Guidelines',
+  description: 'Review behavior and safety rules for participating in WhisprSpace anonymous communities.',
+  url: '/community-guidelines',
+  tags: [...seoKeywords.communityGuidelines],
+})
 
 const allowed = [
   'Honest conversations',
