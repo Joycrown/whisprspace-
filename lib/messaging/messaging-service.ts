@@ -1,6 +1,13 @@
 import * as rawDb from '@/lib/core/supabase/raw-db'
 import * as rawAuth from '@/lib/core/supabase/raw-auth'
 import * as rawRealtime from '@/lib/core/supabase/raw-realtime'
+import { MESSAGE_CONFIG } from '@/lib/core/constants'
+import {
+  sanitizeEnumValue,
+  sanitizeHttpUrl,
+  sanitizeMultilineInput,
+  sanitizeUuid,
+} from '@/lib/security/input-sanitization'
 
 /**
  * Messaging Service
@@ -8,6 +15,7 @@ import * as rawRealtime from '@/lib/core/supabase/raw-realtime'
  */
 
 export type DMMessageType = 'text' | 'image' | 'file' | 'system'
+const DM_MESSAGE_TYPE_VALUES = ['text', 'image', 'file', 'system'] as const
 
 export interface Conversation {
   id: string
@@ -197,14 +205,19 @@ export const getOrCreateConversation = async (
       return { data: null, error: 'User not authenticated' }
     }
 
-    if (user.id === otherUserId) {
+    const safeOtherUserId = sanitizeUuid(otherUserId)
+    if (!safeOtherUserId) {
+      return { data: null, error: 'Invalid recipient reference' }
+    }
+
+    if (user.id === safeOtherUserId) {
       return { data: null, error: 'You cannot start a conversation with yourself' }
     }
 
     // Call database function to get or create conversation
     const { data, error } = await rawDb.rpc<string>('get_or_create_conversation', {
       user1_id: user.id,
-      user2_id: otherUserId,
+      user2_id: safeOtherUserId,
     });
 
     if (error) throw error
@@ -219,7 +232,7 @@ export const getOrCreateConversation = async (
   } catch (error: any) {
     if (isDuplicateConversationParticipantError(error)) {
       // Recover from duplicate participant races by loading existing conversation.
-      const fallback = await findDirectConversationWithUser(otherUserId)
+      const fallback = await findDirectConversationWithUser(safeOtherUserId)
       if (fallback.data) {
         return { data: fallback.data, error: null }
       }
@@ -244,7 +257,12 @@ export const findDirectConversationWithUser = async (
       return { data: null, error: 'User not authenticated' };
     }
 
-    if (user.id === otherUserId) {
+    const safeOtherUserId = sanitizeUuid(otherUserId)
+    if (!safeOtherUserId) {
+      return { data: null, error: 'Invalid recipient reference' };
+    }
+
+    if (user.id === safeOtherUserId) {
       return { data: null, error: 'You cannot message yourself' };
     }
 
@@ -256,7 +274,7 @@ export const findDirectConversationWithUser = async (
     const existing = conversations.find(conv => {
       if (conv.type !== 'direct') return false;
       if (!conv.participants) return false;
-      return conv.participants.some(p => p.userId === otherUserId);
+      return conv.participants.some(p => p.userId === safeOtherUserId);
     });
 
     return { data: existing || null, error: null };
@@ -427,9 +445,14 @@ export const fetchConversationById = async (
       return { data: null, error: 'User not authenticated' }
     }
 
+    const safeConversationId = sanitizeUuid(conversationId)
+    if (!safeConversationId) {
+      return { data: null, error: 'Invalid conversation reference' }
+    }
+
     // Fetch conversation
     const { data: conversationData, error: conversationError } = await rawDb.select<any>('conversations', {
-      filters: { 'id': rawDb.filter.eq(conversationId) },
+      filters: { 'id': rawDb.filter.eq(safeConversationId) },
       single: true
     }) as any;
 
@@ -441,7 +464,7 @@ export const fetchConversationById = async (
           *,
           user:users(id, anonymous_id, avatar_url, is_premium)
         `.replace(/\s+/g, ''),
-        filters: { 'conversation_id': rawDb.filter.eq(conversationId) }
+        filters: { 'conversation_id': rawDb.filter.eq(safeConversationId) }
       }),
       rawDb.select<any[]>('direct_messages', {
         select: `
@@ -449,7 +472,7 @@ export const fetchConversationById = async (
           sender:users!direct_messages_sender_id_fkey(id, anonymous_id, avatar_url)
         `.replace(/\s+/g, ''),
         filters: {
-          'conversation_id': rawDb.filter.eq(conversationId),
+          'conversation_id': rawDb.filter.eq(safeConversationId),
           'is_deleted': rawDb.filter.eq(false)
         },
         order: { column: 'created_at', ascending: false },
@@ -469,7 +492,7 @@ export const fetchConversationById = async (
         (participant: any) => participant.user_id === user.id
       )
       const lastReadAt = currentParticipant?.last_read_at || null
-      const unreadCount = await getConversationUnreadCount(conversationId, user.id, lastReadAt)
+      const unreadCount = await getConversationUnreadCount(safeConversationId, user.id, lastReadAt)
 
       const conversation: Conversation = {
         id: conversationData.id,
@@ -503,14 +526,19 @@ export const createOneTimeConversation = async (
       return { data: null, error: 'User not authenticated' }
     }
 
-    if (user.id === recipientId) {
+    const safeRecipientId = sanitizeUuid(recipientId)
+    if (!safeRecipientId) {
+      return { data: null, error: 'Invalid recipient reference' }
+    }
+
+    if (user.id === safeRecipientId) {
       return { data: null, error: 'You cannot send a one-off message to yourself' }
     }
 
     // Call RPC to create one-time conversation
     const { data: conversationId, error: rpcError } = await rawDb.rpc<string>('create_one_time_conversation', {
       sender_id: user.id,
-      recipient_id: recipientId
+      recipient_id: safeRecipientId
     });
 
     if (rpcError) throw rpcError
@@ -550,6 +578,22 @@ export const fetchMessages = async (
   }
 ): Promise<{ data: DirectMessage[]; error: string | null }> => {
   try {
+    const safeConversationId = sanitizeUuid(conversationId)
+    if (!safeConversationId) {
+      return { data: [], error: 'Invalid conversation reference' }
+    }
+
+    const safeLimitRaw = Number(options?.limit)
+    const safeLimit =
+      Number.isFinite(safeLimitRaw) && safeLimitRaw > 0
+        ? Math.min(200, Math.floor(safeLimitRaw))
+        : undefined
+    const safeOffsetRaw = Number(options?.offset)
+    const safeOffset =
+      Number.isFinite(safeOffsetRaw) && safeOffsetRaw >= 0
+        ? Math.floor(safeOffsetRaw)
+        : undefined
+
     const { data, error } = await rawDb.select<any[]>('direct_messages', {
       select: `
         *,
@@ -558,12 +602,12 @@ export const fetchMessages = async (
         message_delivery_receipts(*)
       `.replace(/\s+/g, ''),
       filters: { 
-        'conversation_id': rawDb.filter.eq(conversationId),
+        'conversation_id': rawDb.filter.eq(safeConversationId),
         'is_deleted': rawDb.filter.eq(false)
       },
       order: { column: 'created_at', ascending: false },
-      limit: options?.limit,
-      offset: options?.offset
+      limit: safeLimit,
+      offset: safeOffset
     });
 
     if (error) throw error
@@ -593,13 +637,30 @@ export const sendMessage = async (
       return { data: null, error: 'User not authenticated' }
     }
 
+    const safeConversationId = sanitizeUuid(conversationId)
+    if (!safeConversationId) {
+      return { data: null, error: 'Invalid conversation reference' }
+    }
+
+    const safeMessageType = sanitizeEnumValue(messageType, DM_MESSAGE_TYPE_VALUES, 'text')
+    const safeContent = sanitizeMultilineInput(content, {
+      maxLength: MESSAGE_CONFIG.maxLength,
+    })
+    const safeAttachmentUrl = attachmentUrl
+      ? sanitizeHttpUrl(attachmentUrl, { maxLength: 2048 })
+      : null
+
+    if (safeMessageType === 'text' && !safeContent && !safeAttachmentUrl) {
+      return { data: null, error: 'Message cannot be empty' }
+    }
+
     // Insert message
     const { data: insertedData, error: insertError } = await rawDb.insert('direct_messages', {
-      conversation_id: conversationId,
+      conversation_id: safeConversationId,
       sender_id: user.id,
-      content,
-      message_type: messageType,
-      attachment_url: attachmentUrl,
+      content: safeContent,
+      message_type: safeMessageType,
+      attachment_url: safeAttachmentUrl,
     }, { returning: true });
 
     if (insertError) throw insertError
@@ -640,14 +701,26 @@ export const editMessage = async (
   newContent: string
 ): Promise<{ success: boolean; error: string | null }> => {
   try {
+    const safeMessageId = sanitizeUuid(messageId)
+    if (!safeMessageId) {
+      return { success: false, error: 'Invalid message reference' }
+    }
+
+    const safeContent = sanitizeMultilineInput(newContent, {
+      maxLength: MESSAGE_CONFIG.maxLength,
+    })
+    if (!safeContent) {
+      return { success: false, error: 'Message cannot be empty' }
+    }
+
     const { error } = await rawDb.update(
         'direct_messages',
         {
-            content: newContent,
+            content: safeContent,
             is_edited: true,
             updated_at: new Date().toISOString(),
         },
-        { 'id': rawDb.filter.eq(messageId) }
+        { 'id': rawDb.filter.eq(safeMessageId) }
     );
 
     if (error) throw error
@@ -666,13 +739,18 @@ export const deleteMessage = async (
   messageId: string
 ): Promise<{ success: boolean; error: string | null }> => {
   try {
+    const safeMessageId = sanitizeUuid(messageId)
+    if (!safeMessageId) {
+      return { success: false, error: 'Invalid message reference' }
+    }
+
     const { error } = await rawDb.update(
         'direct_messages',
         {
             is_deleted: true,
             updated_at: new Date().toISOString(),
         },
-        { 'id': rawDb.filter.eq(messageId) }
+        { 'id': rawDb.filter.eq(safeMessageId) }
     );
 
     if (error) throw error
@@ -698,8 +776,13 @@ export const markConversationRead = async (
       return { success: false, error: 'User not authenticated' }
     }
 
+    const safeConversationId = sanitizeUuid(conversationId)
+    if (!safeConversationId) {
+      return { success: false, error: 'Invalid conversation reference' }
+    }
+
     const { error } = await rawDb.rpc('mark_conversation_read', {
-      p_conversation_id: conversationId,
+      p_conversation_id: safeConversationId,
       p_user_id: user.id,
     });
 
@@ -726,13 +809,18 @@ export const markConversationReadWithReceipts = async (
       return { success: false, insertedCount: 0, error: 'User not authenticated' }
     }
 
+    const safeConversationId = sanitizeUuid(conversationId)
+    if (!safeConversationId) {
+      return { success: false, insertedCount: 0, error: 'Invalid conversation reference' }
+    }
+
     const { data, error } = await rawDb.rpc<number>('mark_conversation_read_with_receipts', {
-      p_conversation_id: conversationId,
+      p_conversation_id: safeConversationId,
       p_user_id: user.id,
     })
 
     if (error) {
-      const fallback = await markConversationRead(conversationId)
+      const fallback = await markConversationRead(safeConversationId)
       if (fallback.success) {
         return { success: true, insertedCount: 0, error: null }
       }
@@ -760,8 +848,13 @@ export const createReadReceipt = async (
       return { success: false, error: 'User not authenticated' }
     }
 
+    const safeMessageId = sanitizeUuid(messageId)
+    if (!safeMessageId) {
+      return { success: false, error: 'Invalid message reference' }
+    }
+
     const { error } = await rawDb.insert('message_read_receipts', {
-        message_id: messageId,
+        message_id: safeMessageId,
         user_id: user.id,
     });
 
@@ -795,8 +888,13 @@ export const createDeliveryReceipt = async (
       return { success: false, error: 'User not authenticated' }
     }
 
+    const safeMessageId = sanitizeUuid(messageId)
+    if (!safeMessageId) {
+      return { success: false, error: 'Invalid message reference' }
+    }
+
     const { error } = await rawDb.rpc('mark_message_delivered', {
-      p_message_id: messageId,
+      p_message_id: safeMessageId,
       p_user_id: user.id,
     });
 
@@ -823,8 +921,13 @@ export const markConversationDelivered = async (
       return { success: false, error: 'User not authenticated' }
     }
 
+    const safeConversationId = sanitizeUuid(conversationId)
+    if (!safeConversationId) {
+      return { success: false, error: 'Invalid conversation reference' }
+    }
+
     const { error } = await rawDb.rpc('mark_conversation_delivered', {
-      p_conversation_id: conversationId,
+      p_conversation_id: safeConversationId,
       p_user_id: user.id,
     });
 
@@ -852,11 +955,16 @@ export const toggleMuteConversation = async (
       return { success: false, error: 'User not authenticated' }
     }
 
+    const safeConversationId = sanitizeUuid(conversationId)
+    if (!safeConversationId) {
+      return { success: false, error: 'Invalid conversation reference' }
+    }
+
     const { error } = await rawDb.update(
         'conversation_participants',
         { is_muted: isMuted },
         { 
-            'conversation_id': rawDb.filter.eq(conversationId),
+            'conversation_id': rawDb.filter.eq(safeConversationId),
             'user_id': rawDb.filter.eq(user.id)
         }
     );
@@ -902,14 +1010,21 @@ export const subscribeToMessages = (
   conversationId: string,
   callback: (message: DirectMessage) => void
 ) => {
+  const safeConversationId = sanitizeUuid(conversationId)
+  if (!safeConversationId) {
+    return {
+      unsubscribe: () => {},
+    }
+  }
+
   const channel = rawRealtime.createChannel({
-      channelName: `realtime:messages:${conversationId}`,
+      channelName: `realtime:messages:${safeConversationId}`,
       config: {
           postgres_changes: [{
               event: 'INSERT',
               schema: 'public',
               table: 'direct_messages',
-              filter: `conversation_id=eq.${conversationId}`
+              filter: `conversation_id=eq.${safeConversationId}`
           }]
       },
       onPostgresChange: async (change) => {
@@ -950,8 +1065,15 @@ export const subscribeToConversations = (
   userId: string,
   callback: () => void
 ) => {
+  const safeUserId = sanitizeUuid(userId)
+  if (!safeUserId) {
+    return {
+      unsubscribe: () => {},
+    }
+  }
+
   const channel = rawRealtime.createChannel({
-      channelName: `realtime:conversations:${userId}`,
+      channelName: `realtime:conversations:${safeUserId}`,
       config: {
           postgres_changes: [{
               event: '*',
