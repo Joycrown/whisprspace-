@@ -1,5 +1,9 @@
 import { getSession } from '@/lib/core/supabase/raw-auth';
 import { getAccessToken } from '@/lib/utils/auth-token-cache';
+import {
+  sanitizeSingleLineInput,
+  sanitizeUuid,
+} from '@/lib/security/input-sanitization';
 
 const readTokenFromStorage = () => {
   if (typeof window === 'undefined') return null;
@@ -56,6 +60,18 @@ export const confirmThreadPurchase = async (payload: {
   txRef?: string | null;
 }) => {
   try {
+    const safeThreadId = sanitizeUuid(payload.threadId);
+    if (!safeThreadId) {
+      return { success: false, error: 'Invalid thread reference' };
+    }
+
+    const safeTransactionId = payload.transactionId
+      ? sanitizeSingleLineInput(payload.transactionId, { maxLength: 128 })
+      : null;
+    const safeTxRef = payload.txRef
+      ? sanitizeSingleLineInput(payload.txRef, { maxLength: 128 })
+      : null;
+
     const token = resolveAccessToken();
     if (!token) {
       return { success: false, error: 'Authentication required' };
@@ -65,7 +81,11 @@ export const confirmThreadPurchase = async (payload: {
       method: 'POST',
       headers: buildAuthHeaders(),
       credentials: 'include',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        threadId: safeThreadId,
+        transactionId: safeTransactionId,
+        txRef: safeTxRef,
+      }),
     });
 
     if (!response.ok) {
@@ -87,6 +107,13 @@ export const confirmPremiumUpgrade = async (payload: {
   txRef?: string | null;
 }): Promise<{ success: boolean; error?: string; premiumExpiresAt?: string }> => {
   try {
+    const safeTransactionId = payload.transactionId
+      ? sanitizeSingleLineInput(payload.transactionId, { maxLength: 128 })
+      : null;
+    const safeTxRef = payload.txRef
+      ? sanitizeSingleLineInput(payload.txRef, { maxLength: 128 })
+      : null;
+
     const token = resolveAccessToken();
     if (!token) {
       return { success: false, error: 'Authentication required' };
@@ -96,7 +123,10 @@ export const confirmPremiumUpgrade = async (payload: {
       method: 'POST',
       headers: buildAuthHeaders(),
       credentials: 'include',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        transactionId: safeTransactionId,
+        txRef: safeTxRef,
+      }),
     });
 
     if (!response.ok) {
@@ -119,6 +149,26 @@ export const createThreadPurchaseSession = async (
   currency?: string
 ): Promise<{ url: string | null; error: string | null; txRef?: string | null; alreadyPurchased?: boolean }> => {
   try {
+    const safeThreadId = sanitizeUuid(threadId);
+    if (!safeThreadId) {
+      return { url: null, error: 'Invalid thread reference', txRef: null };
+    }
+
+    const safeCountryCandidate = country
+      ? sanitizeSingleLineInput(country, { maxLength: 3 }).toUpperCase()
+      : undefined;
+    const safeCurrencyCandidate = currency
+      ? sanitizeSingleLineInput(currency, { maxLength: 3 }).toUpperCase()
+      : undefined;
+    const safeCountry =
+      safeCountryCandidate && /^[A-Z]{2}$/.test(safeCountryCandidate)
+        ? safeCountryCandidate
+        : undefined;
+    const safeCurrency =
+      safeCurrencyCandidate && /^[A-Z]{3}$/.test(safeCurrencyCandidate)
+        ? safeCurrencyCandidate
+        : undefined;
+
     const token = resolveAccessToken();
     if (!token) {
       return { url: null, error: 'Authentication required', txRef: null };
@@ -129,9 +179,9 @@ export const createThreadPurchaseSession = async (
       headers: buildAuthHeaders(),
       credentials: 'include',
       body: JSON.stringify({
-        threadId,
-        country,
-        currency,
+        threadId: safeThreadId,
+        country: safeCountry,
+        currency: safeCurrency,
       }),
     })
 
@@ -157,6 +207,15 @@ export const createPremiumUpgradeSession = async (
   currency?: string
 ): Promise<{ url: string | null; error: string | null; txRef?: string | null }> => {
   try {
+    const safePlan = plan === 'annual' ? 'annual' : 'monthly';
+    const safeCurrencyCandidate = currency
+      ? sanitizeSingleLineInput(currency, { maxLength: 3 }).toUpperCase()
+      : undefined;
+    const safeCurrency =
+      safeCurrencyCandidate && /^[A-Z]{3}$/.test(safeCurrencyCandidate)
+        ? safeCurrencyCandidate
+        : undefined;
+
     const token = resolveAccessToken();
     if (!token) {
       return { url: null, error: 'Authentication required', txRef: null };
@@ -166,7 +225,7 @@ export const createPremiumUpgradeSession = async (
       method: 'POST',
       headers: buildAuthHeaders(),
       credentials: 'include',
-      body: JSON.stringify({ plan, currency }),
+      body: JSON.stringify({ plan: safePlan, currency: safeCurrency }),
     });
 
     if (!response.ok) {
