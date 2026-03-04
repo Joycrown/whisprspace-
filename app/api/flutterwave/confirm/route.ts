@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient as createSupabaseServerClient } from '@/lib/core/supabase/server'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
+import { enforceRateLimit, withRateLimitHeaders } from '@/lib/security/rate-limit'
+import { resolveUserFromRequest } from '@/lib/security/request-auth'
 
 const supabaseAdmin = createSupabaseAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,12 +16,6 @@ type PurchasableThread = {
   price: number | string | null
   deleted_at: string | null
   expires_at: string | null
-}
-
-type ResolvedRequestUser = {
-  id: string
-  email?: string | null
-  user_metadata?: Record<string, unknown>
 }
 
 type MetaRecord = Record<string, unknown>
@@ -39,73 +34,17 @@ const getThreadForPurchase = async (threadId: string) => {
   return { thread: data as PurchasableThread, error: null }
 }
 
-const decodeJwtPayload = (token: string): Record<string, unknown> | null => {
-  try {
-    const payload = token.split('.')[1]
-    if (!payload) return null
-    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
-    const padded = normalized.padEnd(normalized.length + (4 - (normalized.length % 4)) % 4, '=')
-    return JSON.parse(Buffer.from(padded, 'base64').toString('utf-8')) as Record<string, unknown>
-  } catch {
-    return null
-  }
-}
-
-const resolveUserFromRequest = async (request: NextRequest) => {
-  let user: ResolvedRequestUser | null = null
-  const authHeader = request.headers.get('authorization')
-  if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice('Bearer '.length)
-    if (process.env.NODE_ENV === 'production') {
-      try {
-        const { data, error } = await supabaseAdmin.auth.getUser(token)
-        if (!error && data?.user) {
-          return data.user as unknown as ResolvedRequestUser
-        }
-      } catch (error) {
-        console.error('Supabase auth getUser failed:', error)
-      }
-    } else {
-      const payload = decodeJwtPayload(token)
-      const userId =
-        (typeof payload?.sub === 'string' && payload.sub) ||
-        (typeof payload?.user_id === 'string' && payload.user_id) ||
-        null
-      if (userId) {
-        const { data: userRow } = await supabaseAdmin
-          .from('users')
-          .select('id,email')
-          .eq('id', userId)
-          .maybeSingle()
-        if (userRow) {
-          const payloadEmail = typeof payload?.email === 'string' ? payload.email : undefined
-          const payloadMetadata =
-            payload && typeof payload.user_metadata === 'object' && payload.user_metadata !== null
-              ? (payload.user_metadata as Record<string, unknown>)
-              : {}
-
-          user = {
-            id: userRow.id,
-            email: userRow.email || payloadEmail,
-            user_metadata: payloadMetadata,
-          }
-        }
-      }
-    }
-  }
-
-  if (!user) {
-    const supabase = await createSupabaseServerClient()
-    const { data } = await supabase.auth.getUser()
-    if (data?.user) {
-      user = data.user as unknown as ResolvedRequestUser
-    }
-  }
-
-  return user
-}
-
 export async function POST(request: NextRequest) {
+  const rateLimit = enforceRateLimit({
+    request,
+    namespace: 'payments:flutterwave:confirm',
+    max: 12,
+    windowMs: 60_000,
+  })
+  if (!rateLimit.allowed) {
+    return rateLimit.response
+  }
+
   try {
     const flutterwaveSecretKey = process.env.FLW_SECRET_KEY
     if (!flutterwaveSecretKey) {
@@ -115,9 +54,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { threadId, transactionId, txRef } = await request.json().catch(() => ({}))
+    const body = await request.json().catch(() => ({}))
+    const threadId = typeof body.threadId === 'string' ? body.threadId.trim() : ''
+    const transactionId = body.transactionId
+    const txRef = typeof body.txRef === 'string' ? body.txRef.trim() : body.txRef
 
-    if (!threadId || (!transactionId && !txRef)) {
+    if (!threadId || threadId.length > 128 || (!transactionId && !txRef)) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
         { status: 400 }
@@ -325,7 +267,7 @@ export async function POST(request: NextRequest) {
           { onConflict: 'thread_id,user_id' }
         )
 
-      return NextResponse.json({ success: true, alreadyPurchased: true })
+      return withRateLimitHeaders(NextResponse.json({ success: true, alreadyPurchased: true }), rateLimit.headers)
     }
 
     const { data: creatorProfile, error: creatorProfileError } = await supabaseAdmin
@@ -474,12 +416,12 @@ export async function POST(request: NextRequest) {
       ])
     }
 
-    return NextResponse.json({ success: true })
+    return withRateLimitHeaders(NextResponse.json({ success: true }), rateLimit.headers)
   } catch (error) {
     console.error('Flutterwave confirm error:', error)
-    return NextResponse.json(
+    return withRateLimitHeaders(NextResponse.json(
       { error: 'Failed to confirm payment' },
       { status: 500 }
-    )
+    ), rateLimit.headers)
   }
 }

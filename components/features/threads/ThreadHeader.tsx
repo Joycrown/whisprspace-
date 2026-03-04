@@ -21,13 +21,15 @@ interface ThreadHeaderProps {
   onLike: () => void;
   onToggleSidebar?: () => void;
   currentUserId?: string;
+  onOpenPreview?: () => void;
 }
 
 const ThreadHeader: React.FC<ThreadHeaderProps> = ({
   thread,
   onLike,
   onToggleSidebar,
-  currentUserId
+  currentUserId,
+  onOpenPreview,
 }) => {
   const [timeRemaining, setTimeRemaining] = useState('');
   const [showShareDropdown, setShowShareDropdown] = useState(false);
@@ -91,6 +93,7 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
   );
   const defaultShareUrl = buildThreadShareUrl();
   const shareText = thread ? `Check out this thread: ${thread.title}` : 'Check out this thread';
+  const canOpenPreview = typeof onOpenPreview === 'function';
 
   const resolveShareUrl = useCallback(async (forceNew: boolean = false) => {
     if (!thread) {
@@ -335,7 +338,19 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
     <div className="bg-gray-800/95 backdrop-blur-md border-b border-gray-800 flex-shrink-0 w-full max-w-full overflow-hidden"> {/* Enhanced background for fixed positioning */}
       <div className="px-3 md:px-4 py-2 md:py-3">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+          <div
+            className={`flex items-center gap-2 md:gap-3 flex-1 min-w-0 ${canOpenPreview ? 'cursor-pointer' : ''}`}
+            onClick={canOpenPreview ? onOpenPreview : undefined}
+            onKeyDown={canOpenPreview ? (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onOpenPreview?.();
+              }
+            } : undefined}
+            role={canOpenPreview ? 'button' : undefined}
+            tabIndex={canOpenPreview ? 0 : undefined}
+            aria-label={canOpenPreview ? 'Open thread preview' : undefined}
+          >
             <div className="flex-shrink-0 hidden sm:block">
               <div className="flex -space-x-3">
                 {visibleParticipants.map(participant => (
