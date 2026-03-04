@@ -5,6 +5,10 @@
 
 import * as rawDb from '@/lib/core/supabase/raw-db';
 import { validateUsername } from '../utils/username-validation';
+import {
+  sanitizeSingleLineInput,
+  sanitizeUuid,
+} from '@/lib/security/input-sanitization';
 
 export interface UsernameChangeResult {
   success: boolean;
@@ -20,16 +24,20 @@ export async function checkUsernameAvailability(
   excludeUserId?: string
 ): Promise<boolean> {
   try {
+    const safeUsername = sanitizeSingleLineInput(username, { maxLength: 32 });
+    if (!safeUsername) return false;
+    const safeExcludeUserId = excludeUserId ? sanitizeUuid(excludeUserId) : null;
+
     // Try using database function first (if migration has been run)
     const { data, error } = await rawDb.rpc<boolean>('is_username_available', {
-      check_username: username,
-      exclude_user_id: excludeUserId || null,
+      check_username: safeUsername,
+      exclude_user_id: safeExcludeUserId,
     });
 
     // If RPC function doesn't exist, fall back to direct query
     if (error && error.message?.includes('function') && error.message?.includes('does not exist')) {
       console.warn('Database function not found, using fallback query');
-      return await checkUsernameAvailabilityFallback(username, excludeUserId);
+      return await checkUsernameAvailabilityFallback(safeUsername, safeExcludeUserId || undefined);
     }
 
     if (error) {
@@ -42,7 +50,7 @@ export async function checkUsernameAvailability(
     console.error('Error checking username availability:', error);
     // Try fallback on any error
     try {
-      return await checkUsernameAvailabilityFallback(username, excludeUserId);
+      return await checkUsernameAvailabilityFallback(safeUsername, safeExcludeUserId || undefined);
     } catch (fallbackError) {
       console.error('Fallback also failed:', fallbackError);
       return false;
@@ -59,14 +67,18 @@ async function checkUsernameAvailabilityFallback(
   excludeUserId?: string
 ): Promise<boolean> {
   try {
+    const safeUsername = sanitizeSingleLineInput(username, { maxLength: 32 });
+    if (!safeUsername) return false;
+    const safeExcludeUserId = excludeUserId ? sanitizeUuid(excludeUserId) : null;
+
     let query = rawDb
       .from<{ id: string }>('users')
       .select('id')
-      .ilike('username', username)
+      .ilike('username', safeUsername)
       .limit(1);
 
-    if (excludeUserId) {
-      query = query.neq('id', excludeUserId);
+    if (safeExcludeUserId) {
+      query = query.neq('id', safeExcludeUserId);
     }
 
     const { data, error } = await query.execute();
@@ -93,8 +105,15 @@ export async function updateUsername(
   newUsername: string
 ): Promise<UsernameChangeResult> {
   try {
+    const safeUserId = sanitizeUuid(userId);
+    if (!safeUserId) {
+      return { success: false, error: 'Invalid user context' };
+    }
+
+    const candidateUsername = sanitizeSingleLineInput(newUsername, { maxLength: 32 });
+
     // Client-side validation first
-    const validation = validateUsername(newUsername);
+    const validation = validateUsername(candidateUsername);
     if (!validation.isValid) {
       return {
         success: false,
@@ -106,8 +125,8 @@ export async function updateUsername(
     const { data, error } = await rawDb.rpc<{ success: boolean; error?: string; username?: string }>(
       'update_user_username',
       {
-      user_id: userId,
-      new_username: newUsername.trim(),
+      user_id: safeUserId,
+      new_username: candidateUsername.trim(),
       }
     );
 
@@ -146,10 +165,13 @@ export async function getUsernameChangeInfo(userId: string): Promise<{
   isPremium: boolean;
 } | null> {
   try {
+    const safeUserId = sanitizeUuid(userId);
+    if (!safeUserId) return null;
+
     const { data, error } = await rawDb
       .from<{ username: string; last_username_change: string | null; is_premium: boolean }>('users')
       .select('username, last_username_change, is_premium')
-      .eq('id', userId)
+      .eq('id', safeUserId)
       .single()
       .execute();
 
@@ -177,11 +199,19 @@ export async function searchUsernames(
   limit = 10
 ): Promise<{ id: string; username: string; isAnonymous: boolean }[]> {
   try {
+    const safeQuery = sanitizeSingleLineInput(query, { maxLength: 40 }).replace(/[^a-zA-Z0-9_]/g, '');
+    if (!safeQuery) return [];
+    const safeLimitRaw = Number(limit);
+    const safeLimit =
+      Number.isFinite(safeLimitRaw) && safeLimitRaw > 0
+        ? Math.min(50, Math.floor(safeLimitRaw))
+        : 10;
+
     const { data, error } = await rawDb
       .from<{ id: string; username: string; is_anonymous: boolean }>('users')
       .select('id, username, is_anonymous')
-      .ilike('username', `%${query}%`)
-      .limit(limit)
+      .ilike('username', `%${safeQuery}%`)
+      .limit(safeLimit)
       .execute();
 
     if (error || !data) {
@@ -207,10 +237,13 @@ export async function searchUsernames(
  */
 export async function getUsernameById(userId: string): Promise<string | null> {
   try {
+    const safeUserId = sanitizeUuid(userId);
+    if (!safeUserId) return null;
+
     const { data, error } = await rawDb
       .from<{ username: string }>('users')
       .select('username')
-      .eq('id', userId)
+      .eq('id', safeUserId)
       .single()
       .execute();
 
