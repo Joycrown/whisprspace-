@@ -85,3 +85,4 @@ const sentryBuildOptions = {
 export default sentryEnabled
   ? withSentryConfig(pwaConfig, sentryBuildOptions)
   : pwaConfig;
+ 

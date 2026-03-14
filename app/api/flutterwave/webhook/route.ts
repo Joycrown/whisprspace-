@@ -835,19 +835,29 @@ async function handleTransferEvent(data: any, eventType: string) {
         { onConflict: 'payment_provider,tx_ref' }
       )
 
-    if (earningIds.length > 0) {
+    const requestId = metadata?.requestId || metadata?.request_id || null
+
+    if (requestId) {
+      const payoutStatus = status === 'completed' ? 'completed' : status === 'failed' ? 'failed' : 'processing';
+      await supabase
+        .from('payout_requests')
+        .update({ status: payoutStatus })
+        .eq('id', requestId);
+    }
+
+    if (earningIds.length > 0 || requestId) {
       if (status === 'completed') {
-        await supabase
-          .from('creator_earnings')
-          .update({ status: 'paid', paid_at: new Date().toISOString() })
-          .in('id', earningIds)
+        const query = supabase.from('creator_earnings').update({ status: 'paid', paid_at: new Date().toISOString() });
+        if (earningIds.length > 0) query.in('id', earningIds);
+        else if (requestId) query.eq('payout_request_id', requestId);
+        await query;
       }
 
       if (status === 'failed') {
-        await supabase
-          .from('creator_earnings')
-          .update({ status: 'pending' })
-          .in('id', earningIds)
+        const query = supabase.from('creator_earnings').update({ status: 'pending', payout_request_id: null });
+        if (earningIds.length > 0) query.in('id', earningIds);
+        else if (requestId) query.eq('payout_request_id', requestId);
+        await query;
       }
     }
   } catch (error) {

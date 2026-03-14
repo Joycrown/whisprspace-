@@ -8,7 +8,7 @@ import { useUserStore } from '@/store/userStore';
 
 const isPostHogReady = () =>
   Boolean((posthog as unknown as { __loaded?: boolean }).__loaded);
-const isAnalyticsEnabled = process.env.NODE_ENV === 'production' && Boolean(process.env.NEXT_PUBLIC_POSTHOG_KEY);
+const isAnalyticsEnabled = process.env.NEXT_PUBLIC_APP_ENV === 'production' && Boolean(process.env.NEXT_PUBLIC_POSTHOG_KEY);
 
 const initPostHog = () => {
   if (typeof window === 'undefined') return;
@@ -29,11 +29,8 @@ const initPostHog = () => {
       capture_pageview: false,
       autocapture: true,
       mask_all_text: true,
-      mask_all_inputs: true,
       disable_session_recording: false,
       session_recording: {
-        maskAllText: true,
-        maskAllInputs: true,
         blockClass: 'ph-no-capture',
         maskTextClass: 'ph-mask',
       },

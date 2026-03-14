@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/store/userStore';
 import { motion } from 'framer-motion';
-import { Settings, TrendingUp, Calendar, Clock, ArrowLeft, DollarSign, Crown, Edit3, BarChart3 } from 'lucide-react';
+import { Settings, TrendingUp, Calendar, Clock, ArrowLeft, DollarSign, Crown, Edit3, BarChart3, Shield } from 'lucide-react';
 import NotificationPreferencesModal from '@/components/features/notifications/NotificationPreferencesModal';
 import ActivityFeed from '@/components/features/profile/ActivityFeed';
 import PremiumPaymentForm from '@/components/features/premium/PremiumPaymentForm';
@@ -12,10 +12,12 @@ import UsernameChanger from '@/components/features/profile/UsernameChanger';
 import { getUserPollStats } from '@/lib/threads/thread-service';
 import { confirmPremiumUpgrade } from '@/lib/flutterwave/flutterwave-service';
 import AppLoadingState from '@/components/ui/AppLoadingState';
+import { useIsAdmin } from '@/lib/admin';
 
 const ProfilePage = () => {
   const router = useRouter();
   const { session, refreshUser, applyPremiumUpgrade, sessionValidated } = useUserStore();
+  const { isAdmin } = useIsAdmin();
   const [showPreferencesModal, setShowPreferencesModal] = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual' | null>(null);
@@ -222,8 +224,27 @@ const ProfilePage = () => {
               </button>
             </div>
           </div>
-        </div>
 
+          {/* Admin Panel (Conditional) */}
+          {isAdmin && (
+            <div className="bg-[#1E1E1E] rounded-lg p-6 border border-purple-500/30 h-full flex flex-col">
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                <Shield className="w-5 h-5 text-purple-400" />
+                Admin Panel
+              </h3>
+              <div className="flex flex-col flex-1">
+                <p className="text-gray-400 text-sm">Manage users, reports, and payouts</p>
+                <button
+                  onClick={() => router.push('/admin')}
+                  className="w-full px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-lg transition-colors flex items-center justify-center gap-2 mt-auto"
+                >
+                  <Shield className="w-4 h-4" />
+                  Go to Dashboard
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
       </div>
 
@@ -259,7 +280,7 @@ const ProfilePage = () => {
                 className={`bg-white/10 backdrop-blur rounded-lg p-4 border-2 transition-all hover:bg-white/20 ${selectedPlan === 'monthly' ? 'border-yellow-500' : 'border-transparent'
                   }`}
               >
-                <div className="text-xl sm:text-2xl font-bold mb-1">$2.00/mo</div>
+                <div className="text-xl sm:text-2xl font-bold mb-1">$0.01/mo</div>
                 <div className="text-xs sm:text-sm text-purple-200">Monthly Plan</div>
               </button>
               <button
@@ -324,7 +345,7 @@ const ProfilePage = () => {
       {/* Premium Payment Form */}
       {showPaymentForm && selectedPlan && (
         <PremiumPaymentForm
-          plan={selectedPlan}
+          initialPlan={selectedPlan}
           onSuccess={handleUpgradeSuccess}
           onCancel={() => {
             setShowPaymentForm(false);
