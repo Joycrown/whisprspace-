@@ -7,14 +7,17 @@ import UsersTable from './UsersTable'
 import ContentReportsTable from './ContentReportsTable'
 import ModerationActionsTable from './ModerationActionsTable'
 import BanUserModal from './BanUserModal'
-import { BarChart3, Users, Flag, Shield, Lock } from 'lucide-react'
+import UserDetailsModal from './UserDetailsModal'
+import PayoutRequestsTable from './PayoutRequestsTable'
+import { BarChart3, Users, Flag, Shield, Lock, Banknote } from 'lucide-react'
 
-type TabType = 'analytics' | 'users' | 'reports' | 'moderation'
+type TabType = 'analytics' | 'users' | 'reports' | 'moderation' | 'payouts'
 
 export default function AdminDashboard() {
   const { isAdmin, role, isLoading } = useIsAdmin()
   const [activeTab, setActiveTab] = useState<TabType>('analytics')
   const [banModalData, setBanModalData] = useState<{ userId: string; userName: string } | null>(null)
+  const [viewUserId, setViewUserId] = useState<string | null>(null)
 
   if (isLoading) {
     return (
@@ -44,6 +47,7 @@ export default function AdminDashboard() {
     { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart3 },
     { id: 'users' as TabType, label: 'Users', icon: Users },
     { id: 'reports' as TabType, label: 'Reports', icon: Flag },
+    { id: 'payouts' as TabType, label: 'Payouts', icon: Banknote },
     { id: 'moderation' as TabType, label: 'Moderation', icon: Shield },
   ]
 
@@ -102,20 +106,28 @@ export default function AdminDashboard() {
         {activeTab === 'users' && (
           <UsersTable
             onBanUser={(userId) => {
-              // Fetch user details and show ban modal
               setBanModalData({ userId, userName: 'User' })
             }}
             onViewUser={(userId) => {
-              // Navigate to user details page
-              console.log('View user:', userId)
+              setViewUserId(userId)
             }}
           />
         )}
         
         {activeTab === 'reports' && <ContentReportsTable />}
+
+        {activeTab === 'payouts' && <PayoutRequestsTable />}
         
         {activeTab === 'moderation' && <ModerationActionsTable limit={100} />}
       </div>
+
+      {/* User Details Modal */}
+      {viewUserId && (
+        <UserDetailsModal
+          userId={viewUserId}
+          onClose={() => setViewUserId(null)}
+        />
+      )}
 
       {/* Ban User Modal */}
       {banModalData && (
@@ -124,8 +136,10 @@ export default function AdminDashboard() {
           userName={banModalData.userName}
           onClose={() => setBanModalData(null)}
           onSuccess={() => {
-            // Refresh users list
             console.log('User banned successfully')
+            // Refresh logic usually requires lifting state or exposing ref,
+            // for now let's just use window.location.reload() for simplicity or leave it as it will update on next fetch.
+            window.location.reload()
           }}
         />
       )}

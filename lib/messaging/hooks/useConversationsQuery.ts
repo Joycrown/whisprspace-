@@ -61,7 +61,7 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
       return result.data
     },
     // Realtime keeps this fresh; avoid aggressive refetch churn.
-    staleTime: 2 * 60 * 1000,
+    staleTime: 10 * 1000, // 10 seconds is plenty for a list that is shared across pages.
     refetchOnWindowFocus: false,
     refetchInterval: enableRealtime ? false : autoRefreshInterval,
     placeholderData: (previousData) => previousData,
@@ -148,7 +148,7 @@ export function useUnreadCountQuery(options: UseUnreadCountQueryOptions = {}) {
       
       return result.count
     },
-    staleTime: 30 * 1000,
+    staleTime: 10 * 1000,
     refetchOnWindowFocus: false,
     refetchInterval,
     enabled: queryEnabled,

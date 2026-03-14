@@ -41,6 +41,7 @@ export const resolveUserFromRequest = async (
   request: NextRequest
 ): Promise<ResolvedRequestUser | null> => {
   const authHeader = request.headers.get('authorization')
+  
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice('Bearer '.length).trim()
     if (token) {
@@ -50,20 +51,29 @@ export const resolveUserFromRequest = async (
         if (!error && data?.user) {
           return mapUser(data.user as { id: string; email?: string | null; user_metadata?: unknown })
         }
-      } catch (error) {
-        console.error('Failed to resolve user from bearer token:', error)
+        if (error) {
+          console.error('[RequestAuth] Bearer token error:', error.message)
+        }
+      } catch (error: any) {
+        console.error('[RequestAuth] Failed to resolve user from bearer token:', error.message)
       }
+    } else {
+      console.warn('[RequestAuth] Bearer token is empty')
     }
   }
 
   try {
     const supabase = await createSupabaseServerClient()
-    const { data } = await supabase.auth.getUser()
+    const { data, error } = await supabase.auth.getUser()
     if (data?.user) {
       return mapUser(data.user as { id: string; email?: string | null; user_metadata?: unknown })
     }
-  } catch (error) {
-    console.error('Failed to resolve user from cookie session:', error)
+    if (error) {
+      // Don't log cookie errors if we don't expect them, but for admin ops they might be helpful
+      // console.warn('[RequestAuth] Cookie session missing or invalid')
+    }
+  } catch (error: any) {
+    console.error('[RequestAuth] Failed to resolve user from cookie session:', error.message)
   }
 
   return null

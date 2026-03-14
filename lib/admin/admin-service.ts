@@ -1,4 +1,7 @@
 import { supabase } from '@/lib/core/supabase/client'
+import * as rawAuth from '@/lib/core/supabase/raw-auth'
+import * as rawDb from '@/lib/core/supabase/raw-db'
+import { getAccessToken } from '@/lib/utils/auth-token-cache'
 
 /**
  * Admin Service
@@ -59,13 +62,22 @@ export const isAdmin = async (): Promise<boolean> => {
 
     if (!user) return false
 
-    const { data, error } = await supabase
+    const { data: adminData } = await supabase
       .from('admin_users')
       .select('role')
       .eq('user_id', user.id)
       .single()
 
-    return !error && data !== null
+    if (adminData) return true
+
+    // Check users table as fallback
+    const { data: userData } = await supabase
+      .from('users')
+      .select('is_admin')
+      .eq('id', user.id)
+      .single()
+
+    return userData?.is_admin === true
   } catch {
     return false
   }
@@ -91,10 +103,17 @@ export const getAdminRole = async (): Promise<{
       .eq('user_id', user.id)
       .single()
 
-    if (error) throw error
+    if (error) {
+      // Gracefully handle "No rows returned"
+      if (error.message.includes('No rows returned')) {
+        return { role: null, error: null }
+      }
+      throw error
+    }
 
-    return { role: data.role, error: null }
+    return { role: data?.role || null, error: null }
   } catch (error: any) {
+    console.warn('[AdminService] Error fetching role:', error.message)
     return { role: null, error: error.message || 'Failed to get admin role' }
   }
 }
@@ -110,12 +129,13 @@ export const fetchAllUsers = async (
   }
 ): Promise<{
   data: any[]
+  count: number
   error: string | null
 }> => {
   try {
     let query = supabase
       .from('users')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
 
     if (options?.search) {
@@ -133,14 +153,60 @@ export const fetchAllUsers = async (
       )
     }
 
-    const { data, error } = await query
+    const { data, error, count } = await query
 
     if (error) throw error
 
-    return { data: data || [], error: null }
+    // Map snake_case to camelCase
+    const mappedData = (data || []).map((u: any) => ({
+      ...u,
+      anonymousId: u.anonymous_id,
+      avatarUrl: u.avatar_url,
+      isAdmin: u.is_admin,
+      isPremium: u.is_premium,
+      createdAt: u.created_at,
+    }))
+
+    return { data: mappedData, count: count || 0, error: null }
   } catch (error: any) {
     console.error('Fetch all users error:', error)
-    return { data: [], error: error.message || 'Failed to fetch users' }
+    return { data: [], count: 0, error: error.message || 'Failed to fetch users' }
+  }
+}
+
+/**
+ * Get single user details
+ */
+export const fetchUserDetails = async (
+  userId: string
+): Promise<{
+  data: any | null
+  error: string | null
+}> => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single()
+
+    if (error) throw error
+
+    // Map snake_case to camelCase
+    const mappedUser = {
+      ...data,
+      anonymousId: data.anonymous_id,
+      avatarUrl: data.avatar_url,
+      isAdmin: data.is_admin,
+      isPremium: data.is_premium,
+      createdAt: data.created_at,
+      lastActiveAt: data.last_active_at,
+    }
+
+    return { data: mappedUser, error: null }
+  } catch (error: any) {
+    console.error('Fetch user details error:', error)
+    return { data: null, error: error.message || 'Failed to fetch user' }
   }
 }
 
@@ -187,7 +253,23 @@ export const fetchContentReports = async (
 
     if (error) throw error
 
-    return { data: data || [], error: null }
+    // Map snake_case to camelCase
+    const mappedData: ContentReport[] = (data || []).map((r: any) => ({
+      id: r.id,
+      reporterId: r.reporter_id,
+      reportedUserId: r.reported_user_id,
+      contentType: r.content_type,
+      contentId: r.content_id,
+      reason: r.reason,
+      description: r.description,
+      status: r.status,
+      reviewedBy: r.reviewed_by,
+      reviewedAt: r.reviewed_at,
+      actionTaken: r.action_taken,
+      createdAt: r.created_at,
+    }))
+
+    return { data: mappedData, error: null }
   } catch (error: any) {
     console.error('Fetch content reports error:', error)
     return { data: [], error: error.message || 'Failed to fetch reports' }
@@ -414,7 +496,17 @@ export const fetchBannedUsers = async (): Promise<{
 
     if (error) throw error
 
-    return { data: data || [], error: null }
+    // Map snake_case to camelCase
+    const mappedData: BannedUser[] = (data || []).map((b: any) => ({
+      userId: b.user_id,
+      bannedBy: b.banned_by,
+      reason: b.reason,
+      isPermanent: b.is_permanent,
+      expiresAt: b.expires_at,
+      createdAt: b.created_at,
+    }))
+
+    return { data: mappedData, error: null }
   } catch (error: any) {
     console.error('Fetch banned users error:', error)
     return { data: [], error: error.message || 'Failed to fetch banned users' }
@@ -459,7 +551,21 @@ export const fetchModerationActions = async (
 
     if (error) throw error
 
-    return { data: data || [], error: null }
+    // Map snake_case to camelCase
+    const mappedData: ModerationAction[] = (data || []).map((a: any) => ({
+      id: a.id,
+      moderatorId: a.moderator_id,
+      targetUserId: a.target_user_id,
+      action: a.action,
+      reason: a.reason,
+      contentType: a.content_type,
+      contentId: a.content_id,
+      durationDays: a.duration_days,
+      expiresAt: a.expires_at,
+      createdAt: a.created_at,
+    }))
+
+    return { data: mappedData, error: null }
   } catch (error: any) {
     console.error('Fetch moderation actions error:', error)
     return { data: [], error: error.message || 'Failed to fetch actions' }
@@ -498,7 +604,7 @@ export const deleteContent = async (
       .eq('id', contentId)
       .single()
 
-    const targetUserId = content?.creator_id || content?.sender_id
+    const targetUserId = (content as any)?.creator_id || (content as any)?.sender_id
 
     if (targetUserId) {
       await createModerationAction(
@@ -534,8 +640,8 @@ export const checkContentBadWords = async (
     if (error) throw error
 
     return {
-      hasBadWords: data.has_bad_words,
-      matchedWords: data.matched_words || [],
+      hasBadWords: (data as any).has_bad_words,
+      matchedWords: (data as any).matched_words || [],
       error: null,
     }
   } catch (error: any) {
@@ -609,5 +715,60 @@ export const fetchBadWords = async (): Promise<{
   } catch (error: any) {
     console.error('Fetch bad words error:', error)
     return { data: [], error: error.message || 'Failed to fetch bad words' }
+  }
+}
+
+/**
+ * Fetch payout requests (Admin only)
+ */
+export const fetchPayoutRequests = async (): Promise<{
+  data: any[]
+  error: string | null
+}> => {
+  try {
+    const token = getAccessToken() || rawAuth.getSession()?.access_token
+    const response = await fetch('/api/admin/payouts', {
+      headers: {
+        'Authorization': `Bearer ${token || ''}`
+      }
+    })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error || 'Failed to fetch payout requests')
+    return { data: result.data || [], error: null }
+  } catch (error: any) {
+    console.error('Fetch payout requests error:', error)
+    return { data: [], error: error.message || 'Failed to fetch payout requests' }
+  }
+}
+
+/**
+ * Resolve payout request
+ */
+export const resolvePayoutRequest = async (
+  requestId: string,
+  action: 'approve' | 'reject',
+  notes?: string
+): Promise<{ success: boolean; error: string | null }> => {
+  try {
+    let token = getAccessToken()
+    if (!token) {
+      const session = rawAuth.getSession()
+      token = session?.access_token || ''
+    }
+
+    const response = await fetch(`/api/admin/payouts/${requestId}/resolve`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ action, notes }),
+    })
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.error || 'Failed to resolve payout request')
+    return { success: true, error: null }
+  } catch (error: any) {
+    console.error('Resolve payout request error:', error)
+    return { success: false, error: error.message || 'Failed to resolve payout request' }
   }
 }
