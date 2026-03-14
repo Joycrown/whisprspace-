@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter, useParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import { queryKeys } from '@/lib/react-query/queryKeys';
 import { ArrowLeft, Send, Loader2, Check, CheckCheck, Clock, Image as ImageIcon, X } from 'lucide-react';
 import { markConversationDelivered, markConversationReadWithReceipts, useConversationQuery, useMessagesQuery, useSendMessageMutation } from '@/lib/messaging';
 import type { DirectMessage, MessageDeliveryReceipt, MessageReadReceipt } from '@/lib/messaging';
@@ -14,6 +16,7 @@ import AppLoadingState from '@/components/ui/AppLoadingState';
 
 export default function ConversationPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const params = useParams();
   const conversationId = params.messageId as string;
   const { session, sessionValidated } = useUserStore();
@@ -117,7 +120,12 @@ export default function ConversationPage() {
       readSyncInFlightRef.current = true;
       void markConversationReadWithReceipts(conversationId)
         .then((result) => {
-          if (result.success) return;
+          if (result.success) {
+            // Invalidate conversation list and unread counts to keep UI in sync
+            queryClient.invalidateQueries({ queryKey: queryKeys.conversations.lists() });
+            queryClient.invalidateQueries({ queryKey: queryKeys.conversations.unreadCount() });
+            return;
+          }
           pendingReadIds.forEach((messageId) => syncedReadReceiptMessageIdsRef.current.delete(messageId));
         })
         .catch(() => {
