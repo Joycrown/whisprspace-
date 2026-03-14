@@ -41,6 +41,7 @@ type PayoutOptionsResponse = {
   currency: string;
   supportedCurrencies: string[];
   banks: PayoutBankOption[];
+  rate?: number;
 };
 
 const USD_TO_PAYOUT_RATE: Record<string, number> = {
@@ -76,12 +77,16 @@ export default function CreatorEarningsDashboard({
   const [bankOptions, setBankOptions] = useState<PayoutBankOption[]>([]);
   const [payoutOptionsLoading, setPayoutOptionsLoading] = useState(false);
   const [payoutOptionsError, setPayoutOptionsError] = useState<string | null>(null);
+  const [showOtpStep, setShowOtpStep] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [currentRate, setCurrentRate] = useState(1);
   const chartData: CreatorEarningsSeries = earningsSeries || {
     week: [0, 0, 0, 0, 0, 0, 0],
     month: [0, 0, 0, 0, 0, 0, 0, 0],
     all: Array.from({ length: 12 }, () => 0),
   };
-  const payoutRate = USD_TO_PAYOUT_RATE[currency] || 1;
+  const payoutRate = currentRate;
   const payoutAmountInCurrency = Number((earnings.pendingEarnings * payoutRate).toFixed(2));
 
   const formatMoney = (amount: number, currencyCode: string) => {
@@ -120,6 +125,7 @@ export default function CreatorEarningsDashboard({
       setSupportedCurrencies(currencies);
       setCurrency(payload.currency || targetCurrency || 'USD');
       setBankOptions(options);
+      setCurrentRate(payload.rate || USD_TO_PAYOUT_RATE[payload.currency || targetCurrency || 'USD'] || 1);
       setBankCode((current) => {
         if (options.some((option) => option.code === current)) return current;
         return options[0]?.code || current;
@@ -147,6 +153,34 @@ export default function CreatorEarningsDashboard({
     await loadPayoutOptions(nextCurrency);
   };
 
+  const requestOtp = async () => {
+    if (!bankCode || !accountNumber) {
+        setPayoutError('Bank code and account number are required.');
+        return;
+    }
+
+    setOtpLoading(true);
+    setPayoutError(null);
+    try {
+      const session = rawAuth.getSession();
+      const token = session?.access_token;
+
+      const response = await fetch('/api/creator/payout/otp', { 
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to send verification code.');
+      }
+      setShowOtpStep(true);
+    } catch (err: any) {
+      setPayoutError(err.message);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   const handlePayoutRequest = async () => {
     if (!creatorId) {
       setPayoutError('Unable to identify creator.');
@@ -167,29 +201,25 @@ export default function CreatorEarningsDashboard({
     setPayoutError(null);
 
     try {
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
-      const rawSession = rawAuth.getSession();
-      if (rawSession?.access_token) {
-        headers.Authorization = `Bearer ${rawSession.access_token}`;
-      } else {
-        const { data: { session: authSession } } = await supabase.auth.getSession();
-        if (authSession?.access_token) {
-          headers.Authorization = `Bearer ${authSession.access_token}`;
-        }
-      }
+      const session = rawAuth.getSession();
+      const token = session?.access_token;
 
-      const response = await fetch('/api/flutterwave/transfer', {
+      const response = await fetch('/api/creator/payout/request', {
         method: 'POST',
-        headers,
-        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
-          creatorId,
-          accountBank: bankCode,
+          amountUsd: earnings.pendingEarnings,
+          bankCode,
+          bankName: bankOptions.find(b => b.code === bankCode)?.name || bankCode,
           accountNumber,
           currency,
-          narration: narration || 'Creator payout',
+          otp,
         }),
       });
+
 
       if (!response.ok) {
         const error = await response.json().catch(() => null);
@@ -199,6 +229,8 @@ export default function CreatorEarningsDashboard({
       }
 
       setShowPayoutModal(false);
+      setShowOtpStep(false);
+      setOtp('');
       setBankCode('');
       setAccountNumber('');
       setNarration('');
@@ -237,15 +269,15 @@ export default function CreatorEarningsDashboard({
       </div>
 
       {/* Earnings Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 sm:gap-6">
         {/* Total Earnings */}
         <div className="bg-gradient-to-br from-purple-600 to-orange-500 rounded-xl p-6 text-white shadow-lg">
           <div className="flex items-center gap-2 mb-2">
             <TrendingUp size={20} />
-            <span className="text-sm font-medium">Total Earnings</span>
+            <span className="text-sm font-medium">Total Lifetime</span>
           </div>
-          <div className="text-4xl font-bold mb-2">
-            {isLoading ? '--' : `$${earnings.totalEarnings.toFixed(2)}`}
+          <div className="text-3xl sm:text-4xl font-bold mb-2">
+            {isLoading ? '--' : formatMoney(earnings.totalEarnings, 'USD')}
           </div>
           <div className="flex items-center gap-2 text-sm text-purple-100">
             <Sparkles size={14} />
@@ -257,13 +289,27 @@ export default function CreatorEarningsDashboard({
         <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border-2 border-gray-200 dark:border-gray-700 shadow-lg">
           <div className="flex items-center gap-2 mb-2 text-gray-600 dark:text-gray-400">
             <Clock size={20} />
-            <span className="text-sm font-medium">Pending</span>
+            <span className="text-sm font-medium">Available</span>
           </div>
-          <div className="text-4xl font-bold text-orange-500 dark:text-orange-400 mb-2">
-            {isLoading ? '--' : `$${earnings.pendingEarnings.toFixed(2)}`}
+          <div className="text-3xl sm:text-4xl font-bold text-orange-500 dark:text-orange-400 mb-2">
+            {isLoading ? '--' : formatMoney(earnings.pendingEarnings, 'USD')}
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            Next payout: {earnings.nextPayoutAt ? new Date(earnings.nextPayoutAt).toLocaleDateString() : 'TBD'}
+            Minimum: $10.00
+          </div>
+        </div>
+
+        {/* Processing Payouts */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 border-2 border-gray-200 dark:border-gray-700 shadow-lg">
+          <div className="flex items-center gap-2 mb-2 text-gray-600 dark:text-gray-400">
+            <Download className="text-purple-500" size={20} />
+            <span className="text-sm font-medium">In Review</span>
+          </div>
+          <div className="text-3xl sm:text-4xl font-bold text-purple-600 dark:text-purple-400 mb-2">
+            {isLoading ? '--' : formatMoney(earnings.processingPayouts || 0, 'USD')}
+          </div>
+          <div className="text-sm text-gray-500 dark:text-gray-400 truncate">
+             Awaiting approval
           </div>
         </div>
 
@@ -273,11 +319,11 @@ export default function CreatorEarningsDashboard({
             <CheckCircle size={20} />
             <span className="text-sm font-medium">Paid Out</span>
           </div>
-          <div className="text-4xl font-bold text-purple-600 dark:text-purple-400 mb-2">
-            {isLoading ? '--' : `$${earnings.paidEarnings.toFixed(2)}`}
+          <div className="text-3xl sm:text-4xl font-bold text-green-600 dark:text-green-400 mb-2">
+            {isLoading ? '--' : formatMoney(earnings.paidEarnings, 'USD')}
           </div>
           <div className="text-sm text-gray-500 dark:text-gray-400">
-            Last: {earnings.lastPayoutAt ? new Date(earnings.lastPayoutAt).toLocaleDateString() : 'Never'}
+             To bank account
           </div>
         </div>
       </div>
@@ -596,114 +642,141 @@ export default function CreatorEarningsDashboard({
                 </p>
               </div>
 
-              <div className="space-y-4 mb-6">
-                <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3 text-xs text-gray-600 dark:text-gray-300">
-                  Bank details are used only to process this payout and are not stored by WhisprSpace.
-                </div>
-                {payoutOptionsError && (
-                  <p className="text-sm text-red-500">{payoutOptionsError}</p>
-                )}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Bank Code
-                  </label>
-                  {bankOptions.length > 0 ? (
-                    <select
-                      value={bankCode}
-                      onChange={(e) => setBankCode(e.target.value)}
-                      disabled={payoutOptionsLoading}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 disabled:opacity-60"
+              {!showOtpStep ? (
+                <>
+                  <div className="space-y-4 mb-6">
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 p-3 text-xs text-gray-600 dark:text-gray-300">
+                      Bank details are used only to process this payout and are not stored by WhisprSpace.
+                    </div>
+                    {payoutOptionsError && (
+                      <p className="text-sm text-red-500">{payoutOptionsError}</p>
+                    )}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Bank Code
+                      </label>
+                      {bankOptions.length > 0 ? (
+                        <select
+                          value={bankCode}
+                          onChange={(e) => setBankCode(e.target.value)}
+                          disabled={payoutOptionsLoading}
+                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 disabled:opacity-60"
+                        >
+                          <option value="">Select a bank</option>
+                          {bankOptions.map((bank) => (
+                            <option key={bank.code} value={bank.code}>
+                              {bank.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={bankCode}
+                          onChange={(e) => setBankCode(e.target.value)}
+                          placeholder={payoutOptionsLoading ? 'Loading bank options...' : 'Enter bank code'}
+                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                        />
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Account Number
+                      </label>
+                      <input
+                        type="text"
+                        value={accountNumber}
+                        onChange={(e) => setAccountNumber(e.target.value)}
+                        placeholder="Account number"
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Currency
+                      </label>
+                      <select
+                        value={currency}
+                        onChange={(e) => {
+                          void handleCurrencyChange(e.target.value);
+                        }}
+                        disabled={payoutOptionsLoading}
+                        className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 disabled:opacity-60"
+                      >
+                        {supportedCurrencies.map((supportedCurrency) => (
+                          <option key={supportedCurrency} value={supportedCurrency}>
+                            {supportedCurrency}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {payoutError && (
+                      <p className="text-sm text-red-500">{payoutError}</p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col-reverse sm:flex-row gap-3">
+                    <button
+                      onClick={() => setShowPayoutModal(false)}
+                      className="w-full sm:flex-1 py-3 px-4 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     >
-                      {bankOptions.map((bank) => (
-                        <option key={bank.code} value={bank.code}>
-                          {bank.name} ({bank.code})
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
+                      Cancel
+                    </button>
+                    <button
+                      onClick={requestOtp}
+                      disabled={otpLoading || payoutOptionsLoading}
+                      className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-purple-600 to-orange-500 text-white rounded-lg font-medium hover:from-purple-700 hover:to-orange-600 transition-all flex items-center justify-center gap-2 disabled:opacity-60 whitespace-nowrap"
+                    >
+                      {otpLoading ? 'Sending...' : 'Next: Verify Email'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Verification Code
+                    </label>
+                    <p className="text-xs text-gray-500 mb-3">
+                      We've sent a 6-digit code to your registered email.
+                    </p>
                     <input
                       type="text"
-                      value={bankCode}
-                      onChange={(e) => setBankCode(e.target.value)}
-                      placeholder={payoutOptionsLoading ? 'Loading bank options...' : 'Enter bank code'}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                      maxLength={6}
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                      placeholder="Enter 6-digit code"
+                      className="w-full text-center text-2xl tracking-[0.5em] font-bold py-4 border-2 border-purple-300 dark:border-purple-800 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:border-purple-500 focus:ring-0"
                     />
-                  )}
-                </div>
+                    {payoutError && (
+                      <p className="text-sm text-red-500 mt-2">{payoutError}</p>
+                    )}
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Account Number
-                  </label>
-                  <input
-                    type="text"
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
-                    placeholder="Account number"
-                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Currency
-                    </label>
-                    <select
-                      value={currency}
-                      onChange={(e) => {
-                        void handleCurrencyChange(e.target.value);
-                      }}
-                      disabled={payoutOptionsLoading}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 disabled:opacity-60"
+                  <div className="flex flex-col-reverse sm:flex-row gap-3">
+                    <button
+                      onClick={() => setShowOtpStep(false)}
+                      className="w-full sm:flex-1 py-3 px-4 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                     >
-                      {supportedCurrencies.map((supportedCurrency) => (
-                        <option key={supportedCurrency} value={supportedCurrency}>
-                          {supportedCurrency}
-                        </option>
-                      ))}
-                    </select>
+                      Back
+                    </button>
+                    <button
+                      onClick={handlePayoutRequest}
+                      disabled={payoutLoading || otp.length < 6}
+                      className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-purple-600 to-orange-500 text-white rounded-lg font-medium hover:from-purple-700 hover:to-orange-600 transition-all flex items-center justify-center gap-2 disabled:opacity-60 whitespace-nowrap"
+                    >
+                      {payoutLoading ? 'Submitting...' : 'Submit Request'}
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Narration (optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={narration}
-                      onChange={(e) => setNarration(e.target.value)}
-                      placeholder="Creator payout"
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
-                    />
-                  </div>
-                </div>
-
-                {payoutError && (
-                  <p className="text-sm text-red-500">{payoutError}</p>
-                )}
-              </div>
-
-              <div className="flex flex-col-reverse sm:flex-row gap-3">
-                <button
-                  onClick={() => setShowPayoutModal(false)}
-                  className="w-full sm:flex-1 py-3 px-4 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handlePayoutRequest}
-                  disabled={payoutLoading || payoutOptionsLoading}
-                  className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-purple-600 to-orange-500 text-white rounded-lg font-medium hover:from-purple-700 hover:to-orange-600 transition-all flex items-center justify-center gap-2 disabled:opacity-60 whitespace-nowrap"
-                >
-                  <Download size={18} className="shrink-0" />
-                  <span className="whitespace-nowrap">{payoutLoading ? 'Processing...' : 'Confirm Payout'}</span>
-                </button>
-              </div>
+                </>
+              )}
             </div>
           </div>
         )
       }
-    </div >
+    </div>
   );
 }
-

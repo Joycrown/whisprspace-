@@ -53,7 +53,7 @@ const normalizeStatus = (status?: string | null) => {
 const sanitizeTransferPayload = (payload: unknown) => {
   if (!payload || typeof payload !== 'object') return payload
   const cloned = JSON.parse(JSON.stringify(payload))
-  const stripSensitive = (value: unknown) => {
+  const stripSensitive = (value: any) => {
     if (!value || typeof value !== 'object') return
     const keys = [
       'account_number',
@@ -67,7 +67,7 @@ const sanitizeTransferPayload = (payload: unknown) => {
         value[key] = null
       }
     }
-    for (const child of Object.values(value as Record<string, unknown>)) {
+    for (const child of Object.values(value)) {
       if (child && typeof child === 'object') {
         stripSensitive(child)
       }
@@ -135,8 +135,27 @@ const resolveCurrency = (raw: unknown): PayoutCurrency => {
     : 'USD'
 }
 
-const convertUsdToCurrency = (amountUsd: number, currency: PayoutCurrency) => {
-  const rate = USD_TO_PAYOUT_RATE[currency] || 1
+const fetchFlutterwaveRate = async (secretKey: string, toCurrency: string): Promise<number> => {
+  if (toCurrency === 'USD') return 1
+  try {
+    const response = await fetch(`https://api.flutterwave.com/v3/rates?from=USD&to=${toCurrency}&amount=1`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        'Content-Type': 'application/json',
+      },
+    })
+    const payload = await response.json()
+    if (payload?.status === 'success' && payload?.data?.rate) {
+      return Number(payload.data.rate)
+    }
+  } catch (err) {
+    console.error(`Failed to fetch Flutterwave rate for ${toCurrency}:`, err)
+  }
+  return USD_TO_PAYOUT_RATE[toCurrency as PayoutCurrency] || 1
+}
+
+const convertUsdToCurrency = (amountUsd: number, rate: number) => {
   return Number((amountUsd * rate).toFixed(2))
 }
 
@@ -192,10 +211,18 @@ export async function GET(request: NextRequest) {
     const country = CURRENCY_TO_COUNTRY[currency]
 
     let banks: Array<{ code: string; name: string }> = []
+    let rate = 1
+    
     try {
-      banks = await fetchFlutterwaveBanks(flutterwaveSecretKey, country)
+      const results = await Promise.allSettled([
+        fetchFlutterwaveBanks(flutterwaveSecretKey, country),
+        fetchFlutterwaveRate(flutterwaveSecretKey, currency)
+      ])
+      
+      if (results[0].status === 'fulfilled') banks = results[0].value
+      if (results[1].status === 'fulfilled') rate = results[1].value
     } catch (error) {
-      console.error('Failed to fetch Flutterwave banks:', error)
+      console.error('Failed to fetch Flutterwave options:', error)
     }
 
     return withRateLimitHeaders(NextResponse.json({
@@ -204,6 +231,7 @@ export async function GET(request: NextRequest) {
       supportedCurrencies: SUPPORTED_PAYOUT_CURRENCIES,
       banks,
       requiresBankCode: true,
+      rate,
     }), rateLimit.headers)
   } catch (error) {
     console.error('Flutterwave payout options error:', error)
@@ -334,8 +362,8 @@ export async function POST(request: NextRequest) {
     }
 
     const amountUsd = Number(pendingTotalUsd.toFixed(2))
-    const amount = convertUsdToCurrency(amountUsd, currency)
-    const exchangeRate = USD_TO_PAYOUT_RATE[currency] || 1
+    const exchangeRate = await fetchFlutterwaveRate(flutterwaveSecretKey, currency)
+    const amount = convertUsdToCurrency(amountUsd, exchangeRate)
     const earningIds = (pendingRows || []).map(row => row.id)
 
     if (earningIds.length > 0) {

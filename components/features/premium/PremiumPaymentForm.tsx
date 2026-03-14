@@ -42,7 +42,7 @@ export default function PremiumPaymentForm({
   };
 
   const planDetails: Record<'monthly' | 'annual', PlanDetail> = {
-    monthly: { price: 2.0, name: 'Monthly Plan', period: 'month' },
+    monthly: { price: 0.01, name: 'Monthly Plan', period: 'month' },
     annual: { price: 18.0, name: 'Annual Plan', period: 'year', savings: '25%' }
   };
 
