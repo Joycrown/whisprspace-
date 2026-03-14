@@ -230,6 +230,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 
       if (event === 'SIGNED_IN' && session) {
+        // Proactively update cached token
+        const { setAccessToken } = await import('@/lib/utils/auth-token-cache')
+        if (session?.access_token) {
+          setAccessToken(session.access_token)
+        }
+
         const user = await getCurrentSession()
         if (user) {
           const { rememberMe } = useUserStore.getState()

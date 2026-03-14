@@ -185,10 +185,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
 
-    const [earningsResult, threadsResult, payoutsResult] = await Promise.all([
+    const [earningsResult, threadsResult, payoutsResult, payoutRequestsResult] = await Promise.all([
       supabaseAdmin
         .from('creator_earnings')
-        .select('id,thread_id,amount,platform_fee,net_amount,status,created_at,paid_at')
+        .select('id,thread_id,amount,platform_fee,net_amount,status,created_at,paid_at,payout_request_id')
         .eq('creator_id', userId)
         .order('created_at', { ascending: false }),
       supabaseAdmin
@@ -201,6 +201,12 @@ export async function GET(request: NextRequest) {
         .eq('creator_id', userId)
         .eq('payment_type', 'payout')
         .order('occurred_at', { ascending: false })
+        .limit(50),
+      supabaseAdmin
+        .from('payout_requests')
+        .select('id,amount_usd,currency,status,created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
         .limit(50),
     ])
 
@@ -219,9 +225,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to load payout history' }, { status: 500 })
     }
 
-    const earningsRows = (earningsResult.data || []) as EarningRow[]
+    const earningsRows = (earningsResult.data || []) as (EarningRow & { payout_request_id: string | null })[]
     const threadRows = (threadsResult.data || []) as ThreadRow[]
     const payoutRows = (payoutsResult.data || []) as PayoutRow[]
+    const payoutRequestRows = (payoutRequestsResult?.data || []) as any[]
 
     const threadById = new Map<
       string,
@@ -251,9 +258,13 @@ export async function GET(request: NextRequest) {
     const pendingEarnings = settledSaleRows
       .filter((row) => {
         const status = normalizeStatus(row.status)
-        return status === 'pending' || status === 'processing'
+        return status === 'pending'
       })
       .reduce((sum, row) => sum + toNumber(row.net_amount), 0)
+
+    const processingPayouts = payoutRequestRows
+      .filter(row => row.status === 'pending_admin' || row.status === 'approved')
+      .reduce((sum, row) => sum + toNumber(row.amount_usd), 0)
 
     const paidEarnings = settledSaleRows
       .filter((row) => {
@@ -319,13 +330,14 @@ export async function GET(request: NextRequest) {
       userId,
       totalEarnings: roundCurrency(totalEarnings),
       pendingEarnings: roundCurrency(pendingEarnings),
+      processingPayouts: roundCurrency(processingPayouts),
       paidEarnings: roundCurrency(paidEarnings),
       threadsSold,
       totalSales: roundCurrency(totalSales),
       averagePrice: roundCurrency(averagePrice),
       lastPayoutAt: lastCompletedPayout?.occurred_at || undefined,
       nextPayoutAt,
-    }
+    } as any
 
     const saleTransactions: CreatorEarningsTransaction[] = earningsRows
       .filter((row) => !!row.created_at)
@@ -353,7 +365,7 @@ export async function GET(request: NextRequest) {
       .map((row) => {
         const payoutAmount = Math.abs(toNumber(row.amount))
         return {
-          id: `payout_${row.id}`,
+          id: `payout_ledger_${row.id}`,
           type: 'payout',
           status: String(row.status || 'pending').toLowerCase(),
           threadId: null,
@@ -365,9 +377,26 @@ export async function GET(request: NextRequest) {
         }
       })
 
-    const recentTransactions = [...saleTransactions, ...payoutTransactions]
+    const payoutRequestTransactions: CreatorEarningsTransaction[] = payoutRequestRows
+      .map((row) => {
+        const amount = toNumber(row.amount_usd)
+        const status = row.status === 'pending_admin' ? 'processing' : row.status === 'approved' ? 'approved' : row.status
+        return {
+          id: `payout_req_${row.id}`,
+          type: 'payout',
+          status,
+          threadId: null,
+          threadTitle: null,
+          grossAmount: roundCurrency(amount),
+          netAmount: roundCurrency(-amount),
+          currency: 'USD',
+          occurredAt: row.created_at || new Date().toISOString(),
+        }
+      })
+
+    const recentTransactions = [...saleTransactions, ...payoutTransactions, ...payoutRequestTransactions]
       .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
-      .slice(0, 20)
+      .slice(0, 50)
 
     const response: CreatorEarningsResponse = {
       earnings,

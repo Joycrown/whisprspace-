@@ -30,6 +30,22 @@ const convertAuthUserToUser = async (userId: string): Promise<User> => {
 
   const user = Array.isArray(userData) ? userData[0] : userData;
 
+  // Check if user is banned
+  const { data: banData } = await rawDb.select('banned_users', {
+    filters: { 'user_id': rawDb.filter.eq(userId) },
+    single: true,
+  })
+
+  const ban = Array.isArray(banData) ? banData[0] : banData;
+  if (ban) {
+    const isPermanent = ban.is_permanent;
+    const expiresAt = ban.expires_at ? new Date(ban.expires_at) : null;
+    
+    if (isPermanent || (expiresAt && expiresAt > new Date())) {
+      throw new Error(`Your account has been restricted. Reason: ${ban.reason || 'Violation of terms'}`);
+    }
+  }
+
   return {
     id: user.id,
     anonymousId: user.anonymous_id,
@@ -42,6 +58,7 @@ const convertAuthUserToUser = async (userId: string): Promise<User> => {
     lastActiveAt: user.last_active_at,
     preferences: user.preferences,
     isPremium: user.is_premium,
+    isAdmin: user.is_admin,
     premiumExpiresAt: user.premium_expires_at,
     premiumProvider: user.premium_provider,
     premiumLastTxRef: user.premium_last_tx_ref,
@@ -346,4 +363,3 @@ export const updatePassword = async (newPassword: string): Promise<{
     }
   }
 }
-

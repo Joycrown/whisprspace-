@@ -3,39 +3,51 @@ import {
   isAdmin as checkIsAdmin,
   getAdminRole,
   fetchAllUsers,
+  fetchUserDetails,
   fetchContentReports,
   fetchBannedUsers,
   fetchModerationActions,
+  fetchPayoutRequests,
   ContentReport,
   ModerationAction,
   BannedUser,
 } from './admin-service'
 
+import { useUserStore } from '@/store/userStore'
+
 /**
  * Hook to check if user is admin
  */
 export const useIsAdmin = () => {
-  const [isAdmin, setIsAdmin] = useState(false)
+  const { session, isLoading: sessionLoading } = useUserStore()
   const [role, setRole] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isRoleLoading, setIsRoleLoading] = useState(false)
+
+  const isAdmin = session.isAuthenticated && session.user?.isAdmin === true
 
   useEffect(() => {
-    const checkAdmin = async () => {
-      const adminStatus = await checkIsAdmin()
-      setIsAdmin(adminStatus)
-
-      if (adminStatus) {
-        const { role: userRole } = await getAdminRole()
-        setRole(userRole)
+    const fetchRole = async () => {
+      if (isAdmin && !role) {
+        setIsRoleLoading(true)
+        try {
+          const { role: userRole } = await getAdminRole()
+          setRole(userRole)
+        } catch (error) {
+          console.error('Failed to fetch admin role:', error)
+        } finally {
+          setIsRoleLoading(false)
+        }
       }
-
-      setIsLoading(false)
     }
 
-    checkAdmin()
-  }, [])
+    fetchRole()
+  }, [isAdmin, role])
 
-  return { isAdmin, role, isLoading }
+  return { 
+    isAdmin, 
+    role: role || (isAdmin ? 'Admin' : null), 
+    isLoading: sessionLoading || (isAdmin && isRoleLoading && !role) 
+  }
 }
 
 /**
@@ -43,9 +55,11 @@ export const useIsAdmin = () => {
  */
 export const useUsers = (options?: {
   limit?: number
+  offset?: number
   search?: string
 }) => {
   const [users, setUsers] = useState<any[]>([])
+  const [totalCount, setTotalCount] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -53,16 +67,17 @@ export const useUsers = (options?: {
     setIsLoading(true)
     setError(null)
 
-    const { data, error: err } = await fetchAllUsers(options)
+    const { data, count, error: err } = await fetchAllUsers(options)
 
     if (err) {
       setError(err)
     } else {
       setUsers(data)
+      setTotalCount(count)
     }
 
     setIsLoading(false)
-  }, [options])
+  }, [JSON.stringify(options)])
 
   useEffect(() => {
     loadUsers()
@@ -70,10 +85,37 @@ export const useUsers = (options?: {
 
   return {
     users,
+    totalCount,
     isLoading,
     error,
     refreshUsers: loadUsers,
   }
+}
+
+/**
+ * Hook for single user details
+ */
+export const useUserDetails = (userId?: string) => {
+  const [user, setUser] = useState<any | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!userId) return
+
+    const loadUser = async () => {
+      setIsLoading(true)
+      setError(null)
+      const { data, error: err } = await fetchUserDetails(userId)
+      if (err) setError(err)
+      else setUser(data)
+      setIsLoading(false)
+    }
+
+    loadUser()
+  }, [userId])
+
+  return { user, isLoading, error }
 }
 
 /**
@@ -101,7 +143,7 @@ export const useContentReports = (options?: {
     }
 
     setIsLoading(false)
-  }, [options])
+  }, [JSON.stringify(options)])
 
   useEffect(() => {
     loadReports()
@@ -185,5 +227,40 @@ export const useModerationActions = (targetUserId?: string) => {
     isLoading,
     error,
     refreshActions: loadActions,
+  }
+}
+
+/**
+ * Hook for payout requests
+ */
+export const usePayoutRequests = () => {
+  const [requests, setRequests] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadRequests = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+
+    const { data, error: err } = await fetchPayoutRequests()
+
+    if (err) {
+      setError(err)
+    } else {
+      setRequests(data)
+    }
+
+    setIsLoading(false)
+  }, [])
+
+  useEffect(() => {
+    loadRequests()
+  }, [loadRequests])
+
+  return {
+    requests,
+    isLoading,
+    error,
+    refreshRequests: loadRequests,
   }
 }
