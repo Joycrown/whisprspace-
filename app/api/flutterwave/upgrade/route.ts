@@ -13,7 +13,7 @@ const supabaseAdmin = createSupabaseAdminClient(
 )
 
 const PLAN_CONFIG = {
-  monthly: { amount: 2.0, label: 'Monthly Premium', period: 'month' },
+  monthly: { amount: 1.5, label: 'Monthly Premium', period: 'month' },
   annual: { amount: 18.0, label: 'Annual Premium', period: 'year' },
 } as const
 
@@ -83,11 +83,15 @@ export async function POST(request: NextRequest) {
       typeof user.userMetadata?.full_name === 'string' ? user.userMetadata.full_name : undefined
 
     // Determine final currency and amount
-    const currency = (requestedCurrency && Object.values(SUPPORTED_CURRENCIES).includes(requestedCurrency)) 
+    // We let Flutterwave handle the dynamic live exchange rate natively by passing USD
+    // The underlying currency chosen by the user in UI is captured in metadata
+    const uiCurrency = (requestedCurrency && Object.values(SUPPORTED_CURRENCIES).includes(requestedCurrency)) 
       ? requestedCurrency as SupportedCurrency 
       : 'USD';
-    
-    const finalAmount = convertPrice(planConfig.amount, currency);
+
+    // ALWAYS charge exactly in USD. Flutterwave will use their rate.
+    const finalAmount = planConfig.amount;
+    const paymentCurrency = 'USD';
 
     const response = await fetch('https://api.flutterwave.com/v3/payments', {
       method: 'POST',
@@ -98,7 +102,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         tx_ref: txRef,
         amount: finalAmount,
-        currency: currency,
+        currency: paymentCurrency,
         redirect_url: `${baseUrl}/profile?upgrade=success&plan=${plan}&gateway=flutterwave`,
         payment_options: 'card, mobilemoney, ussd, banktransfer, account, credit, nqr',
         customer: {
@@ -111,11 +115,12 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           amountUsd: planConfig.amount,
           amount: finalAmount,
-          currency,
+          currency: paymentCurrency,
+          uiCurrency,
         },
         customizations: {
           title: 'WhisprSpace Premium',
-          description: `${planConfig.label} subscription (${formatCurrency(finalAmount, currency)})`,
+          description: `${planConfig.label} subscription (${formatCurrency(finalAmount, paymentCurrency)})`,
         },
       }),
     })
@@ -152,14 +157,15 @@ export async function POST(request: NextRequest) {
           tx_ref: txRef,
           amount: finalAmount,
           amount_usd: planConfig.amount,
-          currency: currency,
+          currency: paymentCurrency,
           status: 'pending',
           description: `${planConfig.label} subscription`,
           metadata: {
             paymentType: 'premium_upgrade',
             plan,
             userId: user.id,
-            currency: currency,
+            currency: paymentCurrency,
+            uiCurrency,
           },
         },
         { onConflict: 'payment_provider,tx_ref' }
