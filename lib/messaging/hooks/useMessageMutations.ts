@@ -7,6 +7,7 @@ import {
   editMessage,
   deleteMessage,
   markConversationRead,
+  markConversationReadWithReceipts,
   getOrCreateConversation,
   createOneTimeConversation,
   DirectMessage,
@@ -291,7 +292,7 @@ export function useMarkConversationReadMutation() {
 
   return useMutation({
     mutationFn: async (conversationId: string) => {
-      const result = await markConversationRead(conversationId)
+      const result = await markConversationReadWithReceipts(conversationId)
       
       if (result.error) {
         throw new Error(result.error)
