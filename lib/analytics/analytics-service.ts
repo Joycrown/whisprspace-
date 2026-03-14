@@ -142,7 +142,17 @@ export const fetchPlatformStats = async (): Promise<{
 
     if (error) throw error
 
-    return { data: data as unknown as PlatformStats, error: null }
+    const rawData = data as any
+    const mappedData: PlatformStats = {
+      totalUsers: Number(rawData.total_users || 0),
+      activeToday: Number(rawData.active_today || 0),
+      totalThreads: Number(rawData.total_threads || 0),
+      totalMessages: Number(rawData.total_messages || 0),
+      totalGroups: Number(rawData.total_groups || 0),
+      totalPageViewsToday: Number(rawData.total_page_views_today || 0),
+    }
+
+    return { data: mappedData, error: null }
   } catch (error: any) {
     console.error('Fetch platform stats error:', error)
     return { data: null, error: error.message || 'Failed to fetch stats' }
@@ -167,7 +177,25 @@ export const fetchDailyMetrics = async (
 
     if (error) throw error
 
-    return { data: data || [], error: null }
+    const mappedMetrics: DailyMetrics[] = (data || []).map((m: any) => ({
+      metricDate: m.metric_date,
+      totalUsers: m.total_users || 0,
+      newUsers: m.new_users || 0,
+      activeUsers: m.active_users || 0,
+      returningUsers: m.returning_users || 0,
+      totalThreads: m.total_threads || 0,
+      totalMessages: m.total_messages || 0,
+      totalLikes: m.total_likes || 0,
+      totalGroups: m.total_groups || 0,
+      totalDirectMessages: m.total_direct_messages || 0,
+      totalRevenue: Number(m.total_revenue || 0),
+      totalPurchases: m.total_purchases || 0,
+      totalPageViews: m.total_page_views || 0,
+      uniqueVisitors: m.unique_visitors || 0,
+      avgSessionDuration: Number(m.avg_session_duration || 0),
+    }))
+
+    return { data: mappedMetrics, error: null }
   } catch (error: any) {
     console.error('Fetch daily metrics error:', error)
     return { data: [], error: error.message || 'Failed to fetch metrics' }
@@ -197,7 +225,17 @@ export const fetchUserActivitySummary = async (
 
     if (error) throw error
 
-    return { data: data as unknown as UserActivitySummary, error: null }
+    const rawData = data as any
+    const mappedData: UserActivitySummary = {
+      totalThreads: Number(rawData.total_threads || 0),
+      totalMessages: Number(rawData.total_messages || 0),
+      totalLikesGiven: Number(rawData.total_likes_given || 0),
+      totalLikesReceived: Number(rawData.total_likes_received || 0),
+      groupsJoined: Number(rawData.groups_joined || 0),
+      lastActive: rawData.last_active,
+    }
+
+    return { data: mappedData, error: null }
   } catch (error: any) {
     console.error('Fetch user activity summary error:', error)
     return { data: null, error: error.message || 'Failed to fetch summary' }

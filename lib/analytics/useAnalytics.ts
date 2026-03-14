@@ -160,7 +160,7 @@ export const useActivityEvents = (
     }
 
     setIsLoading(false)
-  }, [options])
+  }, [JSON.stringify(options)])
 
   useEffect(() => {
     loadEvents()

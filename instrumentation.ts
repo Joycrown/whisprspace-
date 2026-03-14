@@ -1,6 +1,6 @@
 export async function register() {
   const dsn = process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN;
-  const isProd = process.env.NODE_ENV === "production";
+  const isProd = process.env.NEXT_PUBLIC_APP_ENV === "production";
 
   // Avoid pulling Sentry/OTel into dev unless explicitly enabled.
   if (!dsn || !isProd) {
