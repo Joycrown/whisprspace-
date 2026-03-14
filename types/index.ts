@@ -13,6 +13,7 @@ export interface User {
   lastActiveAt: string;
   preferences: UserPreferences;
   isPremium?: boolean; // Premium membership status
+  isAdmin?: boolean; // Admin status
   premiumExpiresAt?: string | null;
   premiumProvider?: string | null;
   premiumLastTxRef?: string | null;
@@ -101,251 +102,91 @@ export type LinkAttachment = {
   title?: string;
   description?: string;
   thumbnail?: string;
-  file?: File; // For retry logic
 };
 
-export type Attachment = FileAttachment | ImageAttachment | VoiceAttachment | LinkAttachment;
-
-// ===== REACTION TYPES =====
-export interface Reaction {
-  count: number;
-  users: string[];
-}
-
-export type ReactionType = 'like' | 'love' | 'laugh' | 'angry' | 'sad' | 'wow';
-
-// ===== MESSAGE TYPES =====
-export interface Message {
-  id: string;
-  threadId: string;
-  authorId: string;
-  authorName: string;
-  sender: Participant;
-  content: string;
-  timestamp: string;
-  type: 'text' | 'voice' | 'image' | 'file' | 'link';
-  attachments?: Attachment[];
-  replyToId?: string;
-  reactions?: { [key in ReactionType]?: { count: number; users: string[] } };
-  isEdited?: boolean;
-  editedAt?: string;
-  likes: number;
-  hasLiked: boolean;
-  replies?: Message[];
-  repliedMessage?: Partial<Message>;
-  isReported?: boolean; // Add isReported flag to Message
-  status?: 'sending' | 'sent' | 'error'; // Optimistic UI status
-}
-
-// ===== POLL TYPES =====
-export interface PollOption {
-  id: string;
-  text: string;
-  votes: number;
-  percentage: number;
-  hasVoted: boolean;
-}
-
-export interface Poll {
-  id: string;
-  question: string;
-  options: PollOption[];
-  totalVotes: number;
-  expiresAt: string;
-  allowMultipleVotes: boolean;
-  userVote?: string[]; // option IDs user voted for
-  createdBy: string;
-}
-
-// ===== THREAD TYPES =====
+// ===== CONTENT TYPES =====
+export type ThreadPrivacy = 'public' | 'private' | 'invite_only';
 export type ThreadType = 'text' | 'poll' | 'premium';
-export type ThreadCategory = 'general' | 'tech' | 'lifestyle' | 'politics' | 'entertainment' | 'education' | 'business' | 'health';
-
-export interface ThreadFilters {
-  sortBy?: 'newest' | 'popular' | 'trending' | 'expiring' | 'oldest';
-  category?: ThreadCategory | 'all';
-  groupId?: string; // Filter threads by group
-  type?: ThreadType | 'all';
-  privacy?: 'public' | 'private' | 'invite_only' | 'group' | 'all';
-  isPremium?: boolean;
-  expiration?: 'active' | 'expired' | 'all';
-  page?: number; // Pagination page number
-}
 
 export interface Thread {
   id: string;
+  creatorId: string;
+  creator?: Author;
   title: string;
   content: string;
   type: ThreadType;
-  category: ThreadCategory;
-  author: Author;
-  authorId: string; // Explicit author ID for ownership checks
+  category: string;
+  privacy: ThreadPrivacy;
+  isPremium: boolean;
+  price?: number;
+  likesCount: number;
+  messageCount: number;
+  viewCount: number;
+  participantCount: number;
+  expiresAt?: string;
   createdAt: string;
   updatedAt: string;
-  likes: number;
-  messageCount: number;
-  hasLiked: boolean;
-  hasJoined?: boolean;
-  hasAccess?: boolean;
-  isPremium: boolean;
-  price?: number;
-  purchasedBy?: string[]; // User IDs who purchased access
-  purchaseCount?: number; // Number of purchases
-  earnings?: {
-    totalSales: number;
-    creatorEarnings: number;
-    platformEarnings: number;
-  };
-  timeRemaining?: string;
-  latestMessage?: string;
-  tags: string[];
-  rating: number;
-  ratingCount: number;
-  participantCount: number;
-  groupId?: string; // This might become redundant if groups are just private threads
-  isPinned?: boolean;
-  isLocked?: boolean;
-  privacy: ThreadPrivacy; // Add privacy setting to Thread
-  memberLimit?: number; // Add member limit to Thread
-  accessCodes?: AccessCode[]; // Invite codes for free access
-  secretToken?: string; // Token for secret link access
-  freeAccessUsers?: string[]; // User IDs who got free access via codes/links
-  expiresAt?: string; // ISO timestamp when thread expires (null if saved from expiration)
-  isSaved: boolean; // Premium feature: saved threads never expire
-  removedUsers?: string[]; // User IDs removed by thread owner (premium feature)
-  creatorIsPremium?: boolean; // Whether the creator is a premium user
+  isLiked?: boolean;
+  isSaved?: boolean;
+  isDeleted?: boolean;
 }
 
-export interface ThreadData extends Thread {
-  messages: Message[];
-  pollId?: string;
-  pollOptions?: PollOption[];
-  isExpired?: boolean;
-  viewCount: number;
-  participants: Participant[];
-  createdBy: Participant;
-  reportCount: number;
-  messageExpiresAt?: string; // Premium feature: extended message expiration (2 weeks for premium)
-}
-
-export interface CreateThreadForm {
-  title: string;
-  content: string;
-  type: ThreadType;
-  category: ThreadCategory;
-  tags: string[];
-  isPremium: boolean;
-  price?: number;
-  pollOptions?: string[];
-  pollDuration?: number;
-  privacy: ThreadPrivacy; // Add privacy setting to CreateThreadForm
-  memberLimit?: number; // Add member limit to CreateThreadForm
-  isSaved?: boolean; // Premium: Save thread from expiration
-}
-
-export interface ThreadDraft {
+export interface Message {
   id: string;
-  title: string;
+  threadId: string;
+  senderId: string;
+  sender?: Author;
+  parentMessageId?: string;
   content: string;
-  type: ThreadType;
-  category?: ThreadCategory;
-  tags: string[];
-  isPremium: boolean;
-  price?: number;
-  pollOptions?: string[];
-  pollDuration?: number;
-  lastSaved: string;
-  autoSaveEnabled: boolean;
-  privacy: ThreadPrivacy; // Add privacy setting to ThreadDraft
-  memberLimit?: number; // Add member limit to ThreadDraft
-}
-
-export interface ValidationError {
-  field: string;
-  message: string;
-}
-
-export interface FormValidation {
-  isValid: boolean;
-  errors: ValidationError[];
-}
-
-export interface EditorState {
-  content: string;
-  characterCount: number;
-  isPreviewMode: boolean;
-  hasUnsavedChanges: boolean;
-}
-
-export const THREAD_CATEGORIES: { value: ThreadCategory; label: string; icon: string }[] = [
-  { value: 'general', label: 'General', icon: '💬' },
-  { value: 'tech', label: 'Technology', icon: '💻' },
-  { value: 'lifestyle', label: 'Lifestyle', icon: '🌟' },
-  { value: 'politics', label: 'Politics', icon: '🏛️' },
-  { value: 'entertainment', label: 'Entertainment', icon: '🎬' },
-  { value: 'education', label: 'Education', icon: '📚' },
-  { value: 'business', label: 'Business', icon: '💼' },
-  { value: 'health', label: 'Health', icon: '🏥' },
-];
-
-export const CHARACTER_LIMITS = {
-  title: 200,
-  content: 5000,
-  pollOption: 100,
-  tag: 30,
-} as const;
-
-export const THREAD_TYPES: { value: ThreadType; label: string; description: string }[] = [
-  {
-    value: 'text',
-    label: 'Text Thread',
-    description: 'Share thoughts, stories, or start discussions'
-  },
-  {
-    value: 'poll',
-    label: 'Poll',
-    description: 'Ask questions and gather community opinions'
-  },
-  {
-    value: 'premium',
-    label: 'Premium Thread',
-    description: 'Create exclusive content for paying users'
-  },
-];
-
-export type NotificationCategory = 'all' | 'message' | 'group_invite' | 'reaction' | 'system' | 'mention' | 'reply' | 'like' | 'thread_invite';
-export type NotificationType = 'message' | 'group_invite' | 'reaction' | 'system' | 'mention' | 'reply' | 'like' | 'thread_invite' | 'thread_message';
-
-export type ThreadPrivacy = 'public' | 'private' | 'invite_only';
-export type GroupPrivacy = 'public' | 'private' | 'invite_only';
-
-export interface Notification {
-  id: string;
-  userId: string;
-  type: NotificationType;
-  category: NotificationCategory;
-  title: string;
-  message: string;
-  data: Record<string, any>;
-  read: boolean;
+  type: 'text' | 'voice' | 'image' | 'file' | 'link';
+  attachments?: any[];
+  likesCount: number;
+  isEdited: boolean;
+  isReported: boolean;
+  isLiked?: boolean;
   createdAt: string;
-  actionUrl?: string;
+  editedAt?: string;
+  replyCount?: number;
 }
+
+// ===== POLL TYPES =====
+export interface Poll {
+  id: string;
+  threadId: string;
+  question: string;
+  options: PollOption[];
+  allowMultipleVotes: boolean;
+  expiresAt: string;
+  totalVotes: number;
+  userVotedOptionId?: string;
+}
+
+export interface PollOption {
+  id: string;
+  pollId: string;
+  text: string;
+  voteCount: number;
+  orderIndex: number;
+}
+
+// ===== GROUP TYPES =====
+export type GroupPrivacy = 'public' | 'private' | 'invite_only';
 
 export interface Group {
   id: string;
   name: string;
-  description: string;
+  description?: string;
   privacy: GroupPrivacy;
   maxMembers: number;
   currentMembers: number;
-  members: GroupMember[];
-  createdBy: string;
-  createdAt: string;
-  avatar: string;
+  avatar?: string;
   banner?: string;
   rules?: string;
-  inviteCode?: string;
+  creatorId: string;
+  createdAt: string;
+  updatedAt: string;
+  isMember?: boolean;
+  role?: 'creator' | 'admin' | 'member';
 }
 
 export interface GroupMember {
@@ -420,6 +261,7 @@ export interface CreatorEarnings {
   userId: string;
   totalEarnings: number;
   pendingEarnings: number;
+  processingPayouts?: number;
   paidEarnings: number;
   threadsSold: number;
   totalSales: number;
@@ -494,4 +336,108 @@ export interface PaginatedResponse<T> {
     hasNext: boolean;
     hasPrev: boolean;
   };
+}
+
+// ===== THREAD CONSTANTS & LIMITS =====
+export const CHARACTER_LIMITS = {
+  title: 120,
+  content: 10000,
+  pollOption: 80,
+};
+
+export type ThreadCategory =
+  | 'general'
+  | 'tech'
+  | 'lifestyle'
+  | 'politics'
+  | 'entertainment'
+  | 'education'
+  | 'business'
+  | 'health'
+  | 'all';
+
+export const THREAD_CATEGORIES = [
+  { value: 'general', label: 'General', icon: '💬' },
+  { value: 'tech', label: 'Tech', icon: '💻' },
+  { value: 'lifestyle', label: 'Lifestyle', icon: '🌟' },
+  { value: 'politics', label: 'Politics', icon: '🏛️' },
+  { value: 'entertainment', label: 'Entertainment', icon: '🎬' },
+  { value: 'education', label: 'Education', icon: '📚' },
+  { value: 'business', label: 'Business', icon: '💼' },
+  { value: 'health', label: 'Health', icon: '🏥' },
+] as const;
+
+export const THREAD_TYPES = [
+  {
+    value: 'text',
+    label: 'Text Thread',
+    description: 'Start a text-based discussion',
+    icon: '📝',
+  },
+  {
+    value: 'poll',
+    label: 'Poll',
+    description: 'Ask the community with a poll',
+    icon: '📊',
+  },
+  {
+    value: 'premium',
+    label: 'Premium',
+    description: 'Exclusive paid content',
+    icon: '💎',
+  },
+] as const;
+
+// ===== THREAD FORM & DRAFT TYPES =====
+export interface CreateThreadForm {
+  title: string;
+  content: string;
+  type: ThreadType;
+  category: ThreadCategory;
+  tags: string[];
+  isPremium: boolean;
+  price?: number;
+  pollOptions?: string[];
+  pollDuration?: number;
+  privacy: ThreadPrivacy;
+  memberLimit?: number;
+}
+
+export interface ThreadDraft extends CreateThreadForm {
+  id: string;
+  lastSaved: string;
+  autoSaveEnabled: boolean;
+}
+
+export interface ThreadFilters {
+  sortBy?: 'newest' | 'popular' | 'trending' | 'oldest';
+  category?: string;
+  type?: string;
+  groupId?: string;
+  isPremium?: boolean;
+  privacy?: string;
+  expiration?: 'active' | 'expired' | 'all';
+  page?: number;
+}
+
+export interface ThreadData extends Thread {
+  messages: Message[];
+  participants: Participant[];
+  poll?: Poll;
+  hasAccess?: boolean;
+  hasJoined?: boolean;
+  isLocked?: boolean;
+  timeRemaining?: string;
+  rating?: number;
+  ratingCount?: number;
+  removedUsers?: string[];
+}
+
+export type ReactionType = string;
+
+export interface Attachment {
+  id: string;
+  type: 'image' | 'video' | 'file';
+  url: string;
+  name?: string;
 }

@@ -15,7 +15,22 @@ export function setAccessToken(token: string | null) {
  * Returns null if no token is cached
  */
 export function getAccessToken(): string | null {
-  return cachedAccessToken;
+  if (cachedAccessToken) return cachedAccessToken;
+
+  // Fallback to localStorage if in browser
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = localStorage.getItem('supabase.auth.session');
+      if (stored) {
+        const session = JSON.parse(stored);
+        return session?.access_token || null;
+      }
+    } catch (e) {
+      console.error('[AuthTokenCache] Failed to read token from storage:', e);
+    }
+  }
+
+  return null;
 }
 
 /**

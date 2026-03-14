@@ -1,0 +1,18 @@
+[
+  {
+    "id": "0d14e186-0151-4e8f-816c-4170983c677f",
+    "user_id": "b03dc648-2526-4058-a7c7-932d5b6e0a9c",
+    "amount_usd": 50.25,
+    "currency": "NGN",
+    "amount_local": null,
+    "bank_code": "058",
+    "bank_name": "GTBank Plc",
+    "account_number": "0209918938",
+    "status": "rejected",
+    "admin_notes": "No money",
+    "processed_by": null,
+    "processed_at": null,
+    "created_at": "2026-03-13T23:28:30.844968+00:00",
+    "updated_at": "2026-03-14T09:14:39.697711+00:00"
+  }
+]

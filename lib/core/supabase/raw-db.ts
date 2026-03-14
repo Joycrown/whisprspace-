@@ -115,7 +115,10 @@ export async function select<T = any>(
 
     return { data, error: null };
   } catch (error: any) {
-    console.error(`[RawDb] SELECT ${table} error:`, error);
+    // Silence "No rows returned" error logging as it's a common expected condition
+    if (error.message !== 'No rows returned') {
+      console.error(`[RawDb] SELECT ${table} error:`, error);
+    }
     return { data: null, error };
   }
 }
