@@ -12,7 +12,7 @@ import { supabaseAdmin } from '@/lib/core/supabase/admin-client';
 
 // In-memory throttle (per server instance)
 let lastTriggerTime = 0;
-const THROTTLE_MS = 5 * 60 * 1000; // 5 minutes
+const THROTTLE_MS = 2 * 60 * 1000; // 2 minutes
 
 export async function GET() {
   try {
@@ -35,8 +35,8 @@ export async function GET() {
       return NextResponse.json({ skipped: true, reason: 'inactive' });
     }
 
-    // Process up to 5 due items
-    const result = await processScheduledQueue(5);
+    // Process up to 10 due items
+    const result = await processScheduledQueue(10);
 
     return NextResponse.json({ success: true, ...result });
   } catch (err: any) {

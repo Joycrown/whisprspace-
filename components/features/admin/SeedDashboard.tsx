@@ -15,6 +15,8 @@ export default function SeedDashboard() {
   const [error, setError] = useState<string | null>(null)
   const [viewDate, setViewDate] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<{ action: string, data?: any } | null>(null)
+  const [configEdits, setConfigEdits] = useState<Record<string, number>>({})
+  const [isSavingConfig, setIsSavingConfig] = useState(false)
   const toast = useToastHelpers()
 
   const fetchStatus = async () => {
@@ -74,6 +76,28 @@ export default function SeedDashboard() {
 
   const handleActionClick = (action: string, extraData: any = {}) => {
     setConfirmAction({ action, data: extraData })
+  }
+
+  const saveConfig = async () => {
+    if (Object.keys(configEdits).length === 0) return
+    try {
+      setIsSavingConfig(true)
+      const token = getAccessToken() || rawAuth.getSession()?.access_token
+      const res = await fetch('/api/admin/seed', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token || ''}` },
+        body: JSON.stringify({ config: configEdits })
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error || 'Failed to save config')
+      toast.success('Config saved', 'Seed configuration updated.')
+      setConfigEdits({})
+      await fetchStatus()
+    } catch (err: any) {
+      toast.error('Save failed', err.message)
+    } finally {
+      setIsSavingConfig(false)
+    }
   }
 
   if (isLoading && !status) {
@@ -273,6 +297,53 @@ export default function SeedDashboard() {
         </div>
       </div>
       
+      {/* Config Settings */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-between items-center">
+          <h3 className="font-semibold text-gray-900 dark:text-white">Seed Config</h3>
+          {Object.keys(configEdits).length > 0 && (
+            <button
+              onClick={saveConfig}
+              disabled={isSavingConfig}
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition disabled:opacity-50"
+            >
+              {isSavingConfig && <RefreshCw className="w-3 h-3 animate-spin" />}
+              Save Changes
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-px bg-gray-200 dark:bg-gray-700">
+          {[
+            { key: 'threads_per_day', label: 'Threads / Day' },
+            { key: 'thread_spacing_minutes', label: 'Thread Spacing (min)' },
+            { key: 'first_thread_hour', label: 'First Thread Hour (24h)' },
+            { key: 'max_participants_per_thread', label: 'Max Participants' },
+            { key: 'messages_per_user', label: 'Messages / User' },
+            { key: 'reply_interval_minutes', label: 'Reply Interval (min)' },
+          ].map(({ key, label }) => {
+            const current = status.config?.[key] ?? ''
+            const edited = configEdits[key]
+            const value = edited !== undefined ? edited : current
+            const isDirty = edited !== undefined && edited !== current
+            return (
+              <div key={key} className="bg-white dark:bg-gray-800 px-5 py-4">
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+                <input
+                  type="number"
+                  value={value}
+                  onChange={e => setConfigEdits(prev => ({ ...prev, [key]: Number(e.target.value) }))}
+                  className={`w-full text-lg font-semibold bg-transparent border-b-2 outline-none pb-0.5 transition-colors dark:text-white ${
+                    isDirty
+                      ? 'border-purple-500 text-purple-700 dark:text-purple-400'
+                      : 'border-transparent text-gray-900'
+                  } focus:border-purple-400`}
+                />
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
       {/* Playbook Status */}
       {status.playbook?.availableThreads <= 5 && (
         <div className="flex items-center gap-3 p-4 bg-orange-50 border border-orange-200 rounded-xl text-orange-800">
