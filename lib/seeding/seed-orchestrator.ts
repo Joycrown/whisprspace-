@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Seed Orchestrator — Daily schedule generation & processing
  *
@@ -243,14 +244,16 @@ export async function processScheduledQueue(limit: number = 5): Promise<{
         }
 
         if (!targetThreadId) {
-          // Look up from executed schedule items
+          // Look up from executed schedule items — filter by batch_date to avoid
+          // duplicate rows when the same playbook thread is reused across days
           const { data: executedThread } = await supabaseAdmin
             .from('seed_scheduled_content')
             .select('target_thread_id')
             .eq('playbook_thread_id', item.playbook_thread_id)
             .eq('action', 'create_thread')
             .eq('status', 'executed')
-            .single();
+            .eq('batch_date', item.batch_date)
+            .maybeSingle();
 
           targetThreadId = executedThread?.target_thread_id;
         }
