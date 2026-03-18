@@ -113,44 +113,36 @@ export async function prepareDailySchedule(targetDate?: string): Promise<{
     });
     threadsScheduled++;
 
-    // Schedule replies — each participant sends messages_per_user messages
-    const availablePersonas = Object.keys(userMap).filter(p => p !== playbookThread.creator_persona);
-    const shuffledPersonas = availablePersonas.sort(() => Math.random() - 0.5);
-    const participantPersonas = shuffledPersonas.slice(0, config.max_participants_per_thread - 1);
-
     if (replies.length === 0) continue;
 
-    // Interleave messages across participants so the conversation feels natural
-    // (participant A msg1, participant B msg1, participant A msg2, ...)
-    let globalReplySlot = 0;
-    for (let m = 0; m < config.messages_per_user; m++) {
-      for (const participantPersona of participantPersonas) {
-        const participantUserId = userMap[participantPersona];
-        if (!participantUserId) continue;
-
-        // Cycle through playbook replies if there are fewer replies than total slots
-        const reply = replies[globalReplySlot % replies.length];
-
-        let replyTime;
-        if (process.env.NODE_ENV === 'development') {
-          replyTime = new Date(threadTime.getTime() + (globalReplySlot + 1) * 60000);
-        } else {
-          replyTime = new Date(threadTime.getTime() + (globalReplySlot + 1) * config.reply_interval_minutes * 60 * 1000);
-        }
-
-        scheduledItems.push({
-          action: 'create_reply',
-          playbook_thread_id: playbookThread.id,
-          playbook_reply_id: reply.id,
-          seed_user_id: participantUserId,
-          scheduled_at: replyTime.toISOString(),
-          status: 'pending',
-          batch_date: batchDate,
-        });
-
-        repliesScheduled++;
-        globalReplySlot++;
+    // Each playbook reply has a persona_tag specifying exactly who sends it.
+    // Use that directly instead of round-robining content across random participants.
+    for (let slot = 0; slot < replies.length; slot++) {
+      const reply = replies[slot];
+      const participantUserId = userMap[reply.persona_tag];
+      if (!participantUserId) {
+        console.warn(`No seed user for persona tag: ${reply.persona_tag}`);
+        continue;
       }
+
+      let replyTime;
+      if (process.env.NODE_ENV === 'development') {
+        replyTime = new Date(threadTime.getTime() + (slot + 1) * 60000);
+      } else {
+        replyTime = new Date(threadTime.getTime() + (slot + 1) * config.reply_interval_minutes * 60 * 1000);
+      }
+
+      scheduledItems.push({
+        action: 'create_reply',
+        playbook_thread_id: playbookThread.id,
+        playbook_reply_id: reply.id,
+        seed_user_id: participantUserId,
+        scheduled_at: replyTime.toISOString(),
+        status: 'pending',
+        batch_date: batchDate,
+      });
+
+      repliesScheduled++;
     }
 
     // Mark playbook thread as used
