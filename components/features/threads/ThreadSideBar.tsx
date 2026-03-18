@@ -10,6 +10,7 @@ import ThreadSettingsPanel from './ThreadSettingsPanel'; // Import the new setti
 import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/components/ui/Toast'; // Import useToast
 import { createThreadInvite } from '@/lib/threads';
+import { getAvatarUrl } from '@/lib/utils/avatar';
 import { buildThreadPath } from '@/lib/threads/thread-url';
 
 interface ThreadSidebarProps {
@@ -421,7 +422,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
                     <h3 className="text-sm text-gray-400 mb-2">Created by</h3>
                     <div className="flex items-center gap-3">
                       <img
-                        src={thread.author?.avatar || 'https://via.placeholder.com/150'}
+                        src={thread.author?.avatar || getAvatarUrl(thread.author?.id || thread.creatorId)}
                         alt={thread.author?.name || 'Anonymous'}
                         className="w-8 h-8 rounded-full"
                       />
@@ -466,7 +467,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
                     {participants.map(participant => (
                       <div key={participant.id} className="flex items-center gap-3">
                         <img
-                          src={participant.avatar || 'https://via.placeholder.com/150'}
+                          src={participant.avatar || getAvatarUrl(participant.id || participant.anonymousId)}
                           alt={participant.name || 'Anonymous'}
                           className="w-8 h-8 rounded-full"
                         />

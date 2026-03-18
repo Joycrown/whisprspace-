@@ -17,6 +17,12 @@ const ThreadsPage = () => {
   const { session } = useUserStore();
   const searchQuery = useThreadStore((state) => state.searchQuery);
   useRealtimeFeed(process.env.NODE_ENV === 'production'); // Avoid dev-mode realtime thrash on feed
+
+  // Silent seed trigger — processes any due scheduled content in the background
+  useEffect(() => {
+    fetch('/api/cron/seed-trigger').catch(() => {});
+  }, []);
+
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMounted, setIsMounted] = useState(false);

@@ -9,9 +9,10 @@ import ModerationActionsTable from './ModerationActionsTable'
 import BanUserModal from './BanUserModal'
 import UserDetailsModal from './UserDetailsModal'
 import PayoutRequestsTable from './PayoutRequestsTable'
-import { BarChart3, Users, Flag, Shield, Lock, Banknote } from 'lucide-react'
+import SeedDashboard from './SeedDashboard'
+import { BarChart3, Users, Flag, Shield, Lock, Banknote, DatabaseZap } from 'lucide-react'
 
-type TabType = 'analytics' | 'users' | 'reports' | 'moderation' | 'payouts'
+type TabType = 'analytics' | 'users' | 'reports' | 'moderation' | 'payouts' | 'seeding'
 
 export default function AdminDashboard() {
   const { isAdmin, role, isLoading } = useIsAdmin()
@@ -49,6 +50,7 @@ export default function AdminDashboard() {
     { id: 'reports' as TabType, label: 'Reports', icon: Flag },
     { id: 'payouts' as TabType, label: 'Payouts', icon: Banknote },
     { id: 'moderation' as TabType, label: 'Moderation', icon: Shield },
+    { id: 'seeding' as TabType, label: 'Seeding', icon: DatabaseZap },
   ]
 
   return (
@@ -119,6 +121,8 @@ export default function AdminDashboard() {
         {activeTab === 'payouts' && <PayoutRequestsTable />}
         
         {activeTab === 'moderation' && <ModerationActionsTable limit={100} />}
+
+        {activeTab === 'seeding' && <SeedDashboard />}
       </div>
 
       {/* User Details Modal */}
