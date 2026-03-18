@@ -1,7 +1,6 @@
 'use client'
 
 import { DirectMessage } from '@/lib/messaging'
-import { DirectMessage } from '@/lib/messaging'
 import { formatNotificationTime } from '@/lib/notifications'
 import { useState } from 'react'
 import { getAvatarUrl } from '@/lib/utils/avatar'
@@ -47,18 +46,15 @@ export default function MessageBubble({
       {/* Avatar */}
       {showAvatar && (
         <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-          {message.sender?.avatarUrl ? (
-            {
-              message.sender?.avatarUrl || message.sender?.anonymousId ? (
-                <img
-                  src={getAvatarUrl(message.sender?.id || message.sender?.anonymousId || 'anonymous')}
-                  alt={message.sender?.anonymousId || 'User'}
-                  className="w-full h-full object-cover rounded-full"
-                />
-              ) : (
-                message.sender?.anonymousId?.charAt(0).toUpperCase() || '?'
-              )
-            }
+          {message.sender?.avatarUrl || message.sender?.anonymousId ? (
+            <img
+              src={getAvatarUrl(message.sender?.id || message.sender?.anonymousId || 'anonymous')}
+              alt={message.sender?.anonymousId || 'User'}
+              className="w-full h-full object-cover rounded-full"
+            />
+          ) : (
+            message.sender?.anonymousId?.charAt(0).toUpperCase() || '?'
+          )}
         </div>
       )}
 
