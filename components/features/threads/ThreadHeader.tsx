@@ -14,6 +14,8 @@ import { formatTimeRemaining } from '@/lib/utils/utils/helpers/threadHelpers';
 import { ThreadData } from '@/types';
 import { createThreadInvite } from '@/lib/threads';
 import { useToast } from '@/components/ui/Toast';
+import { getAccessToken } from '@/lib/utils/auth-token-cache';
+import { getAvatarUrl } from '@/lib/utils/avatar';
 import { buildThreadPath } from '@/lib/threads/thread-url';
 
 interface ThreadHeaderProps {
@@ -356,7 +358,7 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
                 {visibleParticipants.map(participant => (
                   <img
                     key={participant.id}
-                    src={participant.avatar}
+                    src={participant.avatar || getAvatarUrl(participant.id || participant.anonymousId)}
                     alt={participant.name}
                     className="w-8 h-8 md:w-9 md:h-9 rounded-full border-2 border-gray-900 object-cover"
                   />

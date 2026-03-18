@@ -12,6 +12,7 @@ import {
   sanitizeSingleLineInput,
   sanitizeUuid,
 } from '@/lib/security/input-sanitization';
+import { getAvatarUrl } from '@/lib/utils/avatar';
 
 export interface ThreadInviteItem {
   inviteId: string;
@@ -1967,12 +1968,13 @@ function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Se
     id: dbThread.creator.id,
     anonymousId: dbThread.creator.anonymous_id,
     name: dbThread.creator.username || dbThread.creator.anonymous_id,
-    avatar: dbThread.creator.avatar_url || undefined,
+    avatar: dbThread.creator.avatar_url || getAvatarUrl(dbThread.creator.id || dbThread.creator.anonymous_id),
     isPremium: dbThread.creator.is_premium || false,
   } : {
     id: dbThread.creator_id,
     anonymousId: `ANON_${dbThread.creator_id?.substring(0, 8) || 'UNKNOWN'}`,
     name: `ANON_${dbThread.creator_id?.substring(0, 8) || 'UNKNOWN'}`,
+    avatar: getAvatarUrl(dbThread.creator_id),
     isPremium: false,
   };
 
@@ -2058,7 +2060,7 @@ function transformThreadData(
         id: userIdFromTable,
         anonymousId: userData?.anonymous_id || `User ${userIdFromTable.substring(0, 5)}`,
         name: userData?.username || userData?.anonymous_id || `User ${userIdFromTable.substring(0, 5)}`,
-        avatar: userData?.avatar_url || '#cccccc',
+        avatar: userData?.avatar_url || getAvatarUrl(userIdFromTable || userData?.anonymous_id),
         status: 'online',
         messageCount: 0,
         isPremium: userData?.is_premium || false,
@@ -2087,7 +2089,7 @@ function transformThreadData(
       id: creatorId,
       anonymousId: creatorData?.anonymous_id || `ANON_${creatorId.substring(0, 5)}`,
       name: creatorData?.username || creatorData?.anonymous_id || `User ${creatorId.substring(0, 5)}`,
-      avatar: creatorData?.avatar_url || '#cccccc',
+      avatar: creatorData?.avatar_url || getAvatarUrl(creatorId || creatorData?.anonymous_id),
       status: 'online',
       messageCount: 0,
       isPremium: creatorData?.is_premium || false,
@@ -2145,7 +2147,7 @@ function transformThreadData(
       id: dbThread.creator.id,
       anonymousId: dbThread.creator.anonymous_id,
       name: dbThread.creator.username || dbThread.creator.anonymous_id,
-      avatar: dbThread.creator.avatar_url || '#cccccc',
+      avatar: dbThread.creator.avatar_url || getAvatarUrl(dbThread.creator.id || dbThread.creator.anonymous_id),
       isPremium: dbThread.creator.is_premium,
     },
     authorId: dbThread.creator.id,
@@ -2153,7 +2155,7 @@ function transformThreadData(
       id: dbThread.creator.id,
       anonymousId: dbThread.creator.anonymous_id,
       name: dbThread.creator.username || dbThread.creator.anonymous_id,
-      avatar: dbThread.creator.avatar_url || '#cccccc',
+      avatar: dbThread.creator.avatar_url || getAvatarUrl(dbThread.creator.id || dbThread.creator.anonymous_id),
       status: 'online' as const,
       isPremium: dbThread.creator.is_premium,
     },
