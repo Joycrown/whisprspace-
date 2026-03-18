@@ -1,75 +1,27 @@
-// Quick test script to verify Supabase connectivity outside of React
-// Run with: node scripts/test-supabase.js
 
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config({ path: '.env.local' });
+const dotenv = require('dotenv');
+dotenv.config();
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseKey) {
-  console.error('❌ Missing SUPABASE_URL or SUPABASE_KEY in .env.local');
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('Missing env vars');
   process.exit(1);
 }
 
-console.log('🔗 Supabase URL:', supabaseUrl);
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-async function testConnection() {
-  console.log('\n📡 Testing SELECT from users...');
-  const start1 = Date.now();
-  const { data: users, error: usersError } = await supabase
-    .from('users')
-    .select('id, anonymous_id')
-    .limit(1);
-  console.log(`✅ SELECT users: ${Date.now() - start1}ms`, usersError ? `ERROR: ${usersError.message}` : `Found ${users?.length} user(s)`);
-
-  console.log('\n📡 Testing SELECT from threads...');
-  const start2 = Date.now();
-  const { data: threads, error: threadsError } = await supabase
-    .from('threads')
-    .select('id, title')
-    .limit(1);
-  console.log(`✅ SELECT threads: ${Date.now() - start2}ms`, threadsError ? `ERROR: ${threadsError.message}` : `Found ${threads?.length} thread(s)`);
-
-  // Get a valid thread ID and user ID for INSERT test
-  if (threads?.length > 0 && users?.length > 0) {
-    const threadId = threads[0].id;
-    const userId = users[0].id;
-
-    console.log('\n📡 Testing INSERT into messages...');
-    const start3 = Date.now();
-    const { data: message, error: insertError } = await supabase
-      .from('messages')
-      .insert({
-        thread_id: threadId,
-        sender_id: userId,
-        content: 'TEST MESSAGE FROM SCRIPT - DELETE ME',
-        type: 'text',
-        attachments: [],
-      })
-      .select('id, content')
-      .single();
-    console.log(`✅ INSERT message: ${Date.now() - start3}ms`, insertError ? `ERROR: ${insertError.message}` : `Created message ID: ${message?.id}`);
-
-    // Clean up test message
-    if (message?.id) {
-      console.log('\n🗑️ Cleaning up test message...');
-      await supabase.from('messages').delete().eq('id', message.id);
-      console.log('✅ Test message deleted');
-    }
+async function test() {
+  console.log('Testing connection to:', SUPABASE_URL);
+  const { data, error } = await supabase.from('seed_config').select('*').limit(1);
+  if (error) {
+    console.error('Connection failed:', error.message);
+    if (error.cause) console.error('Cause:', error.cause);
   } else {
-    console.log('\n⚠️ Skipping INSERT test - no threads or users found');
+    console.log('Connection success! Data:', data);
   }
 }
 
-testConnection()
-  .then(() => {
-    console.log('\n✅ All tests completed!');
-    process.exit(0);
-  })
-  .catch((err) => {
-    console.error('\n❌ Test failed:', err);
-    process.exit(1);
-  });
+test();
