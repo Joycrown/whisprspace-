@@ -31,9 +31,12 @@ export async function initializeSeedSystem() {
 
 /**
  * Prepare the daily schedule — picks threads from playbook,
- * assigns personas, calculates timestamps for threads + all replies
+ * assigns personas, calculates timestamps for threads + all replies.
+ *
+ * immediate=true: skips duplicate-date check, starts threads from now
+ * (used by auto-generation when existing threads are expiring)
  */
-export async function prepareDailySchedule(targetDate?: string): Promise<{
+export async function prepareDailySchedule(targetDate?: string, immediate = false): Promise<{
   threadsScheduled: number;
   repliesScheduled: number;
   batchDate: string;
@@ -45,16 +48,22 @@ export async function prepareDailySchedule(targetDate?: string): Promise<{
     throw new Error('No seed users found. Run initialize first.');
   }
 
-  // Target date (defaults to tomorrow)
-  const date = targetDate
-    ? new Date(targetDate)
-    : new Date(Date.now() + 24 * 60 * 60 * 1000);
-  const batchDate = date.toISOString().split('T')[0];
+  // immediate batches use a timestamp-based ID so they never clash with date-based ones
+  const now = new Date();
+  const batchDate = immediate
+    ? `${now.toISOString().split('T')[0]}-${now.getHours()}${now.getMinutes().toString().padStart(2, '0')}`
+    : targetDate
+      ? new Date(targetDate).toISOString().split('T')[0]
+      : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  // Check if already scheduled
-  const existing = await seedService.getScheduledContent({ batchDate });
-  if (existing.length > 0) {
-    return { threadsScheduled: 0, repliesScheduled: 0, batchDate };
+  const date = new Date(batchDate.split('-').slice(0, 3).join('-'));
+
+  // Check if already scheduled (skip for immediate — always allow)
+  if (!immediate) {
+    const existing = await seedService.getScheduledContent({ batchDate });
+    if (existing.length > 0) {
+      return { threadsScheduled: 0, repliesScheduled: 0, batchDate };
+    }
   }
 
   // Pick unused threads from playbook
@@ -86,11 +95,12 @@ export async function prepareDailySchedule(targetDate?: string): Promise<{
       .sort((a: any, b: any) => a.sequence_order - b.sequence_order);
 
     // Calculate thread creation time
-    let threadTime = new Date(date);
-    if (process.env.NODE_ENV === 'development') {
-      // Fast-track testing in dev/local: threads every 5 mins, starting 1 min from now
-      threadTime = new Date(Date.now() + 60000 + (i * 5 * 60000));
+    let threadTime: Date;
+    if (immediate || process.env.NODE_ENV === 'development') {
+      // Immediate / dev: start 1 min from now, spaced by thread_spacing_minutes
+      threadTime = new Date(Date.now() + 60000 + (i * config.thread_spacing_minutes * 60000));
     } else {
+      threadTime = new Date(date);
       const threadHour = config.first_thread_hour + (i * config.thread_spacing_minutes / 60);
       threadTime.setHours(Math.floor(threadHour), (threadHour % 1) * 60, 0, 0);
     }
@@ -125,12 +135,9 @@ export async function prepareDailySchedule(targetDate?: string): Promise<{
         continue;
       }
 
-      let replyTime;
-      if (process.env.NODE_ENV === 'development') {
-        replyTime = new Date(threadTime.getTime() + (slot + 1) * 60000);
-      } else {
-        replyTime = new Date(threadTime.getTime() + (slot + 1) * config.reply_interval_minutes * 60 * 1000);
-      }
+      const replyTime = new Date(
+        threadTime.getTime() + (slot + 1) * config.reply_interval_minutes * 60 * 1000
+      );
 
       scheduledItems.push({
         action: 'create_reply',
@@ -170,6 +177,83 @@ export async function prepareDailySchedule(targetDate?: string): Promise<{
   });
 
   return { threadsScheduled, repliesScheduled, batchDate };
+}
+
+/**
+ * Smart auto-generation — checks if the feed needs fresh content and
+ * generates + approves a new batch automatically.
+ *
+ * Triggers when ALL active seed threads are expiring within 2 hours
+ * (or none exist). Skips if there are still unexecuted approved items.
+ */
+export async function checkAndGenerateIfNeeded(): Promise<{
+  generated: boolean;
+  reason: string;
+}> {
+  const config = await seedService.getSeedConfig();
+  if (!config.is_active) return { generated: false, reason: 'inactive' };
+
+  // Skip if there are still queued items scheduled within the next 48 hours
+  // (i.e. items that can realistically still execute on a live thread).
+  // We ignore items scheduled beyond 48hrs — those belong to threads that
+  // will have already expired and will never meaningfully execute.
+  const fortyEightHoursFromNow = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+  const { count: queuedCount } = await supabaseAdmin
+    .from('seed_scheduled_content')
+    .select('*', { count: 'exact', head: true })
+    .in('status', ['approved', 'pending'])
+    .lte('scheduled_at', fortyEightHoursFromNow);
+
+  if (queuedCount && queuedCount > 0) {
+    return { generated: false, reason: 'queue not empty' };
+  }
+
+  const nowIso = new Date().toISOString();
+  const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
+  // Count active seed threads
+  const { count: activeCount } = await supabaseAdmin
+    .from('threads')
+    .select('*', { count: 'exact', head: true })
+    .eq('is_seed', true)
+    .gt('expires_at', nowIso);
+
+  // Count active seed threads expiring within 2 hours
+  const { count: expiringCount } = await supabaseAdmin
+    .from('threads')
+    .select('*', { count: 'exact', head: true })
+    .eq('is_seed', true)
+    .gt('expires_at', nowIso)
+    .lte('expires_at', twoHoursFromNow);
+
+  // Generate only when there are no active threads, or all remaining ones expire soon
+  const noActiveThreads = !activeCount || activeCount === 0;
+  const allExpiringSoon = activeCount !== null && activeCount > 0 && expiringCount === activeCount;
+
+  if (!noActiveThreads && !allExpiringSoon) {
+    return { generated: false, reason: 'threads still active' };
+  }
+
+  // Generate with immediate timing (threads start ~1 min from now)
+  const result = await prepareDailySchedule(undefined, true);
+
+  if (result.threadsScheduled === 0) {
+    return { generated: false, reason: 'no playbook content available' };
+  }
+
+  // Auto-approve so the queue processor can execute them right away
+  await seedService.approveScheduledBatch(result.batchDate);
+
+  await seedService.logActivity('auto_generate', 'system', result.batchDate, undefined, {
+    trigger: noActiveThreads ? 'no_active_threads' : 'threads_expiring_soon',
+    threadsScheduled: result.threadsScheduled,
+    repliesScheduled: result.repliesScheduled,
+  });
+
+  return {
+    generated: true,
+    reason: `${result.threadsScheduled} threads + ${result.repliesScheduled} replies auto-generated`,
+  };
 }
 
 /**
