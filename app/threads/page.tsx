@@ -18,15 +18,6 @@ const ThreadsPage = () => {
   const searchQuery = useThreadStore((state) => state.searchQuery);
   useRealtimeFeed(process.env.NODE_ENV === 'production'); // Avoid dev-mode realtime thrash on feed
 
-  // Silent seed trigger — fires on mount and every 2 minutes while on the feed
-  useEffect(() => {
-    fetch('/api/cron/seed-trigger').catch(() => {});
-    const interval = setInterval(() => {
-      fetch('/api/cron/seed-trigger').catch(() => {});
-    }, 2 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
-
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
