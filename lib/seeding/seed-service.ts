@@ -140,16 +140,9 @@ export async function loadPlaybookIntoDB(): Promise<{ threads: number; replies: 
   let threadCount = 0;
   let replyCount = 0;
 
+  // Bulk-insert all thread rows first, then bulk-insert their replies.
+  // One round-trip per thread (not one per reply) so 300 threads loads fast.
   for (const thread of SEED_THREADS) {
-    // Check if already exists (by title)
-    const { data: existing } = await supabaseAdmin
-      .from('seed_playbook_threads')
-      .select('id')
-      .eq('title', thread.title)
-      .limit(1);
-
-    if (existing && existing.length > 0) continue;
-
     // Insert thread template
     const { data: insertedThread, error: threadErr } = await supabaseAdmin
       .from('seed_playbook_threads')
@@ -171,24 +164,35 @@ export async function loadPlaybookIntoDB(): Promise<{ threads: number; replies: 
 
     threadCount++;
 
-    // Insert reply templates
-    for (const reply of thread.replies) {
+    if (!thread.replies || thread.replies.length === 0) continue;
+
+    const replyRows = thread.replies.map((reply: PlaybookReply) => ({
+      thread_playbook_id: insertedThread.id,
+      persona_tag: reply.personaTag,
+      content: reply.content,
+      sequence_order: reply.sequenceOrder,
+      reply_to_sequence: reply.replyToSequence || null,
+    }));
+
+    // Insert in batches of 25 to avoid payload size limits
+    const BATCH_SIZE = 25;
+    let batchFailed = false;
+    for (let b = 0; b < replyRows.length; b += BATCH_SIZE) {
+      const batch = replyRows.slice(b, b + BATCH_SIZE);
       const { error: replyErr } = await supabaseAdmin
         .from('seed_playbook_replies')
-        .insert({
-          thread_playbook_id: insertedThread.id,
-          persona_tag: reply.personaTag,
-          content: reply.content,
-          sequence_order: reply.sequenceOrder,
-          reply_to_sequence: reply.replyToSequence || null,
-        });
+        .insert(batch);
 
       if (replyErr) {
-        console.error(`Failed to insert playbook reply: ${replyErr.message}`);
-        continue;
+        console.error(`Failed to insert reply batch for "${thread.title}" (offset ${b}): ${replyErr.message}`);
+        batchFailed = true;
+        break;
       }
-      replyCount++;
+
+      replyCount += batch.length;
     }
+
+    if (batchFailed) continue;
   }
 
   return { threads: threadCount, replies: replyCount };
@@ -381,7 +385,8 @@ export async function markItemExecuted(itemId: string, threadId?: string) {
       executed_at: new Date().toISOString(),
       target_thread_id: threadId || undefined,
     })
-    .eq('id', itemId);
+    .eq('id', itemId)
+    .in('status', ['approved', 'processing']); // accept either in case of retry
 }
 
 export async function markItemFailed(itemId: string, errorMessage: string) {
@@ -392,7 +397,8 @@ export async function markItemFailed(itemId: string, errorMessage: string) {
       error_message: errorMessage,
       executed_at: new Date().toISOString(),
     })
-    .eq('id', itemId);
+    .eq('id', itemId)
+    .in('status', ['approved', 'processing']);
 }
 
 export async function approveScheduledBatch(batchDate: string) {
@@ -473,7 +479,7 @@ export async function getActivityStats() {
 // ─── CLEANUP ─────────────────────────────────────────────────
 
 export async function cleanupAllSeeds() {
-  // Order matters — delete messages first (FK), then threads, then users
+  // Order matters — delete dependents first (FK constraints)
   await supabaseAdmin.from('seed_activity_log').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   await supabaseAdmin.from('seed_scheduled_content').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   await supabaseAdmin.from('messages').delete().eq('is_seed', true);
@@ -483,11 +489,9 @@ export async function cleanupAllSeeds() {
   await supabaseAdmin.from('threads').delete().eq('is_seed', true);
   await supabaseAdmin.from('users').delete().eq('is_seed', true);
 
-  // Reset playbook usage flags
-  await supabaseAdmin
-    .from('seed_playbook_threads')
-    .update({ is_used: false, times_used: 0 })
-    .neq('id', '00000000-0000-0000-0000-000000000000');
+  // Wipe the entire playbook so re-initialize loads the current dataset fresh
+  await supabaseAdmin.from('seed_playbook_replies').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await supabaseAdmin.from('seed_playbook_threads').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
   await logActivity('cleanup', 'system', '00000000-0000-0000-0000-000000000000', undefined, { action: 'full_cleanup' });
 }

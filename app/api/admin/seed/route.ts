@@ -54,6 +54,61 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: true, data: detailedSchedule });
     }
 
+    // ?view=batch-summary — per-thread reply counts for the latest batch
+    const viewQuery = searchParams.get('view');
+    if (viewQuery === 'batch-summary') {
+      // Get the most recent batch
+      const { data: latestBatch } = await supabaseAdmin
+        .from('seed_scheduled_content')
+        .select('batch_date')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      const batchDate = latestBatch?.batch_date;
+      if (!batchDate) {
+        return NextResponse.json({ success: true, data: { batchDate: null, threads: [] } });
+      }
+
+      const { data: items } = await supabaseAdmin
+        .from('seed_scheduled_content')
+        .select('action, status, playbook_thread_id, scheduled_at')
+        .eq('batch_date', batchDate)
+        .order('scheduled_at', { ascending: true });
+
+      // Group by playbook_thread_id
+      const threadMap: Record<string, { threadItem: any; replyCount: number; statuses: Record<string, number> }> = {};
+      for (const item of (items || [])) {
+        if (!threadMap[item.playbook_thread_id]) {
+          threadMap[item.playbook_thread_id] = { threadItem: null, replyCount: 0, statuses: {} };
+        }
+        if (item.action === 'create_thread') {
+          threadMap[item.playbook_thread_id].threadItem = item;
+        } else {
+          threadMap[item.playbook_thread_id].replyCount++;
+        }
+        threadMap[item.playbook_thread_id].statuses[item.status] =
+          (threadMap[item.playbook_thread_id].statuses[item.status] || 0) + 1;
+      }
+
+      const threads = Object.entries(threadMap).map(([pbThreadId, data]) => ({
+        playbookThreadId: pbThreadId,
+        threadStatus: data.threadItem?.status,
+        threadScheduledAt: data.threadItem?.scheduled_at,
+        replyCount: data.replyCount,
+        statuses: data.statuses,
+      }));
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          batchDate,
+          totalItems: items?.length || 0,
+          threads,
+        },
+      });
+    }
+
     const status = await seedOrchestrator.getSeedingStatus();
     return NextResponse.json({ success: true, data: status });
   } catch (err: any) {
