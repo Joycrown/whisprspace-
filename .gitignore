@@ -49,3 +49,6 @@ next-env.d.ts
 # local operational artifacts
 /artifacts/
 *_PLAYBOOK.md
+
+# Claude Code local settings
+.claude/settings.local.json
