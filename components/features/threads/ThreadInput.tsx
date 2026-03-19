@@ -63,12 +63,7 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
     const seenHandles = new Set<string>();
 
     return participants
-      .filter((participant) => {
-        if (!participant.id || participant.id === currentUserId) return false;
-        // Hide seed accounts from the mention picker
-        if (/^SEED_/i.test(participant.anonymousId || '')) return false;
-        return true;
-      })
+      .filter((participant) => participant.id && participant.id !== currentUserId)
       .map((participant) => {
         const name = (participant.name || '').trim();
         const anonymousId = (participant.anonymousId || '').trim();
@@ -86,7 +81,7 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
 
         const displayName = hasCustomName ? name : (anonymousId || name || handle);
         const secondaryLabel =
-          hasCustomName && anonHandle && anonHandle.toLowerCase() !== lowerHandle
+          hasCustomName && anonHandle && anonHandle.toLowerCase() !== lowerHandle && !/^SEED_/i.test(anonHandle)
             ? `@${anonHandle}`
             : undefined;
 
