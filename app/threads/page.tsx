@@ -17,6 +17,7 @@ const ThreadsPage = () => {
   const { session } = useUserStore();
   const searchQuery = useThreadStore((state) => state.searchQuery);
   useRealtimeFeed(process.env.NODE_ENV === 'production'); // Avoid dev-mode realtime thrash on feed
+
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMounted, setIsMounted] = useState(false);

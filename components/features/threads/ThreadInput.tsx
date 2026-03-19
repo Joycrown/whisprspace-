@@ -81,7 +81,7 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
 
         const displayName = hasCustomName ? name : (anonymousId || name || handle);
         const secondaryLabel =
-          hasCustomName && anonHandle && anonHandle.toLowerCase() !== lowerHandle
+          hasCustomName && anonHandle && anonHandle.toLowerCase() !== lowerHandle && !/^SEED_/i.test(anonHandle)
             ? `@${anonHandle}`
             : undefined;
 
