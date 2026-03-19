@@ -85,6 +85,45 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
     return { threadsScheduled: 0, repliesScheduled: 0, batchDate };
   }
 
+  // ── Global unused reply pool ───────────────────────────────────────────────
+  // Collect every playbook_reply_id that has already been scheduled (any status)
+  // so we never reuse the same message content in any thread, ever.
+  const { data: scheduledReplyRows } = await supabaseAdmin
+    .from('seed_scheduled_content')
+    .select('playbook_reply_id')
+    .not('playbook_reply_id', 'is', null);
+
+  const globallyUsedReplyIds = new Set(
+    (scheduledReplyRows || []).map((r: any) => r.playbook_reply_id)
+  );
+
+  // Fetch every reply across the entire playbook — gives us the fill pool for Phase 2.
+  // We'll add IDs to globallyUsedReplyIds as we assign them in this batch so
+  // cross-thread uniqueness is enforced within the same scheduling call too.
+  const { data: allPlaybookReplies } = await supabaseAdmin
+    .from('seed_playbook_replies')
+    .select('id, thread_playbook_id, persona_tag, content')
+    .order('thread_playbook_id', { ascending: true })
+    .order('sequence_order', { ascending: true });
+
+  // Pool of replies not yet used anywhere — available for Phase 2 fill
+  const globalReplyPool: any[] = (allPlaybookReplies || []).filter(
+    (r: any) => !globallyUsedReplyIds.has(r.id)
+  );
+
+  // If the pool can't fill even one full thread, reset used-reply tracking —
+  // same pattern as the thread playbook reset. All 5k+ replies become available
+  // again rather than repeating the same few messages inside a single thread.
+  const targetPerThread = config.max_participants_per_thread * config.messages_per_user;
+  const shouldResetPool = globalReplyPool.length < targetPerThread;
+  if (shouldResetPool) {
+    globallyUsedReplyIds.clear();
+    globalReplyPool.length = 0;
+    globalReplyPool.push(...(allPlaybookReplies || []));
+  }
+
+  // ── End global pool setup ──────────────────────────────────────────────────
+
   const scheduledItems: any[] = [];
   let threadsScheduled = 0;
   let repliesScheduled = 0;
@@ -125,10 +164,23 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
 
     if (replies.length === 0) continue;
 
-    // Each playbook reply has a persona_tag specifying exactly who sends it.
-    // Use that directly instead of round-robining content across random participants.
-    for (let slot = 0; slot < replies.length; slot++) {
-      const reply = replies[slot];
+    // Target: max_participants_per_thread × messages_per_user (e.g. 10 × 5 = 50)
+    const targetReplyCount = config.max_participants_per_thread * config.messages_per_user;
+
+    // All available personas for cycling beyond the playbook's explicit assignments
+    const allPersonas = Object.keys(userMap);
+
+    // Track which personas are already assigned in the playbook to avoid immediate repeats
+    const playbookPersonas = new Set(replies.map((r: any) => r.persona_tag));
+    // Personas not used in the playbook come first for the extra slots
+    const extraPersonas = allPersonas.filter(p => !playbookPersonas.has(p));
+    const personaPool = [...extraPersonas, ...allPersonas]; // extras first, then full rotation
+
+    let slot = 0;
+
+    // Phase 1: schedule the explicit playbook replies in order
+    for (const reply of replies) {
+      if (slot >= targetReplyCount) break;
       const participantUserId = userMap[reply.persona_tag];
       if (!participantUserId) {
         console.warn(`No seed user for persona tag: ${reply.persona_tag}`);
@@ -149,7 +201,64 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
         batch_date: batchDate,
       });
 
+      // Mark as globally used so other threads in this batch don't claim it
+      globallyUsedReplyIds.add(reply.id);
+      const poolIdx = globalReplyPool.findIndex((r: any) => r.id === reply.id);
+      if (poolIdx !== -1) globalReplyPool.splice(poolIdx, 1);
+
+      slot++;
       repliesScheduled++;
+    }
+
+    // Phase 2: fill remaining slots up to targetReplyCount.
+    // Pull from the global unused reply pool — one reply ID used once, ever.
+    // Prefer replies whose persona_tag matches an unused persona in this thread.
+    let extraPersonaIdx = 0;
+    while (slot < targetReplyCount) {
+      // Pick a persona for this slot (round-robin through extras first, then all)
+      const personaTag = personaPool[extraPersonaIdx % personaPool.length];
+      const participantUserId = userMap[personaTag];
+
+      // Find the first unused reply in the global pool that hasn't been used in
+      // this thread yet (prefer matching persona, otherwise take the next available)
+      const usedInThisThread = new Set(
+        scheduledItems
+          .filter((s: any) => s.playbook_thread_id === playbookThread.id && s.playbook_reply_id)
+          .map((s: any) => s.playbook_reply_id)
+      );
+
+      // Pool is always valid here (reset above if it was too small)
+      const poolReply: any =
+        globalReplyPool.find(
+          (r: any) => !usedInThisThread.has(r.id) && r.persona_tag === personaTag
+        ) ||
+        globalReplyPool.find((r: any) => !usedInThisThread.has(r.id));
+
+      if (participantUserId && poolReply) {
+        const replyTime = new Date(
+          threadTime.getTime() + (slot + 1) * config.reply_interval_minutes * 60 * 1000
+        );
+
+        scheduledItems.push({
+          action: 'create_reply',
+          playbook_thread_id: playbookThread.id,
+          playbook_reply_id: poolReply.id,
+          seed_user_id: participantUserId,
+          scheduled_at: replyTime.toISOString(),
+          status: 'pending',
+          batch_date: batchDate,
+        });
+
+        // Mark as used so subsequent threads in this batch don't claim it
+        globallyUsedReplyIds.add(poolReply.id);
+        const idx = globalReplyPool.findIndex((r: any) => r.id === poolReply.id);
+        if (idx !== -1) globalReplyPool.splice(idx, 1);
+
+        repliesScheduled++;
+      }
+
+      slot++;
+      extraPersonaIdx++;
     }
 
     // Mark playbook thread as used
@@ -193,15 +302,14 @@ export async function checkAndGenerateIfNeeded(): Promise<{
   const config = await seedService.getSeedConfig();
   if (!config.is_active) return { generated: false, reason: 'inactive' };
 
-  // Skip if there are still queued items scheduled within the next 48 hours
-  // (i.e. items that can realistically still execute on a live thread).
-  // We ignore items scheduled beyond 48hrs — those belong to threads that
-  // will have already expired and will never meaningfully execute.
+  // Skip if there are still APPROVED items scheduled within the next 48 hours.
+  // Pending items are not counted — they have no automatic approval mechanism
+  // and should not block auto-generation of an immediate batch.
   const fortyEightHoursFromNow = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
   const { count: queuedCount } = await supabaseAdmin
     .from('seed_scheduled_content')
     .select('*', { count: 'exact', head: true })
-    .in('status', ['approved', 'pending'])
+    .eq('status', 'approved')
     .lte('scheduled_at', fortyEightHoursFromNow);
 
   if (queuedCount && queuedCount > 0) {
@@ -226,11 +334,21 @@ export async function checkAndGenerateIfNeeded(): Promise<{
     .gt('expires_at', nowIso)
     .lte('expires_at', twoHoursFromNow);
 
-  // Generate only when there are no active threads, or all remaining ones expire soon
   const noActiveThreads = !activeCount || activeCount === 0;
   const allExpiringSoon = activeCount !== null && activeCount > 0 && expiringCount === activeCount;
 
-  if (!noActiveThreads && !allExpiringSoon) {
+  // Also allow generation when active threads exist but all their scheduled replies
+  // have already been executed — meaning threads are "content-complete" and the
+  // feed is stale even though the threads haven't expired yet.
+  const { count: pendingRepliesCount } = await supabaseAdmin
+    .from('seed_scheduled_content')
+    .select('*', { count: 'exact', head: true })
+    .eq('action', 'create_reply')
+    .eq('status', 'approved');
+
+  const allRepliesExhausted = !pendingRepliesCount || pendingRepliesCount === 0;
+
+  if (!noActiveThreads && !allExpiringSoon && !allRepliesExhausted) {
     return { generated: false, reason: 'threads still active' };
   }
 
