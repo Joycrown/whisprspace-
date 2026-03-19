@@ -66,16 +66,55 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
     }
   }
 
-  // Pick unused threads from playbook
-  const { data: availableThreads, error } = await supabaseAdmin
-    .from('seed_playbook_threads')
-    .select('*, seed_playbook_replies(*)')
-    .eq('is_used', false)
-    .order('created_at', { ascending: true })
-    .limit(config.threads_per_day);
+  // Pick unused threads with a ~60% relationship/personal, ~40% other split.
+  // e.g. threads_per_day=5 → 3 priority + 2 other.
+  const PRIORITY_CATEGORIES = ['relationships', 'personal'];
+  const prioritySlots = Math.round(config.threads_per_day * 0.6); // 3 of 5
+  const otherSlots = config.threads_per_day - prioritySlots;       // 2 of 5
 
-  if (error) throw new Error(`Failed to fetch playbook threads: ${error.message}`);
-  if (!availableThreads || availableThreads.length === 0) {
+  const { data: priorityThreads } = await supabaseAdmin
+    .from('seed_playbook_threads')
+    .select('*')
+    .eq('is_used', false)
+    .in('category', PRIORITY_CATEGORIES)
+    .order('created_at', { ascending: true })
+    .limit(prioritySlots);
+
+  const { data: otherThreads } = await supabaseAdmin
+    .from('seed_playbook_threads')
+    .select('*')
+    .eq('is_used', false)
+    .not('category', 'in', `(${PRIORITY_CATEGORIES.join(',')})`)
+    .order('created_at', { ascending: true })
+    .limit(otherSlots);
+
+  // Interleave: priority, other, priority, other, priority — feels more natural than a block
+  let availableThreads: any[] = [];
+  const pList = priorityThreads || [];
+  const oList = otherThreads || [];
+  const maxLen = Math.max(pList.length, oList.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (i < pList.length) availableThreads.push(pList[i]);
+    if (i < oList.length) availableThreads.push(oList[i]);
+  }
+  availableThreads = availableThreads.slice(0, config.threads_per_day);
+
+  // Fallback: if either pool is exhausted, fill remaining from whatever is available
+  if (availableThreads.length < config.threads_per_day) {
+    const usedIds = new Set(availableThreads.map((t: any) => t.id));
+    const { data: fallback } = await supabaseAdmin
+      .from('seed_playbook_threads')
+      .select('*')
+      .eq('is_used', false)
+      .order('created_at', { ascending: true })
+      .limit(config.threads_per_day);
+    for (const t of (fallback || [])) {
+      if (!usedIds.has(t.id)) availableThreads.push(t);
+      if (availableThreads.length >= config.threads_per_day) break;
+    }
+  }
+
+  if (availableThreads.length === 0) {
     // Reset all threads to unused if we've exhausted the playbook
     await supabaseAdmin
       .from('seed_playbook_threads')
@@ -83,6 +122,25 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
     return { threadsScheduled: 0, repliesScheduled: 0, batchDate };
+  }
+
+  // Fetch all replies for the selected threads in one explicit query —
+  // more reliable than the join above which can silently return empty arrays.
+  const threadIds = availableThreads.map((t: any) => t.id);
+  const { data: allFetchedReplies } = await supabaseAdmin
+    .from('seed_playbook_replies')
+    .select('id, thread_playbook_id, persona_tag, content, sequence_order')
+    .in('thread_playbook_id', threadIds)
+    .order('thread_playbook_id', { ascending: true })
+    .order('sequence_order', { ascending: true });
+
+  // Group by thread ID for quick lookup
+  const repliesByThreadId: Record<string, any[]> = {};
+  for (const reply of (allFetchedReplies || [])) {
+    if (!repliesByThreadId[reply.thread_playbook_id]) {
+      repliesByThreadId[reply.thread_playbook_id] = [];
+    }
+    repliesByThreadId[reply.thread_playbook_id].push(reply);
   }
 
   // ── Global unused reply pool ───────────────────────────────────────────────
@@ -130,8 +188,8 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
 
   for (let i = 0; i < availableThreads.length; i++) {
     const playbookThread = availableThreads[i];
-    const replies = (playbookThread.seed_playbook_replies || [])
-      .sort((a: any, b: any) => a.sequence_order - b.sequence_order);
+    // Use the separately-fetched replies (already sorted by sequence_order)
+    const replies = repliesByThreadId[playbookThread.id] || [];
 
     // Calculate thread creation time
     let threadTime: Date;
@@ -167,14 +225,22 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
     // Target: max_participants_per_thread × messages_per_user (e.g. 10 × 5 = 50)
     const targetReplyCount = config.max_participants_per_thread * config.messages_per_user;
 
-    // All available personas for cycling beyond the playbook's explicit assignments
-    const allPersonas = Object.keys(userMap);
-
-    // Track which personas are already assigned in the playbook to avoid immediate repeats
-    const playbookPersonas = new Set(replies.map((r: any) => r.persona_tag));
-    // Personas not used in the playbook come first for the extra slots
-    const extraPersonas = allPersonas.filter(p => !playbookPersonas.has(p));
-    const personaPool = [...extraPersonas, ...allPersonas]; // extras first, then full rotation
+    // Determine the allowed persona set for this thread — capped at max_participants_per_thread.
+    // Phase 1 personas come first (they're the "anchored" cast for this thread).
+    // Fill remaining slots from the wider user map if the playbook has fewer than the cap.
+    const phase1Personas: string[] = [];
+    for (const r of replies) {
+      if (r.persona_tag && !phase1Personas.includes(r.persona_tag)) {
+        phase1Personas.push(r.persona_tag);
+        if (phase1Personas.length >= config.max_participants_per_thread) break;
+      }
+    }
+    // Top up to the cap with personas not already in phase1Personas
+    const remainingPersonas = Object.keys(userMap).filter(p => !phase1Personas.includes(p));
+    const allowedPersonas = [
+      ...phase1Personas,
+      ...remainingPersonas,
+    ].slice(0, config.max_participants_per_thread);
 
     let slot = 0;
 
@@ -212,15 +278,10 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
 
     // Phase 2: fill remaining slots up to targetReplyCount.
     // Pull from the global unused reply pool — one reply ID used once, ever.
-    // Prefer replies whose persona_tag matches an unused persona in this thread.
+    // Only cycle through allowedPersonas (capped at max_participants_per_thread).
     let extraPersonaIdx = 0;
     while (slot < targetReplyCount) {
-      // Pick a persona for this slot (round-robin through extras first, then all)
-      const personaTag = personaPool[extraPersonaIdx % personaPool.length];
-      const participantUserId = userMap[personaTag];
-
-      // Find the first unused reply in the global pool that hasn't been used in
-      // this thread yet (prefer matching persona, otherwise take the next available)
+      // Snapshot used reply IDs for this thread (rebuilt each iteration to stay accurate)
       const usedInThisThread = new Set(
         scheduledItems
           .filter((s: any) => s.playbook_thread_id === playbookThread.id && s.playbook_reply_id)
@@ -230,11 +291,17 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
       // Pool is always valid here (reset above if it was too small)
       const poolReply: any =
         globalReplyPool.find(
-          (r: any) => !usedInThisThread.has(r.id) && r.persona_tag === personaTag
+          (r: any) => !usedInThisThread.has(r.id) &&
+            r.persona_tag === allowedPersonas[extraPersonaIdx % allowedPersonas.length]
         ) ||
         globalReplyPool.find((r: any) => !usedInThisThread.has(r.id));
 
-      if (participantUserId && poolReply) {
+      if (!poolReply) break; // Global pool exhausted — stop filling
+
+      const personaTag = allowedPersonas[extraPersonaIdx % allowedPersonas.length];
+      const participantUserId = userMap[personaTag];
+
+      if (participantUserId) {
         const replyTime = new Date(
           threadTime.getTime() + (slot + 1) * config.reply_interval_minutes * 60 * 1000
         );
@@ -254,11 +321,14 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
         const idx = globalReplyPool.findIndex((r: any) => r.id === poolReply.id);
         if (idx !== -1) globalReplyPool.splice(idx, 1);
 
+        slot++;
         repliesScheduled++;
       }
 
-      slot++;
       extraPersonaIdx++;
+      // Safety valve: if we've cycled through all personas and still can't schedule,
+      // bail out to avoid an infinite loop (e.g. all userMap entries are missing).
+      if (extraPersonaIdx > allowedPersonas.length * 2 && slot === 0) break;
     }
 
     // Mark playbook thread as used
@@ -395,6 +465,18 @@ export async function processScheduledQueue(limit: number = 5): Promise<{
   const threadMap: Record<string, string> = {};
 
   for (const item of dueItems) {
+    // Atomically claim this item by flipping status approved → processing.
+    // If two trigger calls run concurrently, only one will succeed here.
+    const { data: claimed } = await supabaseAdmin
+      .from('seed_scheduled_content')
+      .update({ status: 'processing' })
+      .eq('id', item.id)
+      .eq('status', 'approved') // only succeeds if still approved
+      .select('id')
+      .single();
+
+    if (!claimed) continue; // Another concurrent call already claimed it
+
     try {
       if (item.action === 'create_thread') {
         // Fetch playbook data

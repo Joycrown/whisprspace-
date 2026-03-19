@@ -68,14 +68,7 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error('Error generating recovery link via admin:', error);
-      if (error.message.includes('User not found')) {
-         // User not found, just return success to prevent enumeration
-         return withRateLimitHeaders(
-           NextResponse.json({ message: 'If an account exists, a reset link has been sent.' }),
-           bodyRateLimit.headers
-         );
-      }
-      return NextResponse.json({ error: 'Failed to generate reset link' }, { status: 500 });
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     const resetLink = data.properties?.action_link;
