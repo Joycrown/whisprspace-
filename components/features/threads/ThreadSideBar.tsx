@@ -464,13 +464,31 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
                   {/* Participants moved here */}
                   <h2 className="text-lg font-bold text-white mb-4 mt-4">Participants</h2>
                   <div className="space-y-3">
-                    {participants.map(participant => (
+                    {participants.map(participant => {
+                      const isValidUrl = (s?: string) => !!s && s.startsWith('http');
+                      const avatarSrc = isValidUrl(participant.avatar)
+                        ? participant.avatar
+                        : getAvatarUrl(participant.id || participant.anonymousId);
+                      const initials = (participant.name || participant.anonymousId || '?').charAt(0).toUpperCase();
+                      return (
                       <div key={participant.id} className="flex items-center gap-3">
                         <img
-                          src={participant.avatar || getAvatarUrl(participant.id || participant.anonymousId)}
+                          src={avatarSrc}
                           alt={participant.name || 'Anonymous'}
-                          className="w-8 h-8 rounded-full"
+                          className="w-8 h-8 rounded-full object-cover object-top flex-shrink-0"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            target.style.display = 'none';
+                            const fallback = target.nextElementSibling as HTMLElement;
+                            if (fallback) fallback.style.display = 'flex';
+                          }}
                         />
+                        <div
+                          className="w-8 h-8 rounded-full flex-shrink-0 items-center justify-center bg-purple-700 text-white text-xs font-bold"
+                          style={{ display: 'none' }}
+                        >
+                          {initials}
+                        </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-white truncate">{participant.name || 'Anonymous'}</p>
                           <p className="text-sm text-gray-400">{participant.messageCount ?? 0} messages</p>
@@ -492,7 +510,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
                           )}
                         </div>
                       </div>
-                    ))}
+                    )})}
                   </div>
                 </div>
               </div>
