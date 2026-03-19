@@ -26,6 +26,11 @@ export default function MainLayout({
     }, 2 * 60 * 1000)
     return () => clearInterval(interval)
   }, [])
+  // Launch page — render with zero chrome, no seed trigger
+  if (pathname === '/launch') {
+    return <>{children}</>
+  }
+
   const isPublicRoute =
     publicRoutes.includes(pathname || '') ||
     (pathname?.startsWith('/auth/') ?? false) ||
