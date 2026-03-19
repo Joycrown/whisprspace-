@@ -8,7 +8,7 @@
  *   node scripts/import-playbook-json.js <playbook.json> [--env .env.production]
  *
  * Defaults to .env.local. Use --env to target a different environment:
- *   node scripts/import-playbook-json.js whisprspace_300_threads_expanded.json --env .env.production
+ *   node scripts/import-playbook-json.js whisprspace_300_threads_anchored_dataset.json --env .env.production
  *
  * Expects the env file to have:
  *   NEXT_PUBLIC_SUPABASE_URL
