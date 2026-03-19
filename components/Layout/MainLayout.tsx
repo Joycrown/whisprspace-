@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { publicRoutes } from "@/lib/utils/utils/routes"
 import Sidebar from "./Sidebar"
@@ -15,6 +16,16 @@ export default function MainLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+
+  // Global seed trigger — fires on mount and every 2 minutes across all pages
+  // so reply scheduling continues even when navigating away from the feed
+  useEffect(() => {
+    fetch('/api/cron/seed-trigger').catch(() => {})
+    const interval = setInterval(() => {
+      fetch('/api/cron/seed-trigger').catch(() => {})
+    }, 2 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
   const isPublicRoute =
     publicRoutes.includes(pathname || '') ||
     (pathname?.startsWith('/auth/') ?? false) ||
