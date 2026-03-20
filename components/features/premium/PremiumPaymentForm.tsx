@@ -42,8 +42,8 @@ export default function PremiumPaymentForm({
   };
 
   const planDetails: Record<'monthly' | 'annual', PlanDetail> = {
-    monthly: { price: 0.01, name: 'Monthly Plan', period: 'month' },
-    annual: { price: 18.0, name: 'Annual Plan', period: 'year', savings: '25%' }
+    monthly: { price: 1.5, name: 'Monthly Plan', period: 'month' },
+    annual: { price: 13.5, name: 'Annual Plan', period: 'year', savings: '25%' }
   };
 
   const selectedPlanDetails = planDetails[selectedPlan];
