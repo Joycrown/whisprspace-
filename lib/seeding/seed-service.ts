@@ -386,7 +386,7 @@ export async function markItemExecuted(itemId: string, threadId?: string) {
       target_thread_id: threadId || undefined,
     })
     .eq('id', itemId)
-    .in('status', ['approved', 'processing']); // accept either in case of retry
+    .in('status', ['approved', 'skipped']); // accept either in case of retry
 }
 
 export async function markItemFailed(itemId: string, errorMessage: string) {
@@ -398,7 +398,7 @@ export async function markItemFailed(itemId: string, errorMessage: string) {
       executed_at: new Date().toISOString(),
     })
     .eq('id', itemId)
-    .in('status', ['approved', 'processing']);
+    .in('status', ['approved', 'skipped']);
 }
 
 export async function approveScheduledBatch(batchDate: string) {
