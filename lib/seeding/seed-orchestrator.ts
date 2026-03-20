@@ -54,7 +54,7 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
     ? `${now.toISOString().split('T')[0]}-${now.getHours()}${now.getMinutes().toString().padStart(2, '0')}`
     : targetDate
       ? new Date(targetDate).toISOString().split('T')[0]
-      : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      : new Date().toISOString().split('T')[0];
 
   const date = new Date(batchDate.split('-').slice(0, 3).join('-'));
 
@@ -193,8 +193,8 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
 
     // Calculate thread creation time
     let threadTime: Date;
-    if (immediate || process.env.NODE_ENV === 'development') {
-      // Immediate / dev: start 1 min from now, spaced by thread_spacing_minutes
+    if (immediate) {
+      // Immediate mode: start 1 min from now, spaced by thread_spacing_minutes
       threadTime = new Date(Date.now() + 60000 + (i * config.thread_spacing_minutes * 60000));
     } else {
       threadTime = new Date(date);
