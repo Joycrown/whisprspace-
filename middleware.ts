@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
-// 10:00 AM WAT (UTC+1) on 20 March 2026 = 09:00 UTC
-const LAUNCH_TIME = new Date('2026-03-20T09:00:00.000Z').getTime()
+// 12:00 noon WAT (UTC+1) on 20 March 2026 = 11:00 UTC
+const LAUNCH_TIME = new Date('2026-03-20T11:00:00.000Z').getTime()
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
