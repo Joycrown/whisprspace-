@@ -63,7 +63,7 @@ export const siteConfig = {
   appUrl,
   authUrl: `${appUrl}/auth`,
   indexingEnabled,
-  ogImage: '/assets/whisprspaceLogoExICON.png',
+  ogImage: '/assets/ws-icon.png',
   twitterHandle: '@whisprspace',
   keywords: [...seoKeywords.home],
 };
