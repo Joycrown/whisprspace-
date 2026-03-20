@@ -465,11 +465,12 @@ export async function processScheduledQueue(limit: number = 5): Promise<{
   const threadMap: Record<string, string> = {};
 
   for (const item of dueItems) {
-    // Atomically claim this item by flipping status approved → processing.
-    // If two trigger calls run concurrently, only one will succeed here.
+    // Atomically claim this item by flipping approved → skipped as a lock.
+    // 'skipped' is immediately overwritten to 'executed' or 'failed' below.
+    // This prevents double-execution if two trigger calls run concurrently.
     const { data: claimed } = await supabaseAdmin
       .from('seed_scheduled_content')
-      .update({ status: 'processing' })
+      .update({ status: 'skipped' })
       .eq('id', item.id)
       .eq('status', 'approved') // only succeeds if still approved
       .select('id')
