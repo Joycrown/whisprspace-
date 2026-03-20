@@ -23,18 +23,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  const launched = Date.now() >= LAUNCH_TIME
-
-  if (!launched) {
-    // Lock every route to /launch
-    if (pathname !== '/launch') {
-      return NextResponse.redirect(new URL('/launch', request.url))
-    }
-  } else {
-    // After launch, redirect /launch back to home
-    if (pathname === '/launch') {
-      return NextResponse.redirect(new URL('/', request.url))
-    }
+  // After launch, redirect /launch back to home
+  if (pathname === '/launch') {
+    return NextResponse.redirect(new URL('/', request.url))
   }
 
   return NextResponse.next()
