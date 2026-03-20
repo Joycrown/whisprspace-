@@ -3,8 +3,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 
-// 10:00 AM WAT (UTC+1) on 20 March 2026 = 09:00 UTC
-const LAUNCH_TIME = new Date('2026-03-20T09:00:00.000Z').getTime()
+// 12:00 noon WAT (UTC+1) on 20 March 2026 = 11:00 UTC
+const LAUNCH_TIME = new Date('2026-03-20T11:00:00.000Z').getTime()
 const START_TIME  = new Date('2026-03-19T00:00:00.000Z').getTime()
 
 interface TimeLeft {
@@ -198,7 +198,7 @@ export default function LaunchPage() {
 
             <p className="mb-10 sm:mb-12 text-sm sm:text-[15px] text-white/38 max-w-[320px] leading-relaxed flex flex-col items-center gap-1">
               <span>Anonymous. Unfiltered. Real conversations.</span>
-              <span className="text-white/55">20 Mar 2026 · 10:00 AM</span>
+              <span className="text-white/55">20 Mar 2026 · 12:00 Noon</span>
             </p>
 
             {/* Countdown */}
