@@ -280,7 +280,7 @@ const ProfilePage = () => {
                 className={`bg-white/10 backdrop-blur rounded-lg p-4 border-2 transition-all hover:bg-white/20 ${selectedPlan === 'monthly' ? 'border-yellow-500' : 'border-transparent'
                   }`}
               >
-                <div className="text-xl sm:text-2xl font-bold mb-1">$0.01/mo</div>
+                <div className="text-xl sm:text-2xl font-bold mb-1">$1.50/mo</div>
                 <div className="text-xs sm:text-sm text-purple-200">Monthly Plan</div>
               </button>
               <button
@@ -288,7 +288,7 @@ const ProfilePage = () => {
                 className={`bg-white/10 backdrop-blur rounded-lg p-4 border-2 transition-all hover:bg-white/20 ${selectedPlan === 'annual' ? 'border-yellow-500' : 'border-transparent'
                   }`}
               >
-                <div className="text-xl sm:text-2xl font-bold mb-1">$18.00/yr</div>
+                <div className="text-xl sm:text-2xl font-bold mb-1">$13.50/yr</div>
                 <div className="text-xs sm:text-sm text-purple-200">
                   Annual Plan <span className="text-green-400 font-semibold">(Save 25%)</span>
                 </div>
