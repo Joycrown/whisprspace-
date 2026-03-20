@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const planFallbackUsd = plan === 'annual' ? 18 : 2
+    const planFallbackUsd = plan === 'annual' ? 13.5 : 1.5
     const amountUsd = Number(resolvedAmountUsd ?? planFallbackUsd)
     const verifiedAmount = Number(verified?.amount)
     const verifiedCurrency = String(verified?.currency || '').toUpperCase()
