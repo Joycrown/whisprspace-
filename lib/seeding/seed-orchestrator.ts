@@ -372,20 +372,6 @@ export async function checkAndGenerateIfNeeded(): Promise<{
   const config = await seedService.getSeedConfig();
   if (!config.is_active) return { generated: false, reason: 'inactive' };
 
-  // Skip if there are still APPROVED items scheduled within the next 48 hours.
-  // Pending items are not counted — they have no automatic approval mechanism
-  // and should not block auto-generation of an immediate batch.
-  const fortyEightHoursFromNow = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-  const { count: queuedCount } = await supabaseAdmin
-    .from('seed_scheduled_content')
-    .select('*', { count: 'exact', head: true })
-    .eq('status', 'approved')
-    .lte('scheduled_at', fortyEightHoursFromNow);
-
-  if (queuedCount && queuedCount > 0) {
-    return { generated: false, reason: 'queue not empty' };
-  }
-
   const nowIso = new Date().toISOString();
   const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
 
@@ -418,7 +404,23 @@ export async function checkAndGenerateIfNeeded(): Promise<{
 
   const allRepliesExhausted = !pendingRepliesCount || pendingRepliesCount === 0;
 
+  // If threads are healthy and there's still reply content to post, skip generation.
+  // We intentionally check thread expiry status FIRST — if threads are expiring
+  // soon (or absent), we must generate even if there are queued items for those
+  // dying threads.
   if (!noActiveThreads && !allExpiringSoon && !allRepliesExhausted) {
+    // Threads are healthy; only skip if there are also queued approved items.
+    const fortyEightHoursFromNow = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+    const { count: queuedCount } = await supabaseAdmin
+      .from('seed_scheduled_content')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'approved')
+      .lte('scheduled_at', fortyEightHoursFromNow);
+
+    if (queuedCount && queuedCount > 0) {
+      return { generated: false, reason: 'queue not empty' };
+    }
+
     return { generated: false, reason: 'threads still active' };
   }
 
