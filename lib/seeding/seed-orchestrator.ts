@@ -393,34 +393,11 @@ export async function checkAndGenerateIfNeeded(): Promise<{
   const noActiveThreads = !activeCount || activeCount === 0;
   const allExpiringSoon = activeCount !== null && activeCount > 0 && expiringCount === activeCount;
 
-  // Also allow generation when active threads exist but all their scheduled replies
-  // have already been executed — meaning threads are "content-complete" and the
-  // feed is stale even though the threads haven't expired yet.
-  const { count: pendingRepliesCount } = await supabaseAdmin
-    .from('seed_scheduled_content')
-    .select('*', { count: 'exact', head: true })
-    .eq('action', 'create_reply')
-    .eq('status', 'approved');
-
-  const allRepliesExhausted = !pendingRepliesCount || pendingRepliesCount === 0;
-
-  // If threads are healthy and there's still reply content to post, skip generation.
-  // We intentionally check thread expiry status FIRST — if threads are expiring
-  // soon (or absent), we must generate even if there are queued items for those
-  // dying threads.
-  if (!noActiveThreads && !allExpiringSoon && !allRepliesExhausted) {
-    // Threads are healthy; only skip if there are also queued approved items.
-    const fortyEightHoursFromNow = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-    const { count: queuedCount } = await supabaseAdmin
-      .from('seed_scheduled_content')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'approved')
-      .lte('scheduled_at', fortyEightHoursFromNow);
-
-    if (queuedCount && queuedCount > 0) {
-      return { generated: false, reason: 'queue not empty' };
-    }
-
+  // Only generate when threads are actually expiring or absent.
+  // Replies being fully executed does NOT trigger generation — threads may still
+  // be live and visible, so creating a new batch would cause content to appear
+  // reused or overlapping from the user's perspective.
+  if (!noActiveThreads && !allExpiringSoon) {
     return { generated: false, reason: 'threads still active' };
   }
 
