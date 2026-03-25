@@ -148,6 +148,58 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, data: result });
       }
 
+      case 'reschedule-now': {
+        if (!date) {
+          return NextResponse.json({ error: 'Date is required for reschedule-now' }, { status: 400 });
+        }
+        // Fetch all pending/approved items for this batch
+        const { data: items, error: fetchErr } = await supabaseAdmin
+          .from('seed_scheduled_content')
+          .select('id, action, scheduled_at')
+          .eq('batch_date', date)
+          .in('status', ['pending', 'approved'])
+          .order('scheduled_at', { ascending: true });
+
+        if (fetchErr) throw new Error(fetchErr.message);
+        if (!items || items.length === 0) {
+          return NextResponse.json({ success: true, data: { rescheduled: 0 } });
+        }
+
+        // Get spacing config
+        const config = await seedService.getSeedConfig();
+        const now = Date.now();
+
+        // Rebuild timestamps: threads first (in original order), replies follow
+        const threads = items.filter((i: { id: string; action: string; scheduled_at: string }) => i.action === 'create_thread');
+        const replies = items.filter((i: { id: string; action: string; scheduled_at: string }) => i.action === 'create_reply');
+
+        // Space threads from 1 min from now
+        const threadUpdates = threads.map((item: { id: string; action: string; scheduled_at: string }, idx: number) => ({
+          id: item.id,
+          scheduled_at: new Date(now + 60000 + idx * config.thread_spacing_minutes * 60000).toISOString(),
+        }));
+
+        // Replies keep their relative offset from their thread's original time
+        const firstOriginalThreadTime = threads.length > 0 ? new Date(threads[0].scheduled_at).getTime() : 0;
+        const replyUpdates = replies.map((item: { id: string; action: string; scheduled_at: string }) => {
+          const originalOffset = new Date(item.scheduled_at).getTime() - firstOriginalThreadTime;
+          return {
+            id: item.id,
+            scheduled_at: new Date(now + 60000 + originalOffset).toISOString(),
+          };
+        });
+
+        const allUpdates = [...threadUpdates, ...replyUpdates];
+        for (const u of allUpdates) {
+          await supabaseAdmin
+            .from('seed_scheduled_content')
+            .update({ scheduled_at: u.scheduled_at })
+            .eq('id', u.id);
+        }
+
+        return NextResponse.json({ success: true, data: { rescheduled: allUpdates.length } });
+      }
+
       case 'process-queue': {
         const result = await seedOrchestrator.processScheduledQueue(10);
         return NextResponse.json({ success: true, data: result });
