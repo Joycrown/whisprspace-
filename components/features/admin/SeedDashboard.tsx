@@ -279,14 +279,23 @@ export default function SeedDashboard() {
                     )}
                     {(row.data?.pending > 0 || row.data?.total === 0) && (
                       <button
-                        onClick={() => row.data?.total === 0 
-                          ? handleActionClick('prepare-daily', { date: row.data?.date }) 
+                        onClick={() => row.data?.total === 0
+                          ? handleActionClick('prepare-daily', { date: row.data?.date })
                           : handleActionClick('approve-day', { date: row.data?.date })
                         }
                         disabled={isActionLoading}
                         className="text-purple-600 hover:text-purple-800 font-medium text-sm"
                       >
                         {row.data?.total === 0 ? 'Generate' : 'Approve'}
+                      </button>
+                    )}
+                    {row.data?.approved > 0 && (
+                      <button
+                        onClick={() => handleActionClick('reschedule-now', { date: row.data?.date })}
+                        disabled={isActionLoading}
+                        className="text-green-600 hover:text-green-800 font-medium text-sm"
+                      >
+                        Push Now
                       </button>
                     )}
                   </td>
