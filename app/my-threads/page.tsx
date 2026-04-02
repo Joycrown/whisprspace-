@@ -11,6 +11,7 @@ import { fetchInvitedThreads, joinThread } from '@/lib/threads';
 import { buildThreadManagePath, buildThreadPath } from '@/lib/threads/thread-url';
 import { useToast } from '@/components/ui/Toast';
 import * as rawDb from '@/lib/core/supabase/raw-db';
+import { supabase } from '@/lib/core/supabase/client';
 import AppLoadingState from '@/components/ui/AppLoadingState';
 
 type TabType = 'joined' | 'created' | 'invited';
@@ -47,6 +48,7 @@ export default function MyThreadsPage() {
   const [invitedThreads, setInvitedThreads] = useState<Thread[]>([]);
   const [joiningThreadId, setJoiningThreadId] = useState<string | null>(null);
   const [messageCountsByThread, setMessageCountsByThread] = useState<Record<string, number>>({});
+  const [summaryIds, setSummaryIds] = useState<Record<string, string>>({});
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewThread, setPreviewThread] = useState<Thread | null>(null);
   const [previewIsJoinAction, setPreviewIsJoinAction] = useState(false);
@@ -147,6 +149,32 @@ export default function MyThreadsPage() {
     thread.author.id === currentUserId
   );
 
+  // Fetch summary IDs for expired threads created by this user (for impact links)
+  // Runs when the created tab is active or when createdThreads changes
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId || activeTab !== 'created') return;
+
+    const now = new Date();
+    const expiredIds = createdThreads
+      .filter(t => t.expiresAt && new Date(t.expiresAt) <= now)
+      .map(t => t.id);
+
+    if (expiredIds.length === 0) return;
+
+    supabase
+      .from('thread_summaries')
+      .select('id, thread_id')
+      .in('thread_id', expiredIds)
+      .eq('creator_id', userId)
+      .then(({ data }) => {
+        if (!data) return;
+        const map: Record<string, string> = {};
+        data.forEach((row: { thread_id: string; id: string }) => { map[row.thread_id] = row.id; });
+        setSummaryIds(map);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, session?.user?.id, threads.length]);
 
 
   const displayThreads = activeTab === 'joined'
@@ -537,6 +565,19 @@ export default function MyThreadsPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Impact link — only for expired threads in the Created tab */}
+                    {isCreator && activeTab === 'created' && thread.expiresAt && new Date(thread.expiresAt) <= new Date() && summaryIds[thread.id] && (
+                      <div className="mb-3">
+                        <Link
+                          href={`/summary/${summaryIds[thread.id]}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-xs text-purple-400 hover:text-purple-300 transition-colors underline underline-offset-2"
+                        >
+                          View impact →
+                        </Link>
+                      </div>
+                    )}
 
                     {/* Footer */}
                     <div className="flex items-center justify-between pt-3 md:pt-4 border-t border-gray-700 gap-3">

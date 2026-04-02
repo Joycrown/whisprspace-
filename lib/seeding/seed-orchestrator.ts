@@ -194,8 +194,8 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
     // Calculate thread creation time
     let threadTime: Date;
     if (immediate) {
-      // Immediate mode: start 1 min from now, spaced by thread_spacing_minutes
-      threadTime = new Date(Date.now() + 60000 + (i * config.thread_spacing_minutes * 60000));
+      // Immediate mode: first thread is due now, subsequent ones spaced by thread_spacing_minutes
+      threadTime = new Date(Date.now() + (i * config.thread_spacing_minutes * 60000));
     } else {
       threadTime = new Date(date);
       const threadHour = config.first_thread_hour + (i * config.thread_spacing_minutes / 60);
@@ -401,7 +401,30 @@ export async function checkAndGenerateIfNeeded(): Promise<{
     return { generated: false, reason: 'threads still active' };
   }
 
-  // Generate with immediate timing (threads start ~1 min from now)
+  // Guard: don't generate a new batch if there are already pending/approved items
+  // waiting to be executed. This prevents cascading duplicate batches when the
+  // 2-minute trigger fires before newly-scheduled threads have been created.
+  const { count: queuedCount } = await supabaseAdmin
+    .from('seed_scheduled_content')
+    .select('*', { count: 'exact', head: true })
+    .in('status', ['pending', 'approved']);
+
+  if (queuedCount && queuedCount > 0) {
+    return { generated: false, reason: 'items already queued' };
+  }
+
+  // Guard: don't attempt generation if the seed system hasn't been initialized.
+  // No seed users means initializeSeedSystem() has never been run.
+  const { count: seedUserCount } = await supabaseAdmin
+    .from('users')
+    .select('*', { count: 'exact', head: true })
+    .eq('is_seed', true);
+
+  if (!seedUserCount || seedUserCount === 0) {
+    return { generated: false, reason: 'not initialized — run initializeSeedSystem() first' };
+  }
+
+  // Generate with immediate timing (first thread is due immediately)
   const result = await prepareDailySchedule(undefined, true);
 
   if (result.threadsScheduled === 0) {

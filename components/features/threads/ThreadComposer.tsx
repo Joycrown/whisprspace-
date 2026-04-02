@@ -242,6 +242,10 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft 
           memberLimit: undefined,
         });
 
+        // Signal MainLayout's PostThreadNudge to appear — fires before the router push
+        // so both components are still mounted and can receive the event.
+        window.dispatchEvent(new CustomEvent('whisprspace:inbox-nudge'))
+
         // Navigate to the new thread or threads list
         setTimeout(() => {
           router.push(buildThreadPath({ id: threadId, title: formData.title }));
@@ -250,10 +254,14 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft 
         throw new Error(storeError || 'Failed to create thread');
       }
     } catch (error) {
+      const msg = error instanceof Error ? error.message : ''
+      const isBlocked = msg === 'CONTENT_BLOCKED'
       showToast({
         type: 'error',
-        title: 'Creation Failed',
-        message: error instanceof Error ? error.message : 'Failed to create thread. Please try again.',
+        title: isBlocked ? 'Hold on.' : 'Creation Failed',
+        message: isBlocked
+          ? 'This space is built on honest expression — not harm. Please rephrase and try again.'
+          : msg || 'Failed to create thread. Please try again.',
       });
     }
   };
