@@ -284,8 +284,8 @@ export const createContentReport = async (
   contentId: string,
   reportedUserId: string,
   reason: string,
-  description?: string
-): Promise<{ success: boolean; error: string | null }> => {
+  additionalContext?: string
+): Promise<{ success: boolean; error: string | null; alreadyReported?: boolean }> => {
   try {
     const { data: { user } } = await supabase.auth.getUser()
 
@@ -301,10 +301,22 @@ export const createContentReport = async (
         content_type: contentType,
         content_id: contentId,
         reason,
-        description,
+        description: additionalContext,       // legacy column kept for compatibility
+        additional_context: additionalContext, // new column from migration
       })
 
-    if (error) throw error
+    if (error) {
+      // Unique constraint violation — user already reported this content
+      if (error.code === '23505') {
+        return { success: false, error: 'already_reported', alreadyReported: true }
+      }
+      throw error
+    }
+
+    // PostHog — track report submission (no content logged)
+    import('posthog-js').then(({ default: posthog }) => {
+      posthog.capture('content_reported', { content_type: contentType, reason })
+    }).catch(() => {})
 
     return { success: true, error: null }
   } catch (error: any) {

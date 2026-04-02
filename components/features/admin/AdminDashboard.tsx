@@ -5,6 +5,7 @@ import { useIsAdmin } from '@/lib/admin'
 import AnalyticsDashboard from '../analytics/AnalyticsDashboard'
 import UsersTable from './UsersTable'
 import ContentReportsTable from './ContentReportsTable'
+import { AdminReportQueue } from '@/components/moderation/AdminReportQueue'
 import ModerationActionsTable from './ModerationActionsTable'
 import BanUserModal from './BanUserModal'
 import UserDetailsModal from './UserDetailsModal'
@@ -116,7 +117,15 @@ export default function AdminDashboard() {
           />
         )}
         
-        {activeTab === 'reports' && <ContentReportsTable />}
+        {activeTab === 'reports' && (
+          <div className="space-y-10">
+            <AdminReportQueue />
+            <div>
+              <h2 className="text-lg font-semibold text-white mb-4">All Reports History</h2>
+              <ContentReportsTable />
+            </div>
+          </div>
+        )}
 
         {activeTab === 'payouts' && <PayoutRequestsTable />}
         
