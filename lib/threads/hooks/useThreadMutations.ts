@@ -330,8 +330,12 @@ export function useCreateThreadMessageMutation() {
     },
 
     onError: (err, newMsg, context) => {
-
-      toast.error(`Failed to send: ${err.message}`);
+      const isBlocked = err?.message === 'CONTENT_BLOCKED'
+      toast.error(
+        isBlocked
+          ? 'This space protects honest expression — not harm. Please rephrase.'
+          : `Failed to send: ${err.message}`
+      )
       // Rollback
       if (context?.previousThread) {
         queryClient.setQueryData(queryKeys.threads.detail(newMsg.threadId), context.previousThread);

@@ -10,6 +10,7 @@ import { ThreadFilters, Thread } from "@/types";
 import GlobalSearchBar from "@/components/features/threads/GlobalSearchBar";
 import { useRealtimeFeed } from "@/lib/core/realtime/useRealtimeThread";
 import AppLoadingState from "@/components/ui/AppLoadingState";
+import { InboxLinkNudge } from "@/components/features/inbox/InboxLinkNudge";
 
 type TabType = 'all' | 'popular' | 'recent';
 
@@ -223,6 +224,9 @@ const ThreadsPage = () => {
             </div>
           )}
         </div>
+
+        {/* Inbox link nudge — shown once per 14 days for authenticated users */}
+        {canCreate && <InboxLinkNudge />}
 
         {/* Navigation Tabs - Mobile optimized with horizontal scroll */}
         <div className="pt-2 md:pt-4 border-b border-gray-800 flex-shrink-0 w-full overflow-hidden">

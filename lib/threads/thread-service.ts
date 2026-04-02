@@ -1,5 +1,6 @@
 import * as rawDb from '@/lib/core/supabase/raw-db';
 import * as rawAuth from '@/lib/core/supabase/raw-auth';
+import { containsBlockedContent } from '@/lib/moderation/blocklist';
 import { Thread, ThreadData, ThreadFilters, CreateThreadForm, Participant, Message, AccessCode, CHARACTER_LIMITS } from '@/types';
 import { calculateThreadExpiration } from '../utils/utils/helpers/threadHelpers';
 import { uploadService } from '@/lib/utils/upload-service';
@@ -56,6 +57,9 @@ export const fetchThreads = async (
     
     // Deleted check
     queryFilters['deleted_at'] = 'is.null';
+
+    // Only show publicly-visible content — hide auto-hidden and removed threads
+    queryFilters['moderation_status'] = 'eq.visible';
 
     const sanitizeSearch = (value: string) =>
       sanitizeSingleLineInput(value, { maxLength: 120 }).replace(/[^a-zA-Z0-9\s_-]/g, '').trim();
@@ -244,9 +248,12 @@ export const fetchThreadById = async (
       filters: {
         'id': rawDb.filter.eq(safeThreadId),
         'deleted_at': 'is.null',
-        // Nested ordering/limits for messages
+        // Only fetch visible threads — hidden/removed return null
+        'moderation_status': 'eq.visible',
+        // Nested ordering/limits/visibility for messages
         'messages.order': 'created_at.desc',
-        'messages.limit': 50
+        'messages.limit': 50,
+        'messages.moderation_status': 'eq.visible',
       },
       single: true
     });
@@ -343,7 +350,17 @@ export const createThread = async (
       if (type === 'poll' && sanitizedPollOptions.length < 2) {
         throw new Error('Poll threads require at least 2 options.');
       }
-    
+
+      // Keyword filter — runs before any DB write
+      const modCheck = containsBlockedContent(`${title} ${content}`)
+      if (modCheck.blocked) {
+        // Fire-and-forget PostHog event — import lazily to avoid SSR issues
+        import('posthog-js').then(({ default: posthog }) => {
+          posthog.capture('post_blocked_by_filter', { content_type: 'thread' })
+        }).catch(() => {})
+        throw new Error('CONTENT_BLOCKED')
+      }
+
     // Get user's premium status
     const { data: userData } = await rawDb.select('users', {
       select: 'is_premium',
@@ -769,6 +786,17 @@ export const addMessage = async (
 
   if (safeType === 'text' && !safeContent && safeAttachments.length === 0) {
     throw new Error('Message cannot be empty');
+  }
+
+  // Keyword filter — runs before any DB write
+  if (safeContent) {
+    const modCheck = containsBlockedContent(safeContent)
+    if (modCheck.blocked) {
+      import('posthog-js').then(({ default: posthog }) => {
+        posthog.capture('post_blocked_by_filter', { content_type: 'message' })
+      }).catch(() => {})
+      throw new Error('CONTENT_BLOCKED')
+    }
   }
 
   const { data: insertedData, error: insertError } = await rawDb.insert('messages', {

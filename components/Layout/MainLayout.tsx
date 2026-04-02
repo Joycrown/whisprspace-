@@ -8,6 +8,8 @@ import BottomNav from "./BottomNav"
 import PWAInstallPrompt from "@/components/pwa/PWAInstallPrompt"
 import NotificationEducationPrompt from "@/components/features/notifications/NotificationEducationPrompt"
 import FirstTimeEducationModal from "@/components/features/onboarding/FirstTimeEducationModal"
+import { UnseenSummaryModal } from "@/components/features/threads/UnseenSummaryModal"
+import { PostThreadNudge } from "@/components/features/inbox/PostThreadNudge"
 
 // components/layout/MainLayout.tsx
 export default function MainLayout({
@@ -67,6 +69,8 @@ export default function MainLayout({
       <FirstTimeEducationModal />
       <NotificationEducationPrompt />
       <PWAInstallPrompt />
+      <UnseenSummaryModal />
+      <PostThreadNudge />
     </div>
   )
 }
