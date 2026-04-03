@@ -76,6 +76,7 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
     .from('seed_playbook_threads')
     .select('*')
     .eq('is_used', false)
+    .eq('is_blacklisted', false)
     .in('category', PRIORITY_CATEGORIES)
     .order('created_at', { ascending: true })
     .limit(prioritySlots);
@@ -84,6 +85,7 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
     .from('seed_playbook_threads')
     .select('*')
     .eq('is_used', false)
+    .eq('is_blacklisted', false)
     .not('category', 'in', `(${PRIORITY_CATEGORIES.join(',')})`)
     .order('created_at', { ascending: true })
     .limit(otherSlots);
@@ -106,6 +108,7 @@ export async function prepareDailySchedule(targetDate?: string, immediate = fals
       .from('seed_playbook_threads')
       .select('*')
       .eq('is_used', false)
+      .eq('is_blacklisted', false)
       .order('created_at', { ascending: true })
       .limit(config.threads_per_day);
     for (const t of (fallback || [])) {
@@ -619,4 +622,141 @@ export async function getSeedingStatus() {
       },
     },
   };
+}
+
+/**
+ * Remove a scheduled playbook thread + all its replies from a batch,
+ * blacklist it so it never gets scheduled again, then slot in a replacement.
+ *
+ * Returns the number of replacement items created (0 if playbook is exhausted).
+ */
+export async function removeAndReplaceScheduledThread(
+  playbookThreadId: string,
+  batchDate: string,
+): Promise<{ removed: number; replaced: boolean }> {
+  // 1. Count items being removed
+  const { count: removedCount } = await supabaseAdmin
+    .from('seed_scheduled_content')
+    .select('*', { count: 'exact', head: true })
+    .eq('playbook_thread_id', playbookThreadId)
+    .eq('batch_date', batchDate)
+    .in('status', ['pending', 'approved']);
+
+  // 2. Delete all scheduled items for this thread in this batch
+  await supabaseAdmin
+    .from('seed_scheduled_content')
+    .delete()
+    .eq('playbook_thread_id', playbookThreadId)
+    .eq('batch_date', batchDate)
+    .in('status', ['pending', 'approved']);
+
+  // 3. Permanently blacklist the playbook thread
+  await supabaseAdmin
+    .from('seed_playbook_threads')
+    .update({ is_blacklisted: true })
+    .eq('id', playbookThreadId);
+
+  // 4. Pick the thread's original scheduled_at so replacement slots in at the same time
+  // (already deleted, so we stored nothing — use now as a sensible default)
+  const threadTime = new Date();
+
+  // 5. Find a replacement — same category first, then any available
+  const { data: blacklistedThread } = await supabaseAdmin
+    .from('seed_playbook_threads')
+    .select('category')
+    .eq('id', playbookThreadId)
+    .maybeSingle();
+
+  const category = blacklistedThread?.category;
+
+  let replacement: any = null;
+
+  if (category) {
+    const { data: sameCat } = await supabaseAdmin
+      .from('seed_playbook_threads')
+      .select('*')
+      .eq('is_used', false)
+      .eq('is_blacklisted', false)
+      .eq('category', category)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    replacement = sameCat;
+  }
+
+  if (!replacement) {
+    const { data: any } = await supabaseAdmin
+      .from('seed_playbook_threads')
+      .select('*')
+      .eq('is_used', false)
+      .eq('is_blacklisted', false)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    replacement = any;
+  }
+
+  if (!replacement) {
+    return { removed: removedCount ?? 0, replaced: false };
+  }
+
+  // 6. Fetch config + users
+  const config = await seedService.getSeedConfig();
+  const userMap = await seedService.getSeedUserMap();
+
+  // 7. Fetch replies for replacement thread
+  const { data: replies } = await supabaseAdmin
+    .from('seed_playbook_replies')
+    .select('id, thread_playbook_id, persona_tag, content, sequence_order')
+    .eq('thread_playbook_id', replacement.id)
+    .order('sequence_order', { ascending: true });
+
+  const creatorUserId = userMap[replacement.creator_persona];
+  if (!creatorUserId) return { removed: removedCount ?? 0, replaced: false };
+
+  const newItems: any[] = [];
+
+  newItems.push({
+    action: 'create_thread',
+    playbook_thread_id: replacement.id,
+    seed_user_id: creatorUserId,
+    scheduled_at: threadTime.toISOString(),
+    status: 'pending',
+    batch_date: batchDate,
+  });
+
+  const targetReplyCount = config.max_participants_per_thread * config.messages_per_user;
+  let slot = 0;
+
+  for (const reply of (replies || [])) {
+    if (slot >= targetReplyCount) break;
+    const participantUserId = userMap[reply.persona_tag];
+    if (!participantUserId) continue;
+
+    const replyTime = new Date(
+      threadTime.getTime() + (slot + 1) * config.reply_interval_minutes * 60 * 1000
+    );
+
+    newItems.push({
+      action: 'create_reply',
+      playbook_thread_id: replacement.id,
+      playbook_reply_id: reply.id,
+      seed_user_id: participantUserId,
+      scheduled_at: replyTime.toISOString(),
+      status: 'pending',
+      batch_date: batchDate,
+    });
+
+    slot++;
+  }
+
+  await supabaseAdmin.from('seed_scheduled_content').insert(newItems);
+
+  // Mark replacement as used
+  await supabaseAdmin
+    .from('seed_playbook_threads')
+    .update({ is_used: true })
+    .eq('id', replacement.id);
+
+  return { removed: removedCount ?? 0, replaced: true };
 }
