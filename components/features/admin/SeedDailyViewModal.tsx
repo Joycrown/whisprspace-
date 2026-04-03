@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Save, Clock, MessageSquare, AlertCircle, RefreshCw } from 'lucide-react'
+import { X, Save, Clock, MessageSquare, AlertCircle, RefreshCw, Trash2 } from 'lucide-react'
 import { getAccessToken } from '@/lib/utils/auth-token-cache'
 import * as rawAuth from '@/lib/core/supabase/raw-auth'
 import { useToastHelpers } from '@/components/ui/Toast'
@@ -20,6 +20,8 @@ export default function SeedDailyViewModal({ date, onClose, onApproved }: SeedDa
   const [editContent, setEditContent] = useState('')
   const [isSavingItem, setIsSavingItem] = useState(false)
   const [isApprovingAll, setIsApprovingAll] = useState(false)
+  const [removingId, setRemovingId] = useState<string | null>(null)
+  const [confirmRemoveItem, setConfirmRemoveItem] = useState<any | null>(null)
   const toast = useToastHelpers()
 
   const fetchItems = async () => {
@@ -106,6 +108,35 @@ export default function SeedDailyViewModal({ date, onClose, onApproved }: SeedDa
       toast.error('Approval failed', err.message)
     } finally {
       setIsApprovingAll(false)
+    }
+  }
+
+  const handleRemoveAndReplace = async (item: any) => {
+    try {
+      setRemovingId(item.id)
+      const token = getAccessToken() || rawAuth.getSession()?.access_token
+      const res = await fetch('/api/admin/seed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token || ''}` },
+        body: JSON.stringify({
+          action: 'remove-and-replace',
+          playbookThreadId: item.playbook_thread_id,
+          batchDate: item.batch_date,
+        }),
+      })
+      const data = await res.json()
+      if (!data.success) throw new Error(data.error)
+      const { replaced } = data.data
+      toast.success(
+        'Content removed',
+        replaced ? 'Replaced with a new thread from the playbook.' : 'Removed. No replacement available — playbook may be exhausted.'
+      )
+      setConfirmRemoveItem(null)
+      await fetchItems()
+    } catch (err: any) {
+      toast.error('Remove failed', err.message)
+    } finally {
+      setRemovingId(null)
     }
   }
 
@@ -209,8 +240,19 @@ export default function SeedDailyViewModal({ date, onClose, onApproved }: SeedDa
                       </p>
                       
                       {item.status === 'pending' && (
-                        <div className="mt-4 flex justify-end">
-                           <button 
+                        <div className="mt-4 flex justify-end gap-4">
+                          <button
+                            onClick={() => setConfirmRemoveItem(item)}
+                            disabled={removingId === item.id}
+                            className="flex items-center gap-1.5 text-sm font-medium text-red-500 hover:text-red-700 disabled:opacity-40"
+                          >
+                            {removingId === item.id
+                              ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              : <Trash2 className="w-3.5 h-3.5" />
+                            }
+                            Remove & Replace
+                          </button>
+                          <button
                             onClick={() => handleEdit(item)}
                             className="text-sm font-medium text-blue-600 hover:text-blue-800"
                           >
@@ -229,13 +271,13 @@ export default function SeedDailyViewModal({ date, onClose, onApproved }: SeedDa
 
         {/* Footer */}
         <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3 bg-white dark:bg-gray-800">
-          <button 
+          <button
             onClick={onClose}
             className="px-4 py-2 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium transition-colors"
           >
             Close
           </button>
-          <button 
+          <button
             onClick={handleApproveAll}
             disabled={isApprovingAll || isSavingItem || items.length === 0 || !items.some(i => i.status === 'pending')}
             className="bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white px-6 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-colors"
@@ -245,6 +287,46 @@ export default function SeedDailyViewModal({ date, onClose, onApproved }: SeedDa
           </button>
         </div>
       </div>
+
+      {/* Remove & Replace confirmation */}
+      {confirmRemoveItem && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900 dark:text-white">Remove this content?</p>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  This will remove the thread and all its replies from the schedule. The content will be <span className="font-medium text-red-500">permanently blacklisted</span> and never scheduled again. A replacement will be pulled from the playbook.
+                </p>
+              </div>
+            </div>
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 text-sm text-gray-700 dark:text-gray-300 line-clamp-3">
+              {confirmRemoveItem.action === 'create_thread'
+                ? confirmRemoveItem.thread?.title || confirmRemoveItem.thread?.content
+                : confirmRemoveItem.reply?.content}
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setConfirmRemoveItem(null)}
+                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleRemoveAndReplace(confirmRemoveItem)}
+                disabled={!!removingId}
+                className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 transition-colors"
+              >
+                {removingId ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Remove & Replace
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

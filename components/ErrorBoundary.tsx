@@ -11,7 +11,7 @@ interface Props {
 interface State {
   hasError: boolean
   error: Error | null
-  
+
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -57,7 +57,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 Something went wrong
               </h2>
               <p className="text-gray-600 text-sm">
-                We encountered an unexpected error. Don't worry, your data is safe.
+                We encountered an unexpected error. Dont worry, your data is safe.
               </p>
             </div>
 
