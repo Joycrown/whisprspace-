@@ -220,9 +220,18 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: true, message: 'All seed data cleaned up' });
       }
 
+      case 'remove-and-replace': {
+        const { playbookThreadId, batchDate } = body;
+        if (!playbookThreadId || !batchDate) {
+          return NextResponse.json({ error: 'playbookThreadId and batchDate are required' }, { status: 400 });
+        }
+        const result = await seedOrchestrator.removeAndReplaceScheduledThread(playbookThreadId, batchDate);
+        return NextResponse.json({ success: true, data: result });
+      }
+
       default:
         return NextResponse.json(
-          { error: `Unknown action: ${action}. Valid: initialize, prepare-daily, approve-day, process-queue, pause, resume, cleanup` },
+          { error: `Unknown action: ${action}. Valid: initialize, prepare-daily, approve-day, process-queue, pause, resume, cleanup, remove-and-replace` },
           { status: 400 }
         );
     }
