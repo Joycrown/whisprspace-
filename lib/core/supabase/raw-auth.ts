@@ -313,13 +313,30 @@ export async function signOut(): Promise<{ error: Error | null }> {
   }
 }
 
+// Mutex: if a refresh is already in-flight, return the same promise instead of
+// firing a second request. This prevents the race condition between AuthProvider
+// and the module-level init both calling refreshToken() simultaneously, which
+// causes the second caller to consume an already-rotated refresh token and
+// trigger an unintended SIGNED_OUT.
+let _refreshInProgress: Promise<AuthResponse> | null = null;
+
 /**
  * Refresh access token
  */
-export async function refreshToken(): Promise<AuthResponse> {
+export function refreshToken(): Promise<AuthResponse> {
+  if (_refreshInProgress) return _refreshInProgress;
+
+  _refreshInProgress = _doRefresh().finally(() => {
+    _refreshInProgress = null;
+  });
+
+  return _refreshInProgress;
+}
+
+async function _doRefresh(): Promise<AuthResponse> {
   try {
     const session = readStoredSession();
-    
+
     if (!session?.refresh_token) {
       throw new Error('No refresh token available');
     }
@@ -351,7 +368,6 @@ export async function refreshToken(): Promise<AuthResponse> {
     return { session: newSession, user: newSession.user, error: null };
   } catch (error: any) {
     console.error('[RawAuth] Token refresh error:', error);
-    // Clear invalid session
     saveSession(null);
     emitAuthEvent('SIGNED_OUT', null);
     return { session: null, user: null, error };
@@ -406,17 +422,19 @@ function cancelTokenRefresh() {
   }
 }
 
-// Initialize on module load
+// Initialize on module load — only schedule the refresh timer for non-expired
+// sessions. Expired sessions are handled exclusively by AuthProvider's
+// validateSessionFromBackend, which has proper retry and redirect logic.
+// Having both call refreshToken() simultaneously caused a race: the second
+// caller consumed the already-rotated refresh token and triggered SIGNED_OUT.
 if (typeof window !== 'undefined') {
   const session = readStoredSession();
   if (session) {
     const timeUntilExpiry = session.expires_at - Math.floor(Date.now() / 1000);
     if (timeUntilExpiry > 0) {
       scheduleTokenRefresh(timeUntilExpiry);
-    } else {
-      // Expired - try to refresh
-      refreshToken();
     }
+    // Expired sessions: AuthProvider calls refreshToken() after mount.
   }
 }
 
