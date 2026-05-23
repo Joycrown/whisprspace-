@@ -405,6 +405,12 @@ const AuthPage = () => {
               </div>
             </div>
 
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-left">
+              <p className="text-xs text-amber-800 leading-relaxed">
+                <span className="font-semibold">Heads up:</span> Guest accounts are temporary and you can lose access permanently.
+              </p>
+            </div>
+
             <button
               onClick={handleAnonymousJoin}
               disabled={isLoading}
