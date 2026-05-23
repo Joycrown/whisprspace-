@@ -1,0 +1,159 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
+import { resolveUserFromRequest } from '@/lib/security/request-auth'
+import { getTrustedAppBaseUrl } from '@/lib/security/app-url'
+import { buildInboxMessageContent, buildWelcomeEmailHtml } from '@/lib/welcome/templates'
+
+const SYSTEM_USER_ID = 'ffffffff-ffff-ffff-ffff-ffffffffffff'
+
+async function isAdmin(userId: string): Promise<boolean> {
+  const [{ data: u }, { data: a }] = await Promise.all([
+    supabaseAdmin.from('users').select('is_admin').eq('id', userId).single(),
+    supabaseAdmin.from('admin_users').select('role').eq('user_id', userId).maybeSingle(),
+  ])
+  return u?.is_admin === true || !!a
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const caller = await resolveUserFromRequest(request)
+    if (!caller) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (!(await isAdmin(caller.id))) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const baseUrl = getTrustedAppBaseUrl(request)
+    const gettingStartedUrl = `${baseUrl}/getting-started`
+    const brevoApiKey =
+      process.env.BREVO_TRANSACTIONAL_API_KEY || process.env.NEXT_PUBLIC_BREVO_API_KEY
+
+    // Fetch all users except the system bot itself
+    const { data: users, error: usersError } = await supabaseAdmin
+      .from('users')
+      .select('id, anonymous_id, username, email')
+      .neq('id', SYSTEM_USER_ID)
+
+    if (usersError || !users) {
+      return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
+    }
+
+    // Find all conversations the bot is already in
+    const { data: existingConvParticipants } = await supabaseAdmin
+      .from('conversation_participants')
+      .select('conversation_id')
+      .eq('user_id', SYSTEM_USER_ID)
+
+    const botConversationIds = (existingConvParticipants ?? []).map((r) => r.conversation_id)
+
+    // Find which of those conversations already have a message from the bot
+    const { data: alreadySentRows } = botConversationIds.length
+      ? await supabaseAdmin
+          .from('direct_messages')
+          .select('conversation_id')
+          .eq('sender_id', SYSTEM_USER_ID)
+          .in('conversation_id', botConversationIds)
+      : { data: [] }
+
+    // Build a set of conversation IDs where welcome was already sent
+    const alreadySentConvIds = new Set((alreadySentRows ?? []).map((r) => r.conversation_id))
+
+    // For each user in those conversations, record their user ID as already welcomed
+    const { data: alreadyWelcomedParticipants } = botConversationIds.length
+      ? await supabaseAdmin
+          .from('conversation_participants')
+          .select('conversation_id, user_id')
+          .in('conversation_id', [...alreadySentConvIds])
+          .neq('user_id', SYSTEM_USER_ID)
+      : { data: [] }
+
+    const alreadyWelcomedUserIds = new Set(
+      (alreadyWelcomedParticipants ?? []).map((r) => r.user_id)
+    )
+
+    let messaged = 0
+    let emailed = 0
+    let skipped = 0
+    const errors: string[] = []
+
+    for (const user of users) {
+      if (alreadyWelcomedUserIds.has(user.id)) {
+        skipped++
+        continue
+      }
+
+      const handle = user.username || user.anonymous_id
+      const inboxUrl = `${baseUrl}/message/${encodeURIComponent(handle)}`
+
+      // Create conversation and send welcome inbox message
+      const { data: conversationId, error: convError } = await supabaseAdmin.rpc(
+        'get_or_create_conversation',
+        { user1_id: SYSTEM_USER_ID, user2_id: user.id }
+      )
+
+      if (convError || !conversationId) {
+        errors.push(`Failed to create conversation for user ${user.id}: ${convError?.message}`)
+        continue
+      }
+
+      const { error: msgError } = await supabaseAdmin.from('direct_messages').insert({
+        conversation_id: conversationId,
+        sender_id: SYSTEM_USER_ID,
+        content: buildInboxMessageContent(inboxUrl, gettingStartedUrl),
+        message_type: 'text',
+      })
+
+      if (msgError) {
+        errors.push(`Failed to send inbox message to user ${user.id}: ${msgError.message}`)
+        continue
+      }
+
+      messaged++
+
+      // Send welcome email if user has one and Brevo is configured
+      if (user.email && brevoApiKey) {
+        try {
+          const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
+            method: 'POST',
+            headers: {
+              accept: 'application/json',
+              'api-key': brevoApiKey,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({
+              sender: {
+                name: process.env.EMAIL_SENDER_NAME || 'WhisprSpace',
+                email: process.env.EMAIL_SENDER || 'admin@whisprspace.com',
+              },
+              to: [{ email: user.email }],
+              subject: "You're in. Here's what to do first on WhisprSpace.",
+              htmlContent: buildWelcomeEmailHtml(inboxUrl, gettingStartedUrl),
+            }),
+          })
+
+          if (emailRes.ok) {
+            emailed++
+          } else {
+            const errBody = await emailRes.json().catch(() => ({}))
+            errors.push(`Email failed for ${user.email}: ${JSON.stringify(errBody)}`)
+          }
+        } catch (err) {
+          errors.push(`Email error for ${user.email}: ${String(err)}`)
+        }
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      total: users.length,
+      messaged,
+      emailed,
+      skipped,
+      errors: errors.length ? errors : undefined,
+    })
+  } catch (error) {
+    console.error('[BackfillWelcome] Unexpected error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

@@ -67,6 +67,14 @@ const convertAuthUserToUser = async (userId: string): Promise<User> => {
 
 const ACCOUNT_EXISTS_ERROR = 'Account already exsit'
 
+const sendWelcome = (payload: { userId: string; inboxHandle: string; email?: string }) => {
+  fetch('/api/welcome', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch((err) => console.warn('[AuthService] Welcome message failed silently:', err))
+}
+
 const emailAlreadyExists = async (email: string): Promise<boolean> => {
   const normalizedEmail = sanitizeEmailAddress(email)
   if (!normalizedEmail) return false
@@ -101,17 +109,23 @@ export const signInAnonymously = async (): Promise<User> => {
 
     // Wait and retry for the trigger to create the user record
     const maxAttempts = 10;
+    let user = null
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        return await convertAuthUserToUser(session.user.id)
+        user = await convertAuthUserToUser(session.user.id)
+        break
       } catch (err) {
         if (attempt === maxAttempts) throw err
-        // Small backoff before retry
         await new Promise(resolve => setTimeout(resolve, 300))
       }
     }
 
-    throw new Error('Failed to create anonymous user profile')
+    if (!user) throw new Error('Failed to create anonymous user profile')
+
+    // Fire-and-forget: send welcome inbox message (no email for anonymous users)
+    sendWelcome({ userId: user.id, inboxHandle: user.anonymousId })
+
+    return user
   } catch (error) {
     console.error('Anonymous sign-in error:', error)
     throw error
@@ -161,7 +175,12 @@ export const signUpWithEmail = async (
     await new Promise(resolve => setTimeout(resolve, 100))
 
     // Fetch user record created by trigger
-    return await convertAuthUserToUser(session.user.id)
+    const user = await convertAuthUserToUser(session.user.id)
+
+    // Fire-and-forget: send welcome inbox message + email
+    sendWelcome({ userId: user.id, inboxHandle: user.anonymousId, email: normalizedEmail })
+
+    return user
   } catch (error) {
     console.error('Sign-up error:', error)
     throw error
