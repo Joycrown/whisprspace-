@@ -72,46 +72,58 @@ export async function POST(request: NextRequest) {
       (alreadyWelcomedParticipants ?? []).map((r) => r.user_id)
     )
 
+    // Pre-flight: verify Brevo key is present before looping
+    if (!brevoApiKey) {
+      console.error('[BackfillWelcome] Brevo API key not configured — emails will be skipped. Set BREVO_TRANSACTIONAL_API_KEY in your environment.')
+    }
+
     let messaged = 0
     let emailed = 0
     let skipped = 0
     const errors: string[] = []
 
+    if (!brevoApiKey) {
+      errors.push('BREVO_TRANSACTIONAL_API_KEY is not set — inbox messages will send but emails are skipped.')
+    }
+
     for (const user of users) {
-      if (alreadyWelcomedUserIds.has(user.id)) {
+      const handle = user.username || user.anonymous_id
+      const inboxUrl = `${baseUrl}/message/${encodeURIComponent(handle)}`
+      const alreadyGotInbox = alreadyWelcomedUserIds.has(user.id)
+
+      if (!alreadyGotInbox) {
+        // First time — create conversation and send inbox message
+        const { data: conversationId, error: convError } = await supabaseAdmin.rpc(
+          'get_or_create_conversation',
+          { user1_id: SYSTEM_USER_ID, user2_id: user.id }
+        )
+
+        if (convError || !conversationId) {
+          errors.push(`Failed to create conversation for user ${user.id}: ${convError?.message}`)
+          continue
+        }
+
+        const { error: msgError } = await supabaseAdmin.from('direct_messages').insert({
+          conversation_id: conversationId,
+          sender_id: SYSTEM_USER_ID,
+          content: buildInboxMessageContent(inboxUrl, gettingStartedUrl),
+          message_type: 'text',
+        })
+
+        if (msgError) {
+          errors.push(`Failed to send inbox message to user ${user.id}: ${msgError.message}`)
+          continue
+        }
+
+        messaged++
+      } else if (!user.email) {
+        // Already got inbox, no email — nothing left to do
         skipped++
         continue
       }
 
-      const handle = user.username || user.anonymous_id
-      const inboxUrl = `${baseUrl}/message/${encodeURIComponent(handle)}`
-
-      // Create conversation and send welcome inbox message
-      const { data: conversationId, error: convError } = await supabaseAdmin.rpc(
-        'get_or_create_conversation',
-        { user1_id: SYSTEM_USER_ID, user2_id: user.id }
-      )
-
-      if (convError || !conversationId) {
-        errors.push(`Failed to create conversation for user ${user.id}: ${convError?.message}`)
-        continue
-      }
-
-      const { error: msgError } = await supabaseAdmin.from('direct_messages').insert({
-        conversation_id: conversationId,
-        sender_id: SYSTEM_USER_ID,
-        content: buildInboxMessageContent(inboxUrl, gettingStartedUrl),
-        message_type: 'text',
-      })
-
-      if (msgError) {
-        errors.push(`Failed to send inbox message to user ${user.id}: ${msgError.message}`)
-        continue
-      }
-
-      messaged++
-
-      // Send welcome email if user has one and Brevo is configured
+      // Send welcome email — runs for both new users and those who already got
+      // the inbox message but missed the email on a previous run
       if (user.email && brevoApiKey) {
         try {
           const emailRes = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -136,11 +148,14 @@ export async function POST(request: NextRequest) {
             emailed++
           } else {
             const errBody = await emailRes.json().catch(() => ({}))
-            errors.push(`Email failed for ${user.email}: ${JSON.stringify(errBody)}`)
+            errors.push(`Email failed for ${user.email} (HTTP ${emailRes.status}): ${JSON.stringify(errBody)}`)
           }
         } catch (err) {
           errors.push(`Email error for ${user.email}: ${String(err)}`)
         }
+      } else if (alreadyGotInbox) {
+        // Got inbox, no email address — count as skipped
+        skipped++
       }
     }
 
