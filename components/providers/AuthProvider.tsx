@@ -25,6 +25,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       path.startsWith('/auth') ||
       path === '/privacy-policy' ||
       path === '/community-guidelines' ||
+      path === '/getting-started' ||
       path.startsWith('/profile') ||
       path.startsWith('/invite') ||
       path.startsWith('/message')
