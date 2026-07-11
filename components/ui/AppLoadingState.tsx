@@ -6,36 +6,26 @@ interface AppLoadingStateProps {
   title?: string
   description?: string
   fullScreen?: boolean
-  tone?: 'dark' | 'light'
   className?: string
+  // tone prop kept for API compatibility but dark is always used
+  tone?: 'dark' | 'light'
 }
 
 export default function AppLoadingState({
   title = 'Almost there...',
   description,
   fullScreen = true,
-  tone = 'dark',
   className = '',
 }: AppLoadingStateProps) {
-  const isLightTone = tone === 'light'
-
   return (
     <div
-      className={`${
-        fullScreen ? 'min-h-screen' : 'min-h-[220px]'
-      } ${
-        isLightTone ? 'bg-white' : 'bg-[#121212]'
-      } flex items-center justify-center px-4 ${className}`}
+      className={`${fullScreen ? 'min-h-screen' : 'min-h-[220px]'} bg-[#0A0A10] flex items-center justify-center px-4 ${className}`}
     >
       <div className="flex flex-col items-center text-center">
-        <WhisprSpinner size={52} showText={false} />
-        <p className={`mt-4 text-sm font-medium ${isLightTone ? 'text-gray-800' : 'text-gray-200'}`}>
-          {title}
-        </p>
+        <WhisprSpinner size={48} showText={false} />
+        <p className="mt-4 text-sm font-medium text-[#8F8FA3]">{title}</p>
         {description && (
-          <p className={`mt-1 max-w-md text-xs ${isLightTone ? 'text-gray-500' : 'text-gray-400'}`}>
-            {description}
-          </p>
+          <p className="mt-1 max-w-sm text-xs text-[#5C5C6E] leading-relaxed">{description}</p>
         )}
       </div>
     </div>

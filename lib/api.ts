@@ -82,8 +82,6 @@ export class AuthAPI extends MockAPI {
       id: `user_${Date.now()}`,
       anonymousId: generateAnonymousId(),
       isAnonymous: true,
-      points: 0,
-      level: 1,
       joinedAt: new Date().toISOString(),
       lastActiveAt: new Date().toISOString(),
       preferences: {

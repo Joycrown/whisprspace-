@@ -2,7 +2,7 @@
 
 import { useUserDetails } from '@/lib/admin'
 import { useUserActivitySummary } from '@/lib/analytics/useAnalytics'
-import { X, Activity, Clock, Shield, Award, Calendar, Banknote } from 'lucide-react'
+import { X, Activity, Clock, Shield, Calendar } from 'lucide-react'
 
 interface UserDetailsModalProps {
   userId: string
@@ -73,24 +73,8 @@ export default function UserDetailsModal({ userId, onClose }: UserDetailsModalPr
                 </div>
               </div>
 
-              {/* Status & Points Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
-                  <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-1">
-                    <Award className="w-4 h-4 text-yellow-500" /> Level
-                  </div>
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {user.level || 1}
-                  </div>
-                </div>
-                <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
-                  <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-1">
-                    <Banknote className="w-4 h-4 text-green-500" /> Points
-                  </div>
-                  <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {user.points || 0}
-                  </div>
-                </div>
+              {/* Status Grid */}
+              <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
                   <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-1">
                     <Calendar className="w-4 h-4 text-blue-500" /> Joined

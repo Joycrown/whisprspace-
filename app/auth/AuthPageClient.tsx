@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useUserStore } from '@/store/userStore';
-import { motion } from 'framer-motion';
-import { UserCheck, Shield, Zap, Copy, CheckCircle, Eye, EyeOff } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Shield, Copy, CheckCircle, Eye, EyeOff, RefreshCw, Link2, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/components/ui/Toast';
 import AppLoadingState from '@/components/ui/AppLoadingState';
 import { LEGAL_CONSENT_REQUIRED_ERROR, hasRequiredLegalConsent, recordLegalConsent } from '@/lib/legal/consent';
@@ -13,15 +13,55 @@ import {
   sanitizeEmailAddress,
   sanitizePasswordInput,
 } from '@/lib/security/input-sanitization';
+import { generatePseudonym } from '@/lib/utils/pseudonym-generator';
+import { checkUsernameAvailability, updateUsername } from '@/lib/services/username-service';
+import { validateUsername } from '@/lib/utils/username-validation';
+
+// ─── Shared primitives ────────────────────────────────────────────────────────
+
+const Spinner = () => (
+  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+);
+
+const inputCls =
+  'w-full h-11 rounded-xl px-4 text-sm text-[#F2F2F6] placeholder-[#5C5C6E] ' +
+  'bg-white/[0.03] border border-[#2A2A38] ' +
+  'focus:outline-none focus:border-[#8B5CF6]/60 transition-colors';
+
+const labelCls = 'block text-xs font-medium text-[#8F8FA3] uppercase tracking-wide mb-1.5';
+
+const heroBtnCls =
+  'w-full h-[50px] rounded-[11px] text-sm font-medium text-white ' +
+  'bg-gradient-to-r from-[#8B5CF6] to-[#F97316] ' +
+  'hover:opacity-90 active:scale-[0.97] transition-all flex items-center justify-center gap-2';
+
+const secondaryBtnCls =
+  'w-full h-[50px] rounded-[11px] text-sm font-medium text-[#F2F2F6] ' +
+  'bg-white/[0.05] border border-[#2A2A38] ' +
+  'hover:bg-white/[0.08] active:scale-[0.97] transition-all flex items-center justify-center gap-2';
+
+const ghostBtnCls =
+  'w-full text-sm text-[#8F8FA3] hover:text-[#F2F2F6] active:scale-[0.97] transition-all py-2';
+
+const cardCls =
+  'w-full max-w-md bg-[#12121A] rounded-2xl p-8 border border-[#23232E]';
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 const AuthPage = () => {
-  const [view, setView] = useState<'main' | 'anonymous' | 'login' | 'signup' | 'forgot' | 'welcome'>('main');
+  const [view, setView] = useState<'main' | 'anonymous' | 'login' | 'signup' | 'forgot' | 'welcome' | 'handle-picker' | 'inbox-welcome'>('main');
   const [copiedId, setCopiedId] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [legalConsentChecked, setLegalConsentChecked] = useState(false);
 
-  // Form states
+  const [handleValue, setHandleValue] = useState('');
+  const [handleAvailability, setHandleAvailability] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
+  const [handleSaving, setHandleSaving] = useState(false);
+  const [claimedHandle, setClaimedHandle] = useState('');
+  const [copiedInboxLink, setCopiedInboxLink] = useState(false);
+  const handleCheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [signupForm, setSignupForm] = useState({ email: '', password: '' });
   const [forgotEmail, setForgotEmail] = useState('');
@@ -40,9 +80,11 @@ const AuthPage = () => {
     rememberMe,
     setRememberMe,
   } = useUserStore();
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const { showToast } = useToast();
+
   const redirectTo = (() => {
     const raw = searchParams?.get('redirect');
     if (!raw || !raw.startsWith('/')) return '/threads';
@@ -50,6 +92,7 @@ const AuthPage = () => {
   })();
   const forceAuth = searchParams?.get('force') === '1';
   const viewParam = searchParams?.get('view');
+  const reasonParam = searchParams?.get('reason');
 
   useEffect(() => {
     if (!viewParam) return;
@@ -62,165 +105,173 @@ const AuthPage = () => {
     setLegalConsentChecked(hasRequiredLegalConsent());
   }, []);
 
-  // CRITICAL: Immediate redirect check using useLayoutEffect (runs synchronously before paint)
-  // This executes before any other effects and before the component fully renders
   useLayoutEffect(() => {
     if (forceAuth) return;
-    // Only redirect if session is already validated and exists
     const currentState = useUserStore.getState();
     if (currentState.sessionValidated && (currentState.session.isAuthenticated || currentState.sessionInfo)) {
       window.location.replace(redirectTo);
-      return;
     }
   }, [redirectTo, forceAuth]);
 
   useEffect(() => {
     if (forceAuth) return;
     if ((session.isAuthenticated || sessionInfo) && view === 'welcome') {
-      const timer = setTimeout(() => {
-        router.push(redirectTo);
-      }, 5000);
+      const timer = setTimeout(() => { router.push(redirectTo); }, 5000);
       return () => clearTimeout(timer);
     }
   }, [session.isAuthenticated, sessionInfo?.anonymousId, view, router, redirectTo, forceAuth]);
 
   const handleAnonymousJoin = async () => {
-    clearError(); // Clear previous errors
+    clearError();
     if (!legalConsentChecked) {
-      showToast({
-        type: 'error',
-        title: 'Consent Required',
-        message: LEGAL_CONSENT_REQUIRED_ERROR,
-        duration: 5000,
-      });
+      showToast({ type: 'error', title: 'Consent required', message: LEGAL_CONSENT_REQUIRED_ERROR, duration: 5000 });
       return;
     }
     recordLegalConsent();
     await loginAnonymously();
   };
 
-  // Auto-switch to welcome view when login succeeds
   useEffect(() => {
-    if ((sessionInfo || session.user) && (view === 'anonymous' || view === 'main') && !isLoading) {
-      setView('welcome');
-      // Show success toast
-      const isAnonymous = sessionInfo !== null;
-      showToast({
-        type: 'success',
-        title: isAnonymous ? 'Anonymous Session Created!' : 'Welcome Back!',
-        message: isAnonymous
-          ? 'You can now browse, like, and comment. Sign up to create threads!'
-          : 'You now have full access to all features.',
-        duration: 4000,
-      });
+    if (!isLoading && (sessionInfo || session.user)) {
+      if (view === 'anonymous' || view === 'main') {
+        setView('welcome');
+        const isAnonymous = sessionInfo !== null;
+        showToast({
+          type: 'success',
+          title: isAnonymous ? 'Anonymous session created' : 'Welcome back',
+          message: isAnonymous
+            ? 'You can browse, like, and comment. Sign up to create threads.'
+            : 'You have full access to all features.',
+          duration: 4000,
+        });
+      } else if (view === 'signup') {
+        if (reasonParam === 'inbox') {
+          const generated = generatePseudonym();
+          setHandleValue(generated);
+          setHandleAvailability('checking');
+          setView('handle-picker');
+          checkUsernameAvailability(generated, session.user?.id).then(available => {
+            setHandleAvailability(available ? 'available' : 'taken');
+          });
+        } else {
+          setView('welcome');
+          showToast({ type: 'success', title: 'Account ready', message: 'You now have full access.', duration: 4000 });
+        }
+      }
     }
-  }, [sessionInfo?.anonymousId, session.user?.id, view, isLoading, showToast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionInfo?.anonymousId, session.user?.id, isLoading]);
 
-  // Auto-redirect if already authenticated (only after AuthProvider validates)
   const hasRedirected = useRef(false);
-
   useEffect(() => {
     if (forceAuth) return;
-    if (!sessionValidated) {
-      // Still waiting for validation
-      return
+    if (!sessionValidated) return;
+    if (hasRedirected.current) return;
+    if (sessionInfo !== null || session.isAuthenticated) {
+      hasRedirected.current = true;
+      window.location.replace(redirectTo);
     }
+  }, [sessionValidated, sessionInfo?.anonymousId, session.isAuthenticated, redirectTo, forceAuth]);
 
-    // Prevent multiple redirects
-    if (hasRedirected.current) {
-      return
-    }
-
-    // Session has been validated
-    const hasSession = sessionInfo !== null || session.isAuthenticated
-
-    if (hasSession) {
-      // Valid session found - redirect to threads with hard navigation
-      hasRedirected.current = true  // Mark as redirected
-      // Use replace instead of href - more forceful, replaces history entry, cannot be interrupted  
-      window.location.replace(redirectTo)
-      // Return immediately to stop any further code execution
-      return
-    } else {
-      // No valid session - make sure localStorage is cleared
-
-    }
-  }, [sessionValidated, sessionInfo?.anonymousId, session.isAuthenticated, redirectTo, forceAuth])
-
-  // Display error as toast
   useEffect(() => {
     if (error) {
-      showToast({
-        type: 'error',
-        title: 'Authentication Error',
-        message: error,
-        duration: 5000,
-      });
-      // Clear error after showing toast
+      showToast({ type: 'error', title: 'Authentication error', message: error, duration: 5000 });
       setTimeout(() => clearError(), 100);
     }
   }, [error, showToast, clearError]);
 
-  // Clear error when view changes
-  useEffect(() => {
-    clearError();
-  }, [view, clearError]);
+  useEffect(() => { clearError(); }, [view, clearError]);
+
+  const checkHandle = useCallback((value: string) => {
+    if (handleCheckTimer.current) clearTimeout(handleCheckTimer.current);
+    const trimmed = value.trim();
+    if (!trimmed) { setHandleAvailability('idle'); return; }
+    const validation = validateUsername(trimmed);
+    if (!validation.isValid) { setHandleAvailability('invalid'); return; }
+    setHandleAvailability('checking');
+    handleCheckTimer.current = setTimeout(async () => {
+      const userId = session.user?.id;
+      const available = await checkUsernameAvailability(trimmed, userId);
+      setHandleAvailability(available ? 'available' : 'taken');
+    }, 400);
+  }, [session.user?.id]);
+
+  const onHandleChange = (value: string) => {
+    const cleaned = value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+    setHandleValue(cleaned);
+    checkHandle(cleaned);
+  };
+
+  const regenerateHandle = () => {
+    const next = generatePseudonym();
+    setHandleValue(next);
+    checkHandle(next);
+  };
+
+  const claimHandle = async () => {
+    const userId = session.user?.id;
+    if (!userId) return;
+    setHandleSaving(true);
+    const result = await updateUsername(userId, handleValue.trim());
+    setHandleSaving(false);
+    if (result.success) {
+      setClaimedHandle(result.username || handleValue.trim());
+      setView('inbox-welcome');
+    } else {
+      showToast({ type: 'error', title: 'Could not claim handle', message: result.error || 'Try a different one.', duration: 4000 });
+    }
+  };
+
+  const copyInboxLink = () => {
+    navigator.clipboard.writeText(`${window.location.origin}/message/${claimedHandle}`);
+    setCopiedInboxLink(true);
+    setTimeout(() => setCopiedInboxLink(false), 2500);
+  };
+
+  const shareInbox = async () => {
+    const link = `${window.location.origin}/message/${claimedHandle}`;
+    const text = `Tell me what you actually think — anonymously. No name. No trace.\n${link}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: 'My WhisprSpace inbox', text, url: link }); } catch { /* cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(link);
+      showToast({ type: 'success', title: 'Link copied', message: 'Share it wherever you like.', duration: 3000 });
+    }
+  };
 
   const copyAnonymousId = () => {
     const id = session.user?.anonymousId || sessionInfo?.anonymousId;
     if (id) {
       navigator.clipboard.writeText(id);
       setCopiedId(true);
-      showToast({
-        type: 'success',
-        title: 'Copied!',
-        message: 'Anonymous ID copied to clipboard',
-        duration: 2000,
-      });
+      showToast({ type: 'success', title: 'Copied', message: 'Anonymous ID copied to clipboard', duration: 2000 });
       setTimeout(() => setCopiedId(false), 2000);
     }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearError(); // Clear previous errors
+    clearError();
     const email = sanitizeEmailAddress(loginForm.email);
     const password = sanitizePasswordInput(loginForm.password);
     if (!email || !password.trim()) {
-      showToast({
-        type: 'error',
-        title: 'Invalid Credentials',
-        message: 'Please provide a valid email and password.',
-        duration: 3000,
-      });
+      showToast({ type: 'error', title: 'Invalid credentials', message: 'Please provide a valid email and password.', duration: 3000 });
       return;
     }
-
     await login(email, password, rememberMe);
   };
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    clearError(); // Clear previous errors
+    clearError();
     const email = sanitizeEmailAddress(signupForm.email);
     const password = sanitizePasswordInput(signupForm.password);
     if (!email || !password.trim()) {
-      showToast({
-        type: 'error',
-        title: 'Invalid Input',
-        message: 'Please provide a valid email and password.',
-        duration: 3000,
-      });
+      showToast({ type: 'error', title: 'Invalid input', message: 'Please provide a valid email and password.', duration: 3000 });
       return;
     }
-
     if (!legalConsentChecked) {
-      showToast({
-        type: 'error',
-        title: 'Consent Required',
-        message: LEGAL_CONSENT_REQUIRED_ERROR,
-        duration: 5000,
-      });
+      showToast({ type: 'error', title: 'Consent required', message: LEGAL_CONSENT_REQUIRED_ERROR, duration: 5000 });
       return;
     }
     recordLegalConsent();
@@ -229,585 +280,465 @@ const AuthPage = () => {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-
     const email = sanitizeEmailAddress(forgotEmail);
     if (!email) {
-      showToast({
-        type: 'error',
-        title: 'Invalid Email',
-        message: 'Please enter a valid email address',
-        duration: 3000,
-      });
+      showToast({ type: 'error', title: 'Invalid email', message: 'Please enter a valid email address', duration: 3000 });
       return;
     }
-
     setForgotLoading(true);
-
     try {
-
       const { requestPasswordReset } = await import('@/lib/auth/auth-service');
       const result = await requestPasswordReset(email);
-
       if (result.success) {
-        showToast({
-          type: 'success',
-          title: 'Reset Link Sent',
-          message: result.message,
-          duration: 8000,
-        });
-
-
-
-        // Clear form and go back to login after success
+        showToast({ type: 'success', title: 'Reset link sent', message: result.message, duration: 8000 });
         setForgotEmail('');
-        setTimeout(() => {
-          setView('login');
-        }, 3000);
+        setTimeout(() => { setView('login'); }, 3000);
       } else {
-        // Show detailed error with SMTP setup instructions
-        showToast({
-          type: 'error',
-          title: 'Reset Failed',
-          message: result.message,
-          duration: 8000,
-        });
-
-
+        showToast({ type: 'error', title: 'Reset failed', message: result.message, duration: 8000 });
       }
-    } catch (error) {
-      console.error('Forgot password error:', error);
-      showToast({
-        type: 'error',
-        title: 'Error',
-        message: 'An unexpected error occurred. Please try again.',
-        duration: 4000,
-      });
+    } catch {
+      showToast({ type: 'error', title: 'Error', message: 'An unexpected error occurred. Please try again.', duration: 4000 });
     } finally {
       setForgotLoading(false);
     }
   };
 
-  const skipToApp = () => {
-    router.push(redirectTo);
-  };
-
-  // Render blocking redirect if session is valid
-  // This prevents the auth form from rendering and potentially causing state issues or race conditions
   if (!forceAuth && sessionValidated && (sessionInfo || session.isAuthenticated)) {
     return <AppLoadingState title="Opening your space..." />;
   }
 
+  const enter = { initial: { opacity: 0, y: 10 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.22 } };
+
   return (
-    <div
-      className="min-h-[100dvh] flex flex-col items-center justify-center bg-white px-4 py-6 sm:py-10"
-    >
-      {/* Logo and Tagline */}
-      <div className="mb-6 sm:mb-8 text-center">
-        <h1 className="text-4xl font-bold text-gray-900 mb-1">WhisprSpace</h1>
-        <p className="text-gray-600 text-md">Speak freely, stay hidden</p>
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center bg-[#0A0A10] px-4 py-8">
+
+      {/* Wordmark */}
+      <div className="mb-8 text-center">
+        <h1
+          className="text-3xl font-medium tracking-[-0.3px]"
+          style={{
+            background: 'linear-gradient(100deg, #8B5CF6 0%, #F97316 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+          }}
+        >
+          WhisprSpace
+        </h1>
+        <p className="text-[#5C5C6E] text-sm mt-1">Speak freely, stay anonymous.</p>
       </div>
 
-      {/* Auth Card */}
-      <div className="w-full max-w-md bg-white rounded-lg p-8 border border-gray-200 shadow-xl">
-        {view === 'main' && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center space-y-6"
-          >
-            <div className="space-y-2">
-              <h2 className="text-3xl font-bold text-gray-900">Get Started</h2>
-              <p className="text-gray-600 text-sm">
-                Join WhisprSpace and express yourself freely
-              </p>
-            </div>
+      <div className={cardCls}>
+        <AnimatePresence mode="wait">
 
-            {/* Primary CTAs - Login & Signup */}
-            <div className="space-y-3">
-              <button
-                onClick={() => setView('signup')}
-                className="w-full h-14 rounded-lg bg-gradient-to-r from-purple-500 to-orange-500 text-white text-base font-semibold hover:opacity-90 transition-opacity shadow-lg"
-              >
-                Create Account
-              </button>
-
-              <button
-                onClick={() => setView('login')}
-                className="w-full h-14 rounded-lg bg-gray-900 text-white text-base font-semibold hover:bg-gray-800 transition-colors"
-              >
-                Log In
-              </button>
-            </div>
-
-            {/* Benefits */}
-            <div className="pt-2 space-y-3">
-              <div className="flex items-center gap-3 text-sm text-gray-700">
-                <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Zap className="w-4 h-4 text-purple-600" />
-                </div>
-                <span className="text-left">Create threads and start discussions</span>
+          {/* ── Main ── */}
+          {view === 'main' && (
+            <motion.div key="main" {...enter} className="space-y-5">
+              <div className="text-center space-y-1">
+                <h2 className="text-xl font-medium text-[#F2F2F6] tracking-[-0.3px]">Get started</h2>
+                <p className="text-[#5C5C6E] text-sm">No name. No trace.</p>
               </div>
-              <div className="flex items-center gap-3 text-sm text-gray-700">
-                <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <UserCheck className="w-4 h-4 text-orange-600" />
-                </div>
-                <span className="text-left">Join supportive, honest conversations</span>
-              </div>
-              <div className="flex items-center gap-3 text-sm text-gray-700">
-                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                  <Shield className="w-4 h-4 text-green-600" />
-                </div>
-                <span className="text-left">Full access to all features</span>
-              </div>
-            </div>
 
-            {/* Secondary Option - Anonymous */}
-            <div className="pt-4 border-t border-gray-200">
-              <p className="text-sm text-gray-500 mb-2">Just want to explore?</p>
-              <button
-                onClick={() => setView('anonymous')}
-                className="text-sm text-gray-600 hover:text-purple-600 transition-colors font-medium"
-              >
-                Continue as a Guest
-              </button>
-            </div>
-          </motion.div>
-        )}
-
-        {view === 'anonymous' && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center space-y-6"
-          >
-            <div className="space-y-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-orange-500 rounded-full flex items-center justify-center mx-auto">
-                <Shield className="w-8 h-8 text-white" />
-              </div>
-              <h2 className="text-2xl font-bold text-gray-900">Join as a Guest</h2>
-              <p className="text-gray-600 text-sm leading-relaxed">
-                Start expressing yourself freely without revealing your identity. No email, no personal data required.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 text-sm text-gray-600">
-                <UserCheck className="w-5 h-5 text-green-600" />
-                <span>Instant guest identity</span>
-              </div>
-              <div className="flex items-center gap-3 text-sm text-gray-600">
-                <Shield className="w-5 h-5 text-purple-600" />
-                <span>Complete privacy protection</span>
-              </div>
-              <div className="flex items-center gap-3 text-sm text-gray-600">
-                <Zap className="w-5 h-5 text-orange-600" />
-                <span>Join conversations instantly</span>
-              </div>
-            </div>
-
-            <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-left">
-              <p className="text-xs text-amber-800 leading-relaxed">
-                <span className="font-semibold">Heads up:</span> Guest accounts are temporary and you can lose access permanently.
-              </p>
-            </div>
-
-            <button
-              onClick={handleAnonymousJoin}
-              disabled={isLoading}
-              className="w-full h-12 rounded-md bg-gradient-to-r from-purple-500 to-orange-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {isLoading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <>
+              <div className="space-y-3 pt-1">
+                <button onClick={() => setView('anonymous')} className={heroBtnCls}>
                   <Shield className="w-4 h-4" />
-                  Join as a Guest
-                </>
-              )}
-            </button>
+                  Continue anonymously
+                </button>
+                <button onClick={() => setView('signup')} className={secondaryBtnCls}>
+                  Create account
+                </button>
+                <button onClick={() => setView('login')} className={ghostBtnCls}>
+                  Sign in
+                </button>
+              </div>
+            </motion.div>
+          )}
 
-            <label className="flex items-start gap-2 text-xs text-gray-600 text-left">
-              <input
-                type="checkbox"
-                checked={legalConsentChecked}
-                onChange={(e) => setLegalConsentChecked(e.target.checked)}
-                className="mt-0.5 rounded border-gray-300 text-purple-600 focus:ring-purple-600"
-              />
-              <span>
-                I agree to the{' '}
-                <Link href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-orange-500">
-                  Privacy Policy
-                </Link>{' '}
-                and{' '}
-                <Link href="/community-guidelines" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-orange-500">
-                  Community Guidelines
-                </Link>
-                .
-              </span>
-            </label>
-
-            <div className="pt-4 border-t border-gray-200">
-              <button
-                onClick={() => setView('main')}
-                className="text-sm text-gray-600 hover:text-purple-600 transition-colors font-medium"
-              >
-                Back to Sign In Options
+          {/* ── Anonymous ── */}
+          {view === 'anonymous' && (
+            <motion.div key="anonymous" {...enter} className="space-y-5">
+              <button onClick={() => setView('main')} className="flex items-center gap-1.5 text-[#5C5C6E] hover:text-[#8F8FA3] text-sm transition-colors mb-2">
+                <ArrowLeft className="w-3.5 h-3.5" /> Back
               </button>
-            </div>
-          </motion.div>
-        )}
 
-        {view === 'welcome' && (session.user || sessionInfo) && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="text-center space-y-6"
-          >
-            <div className="space-y-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-blue-500 rounded-full flex items-center justify-center mx-auto">
-                <CheckCircle className="w-8 h-8 text-white" />
+              <div className="text-center space-y-1">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-[16px] flex items-center justify-center"
+                  style={{ background: 'linear-gradient(100deg, #231D3D, #3D3555)' }}>
+                  <Shield className="w-5 h-5 text-[#A78BFA]" />
+                </div>
+                <h2 className="text-xl font-medium text-[#F2F2F6] tracking-[-0.3px]">Join anonymously</h2>
+                <p className="text-[#8F8FA3] text-sm leading-relaxed">No email. No personal data. Your identity stays yours.</p>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900">Welcome to WhisprSpace!</h2>
-              <p className="text-gray-600 text-sm">
-                {sessionInfo
-                  ? "Your anonymous session has been created. You can browse, like, and comment. Sign up to create threads!"
-                  : "Your account has been created. You now have full access to create and manage threads!"}
-              </p>
-            </div>
 
-            <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">Your Anonymous ID</p>
-              <div className="flex items-center justify-between bg-white rounded-md p-3 border border-gray-200">
-                <span className="text-gray-900 font-mono text-sm">
-                  {session.user?.anonymousId || sessionInfo?.anonymousId}
-                </span>
-                <button
-                  onClick={copyAnonymousId}
-                  className="p-1 hover:bg-white/10 rounded transition-colors"
-                >
-                  {copiedId ? (
-                    <CheckCircle className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Copy className="w-4 h-4 text-gray-500" />
-                  )}
-                </button>
+              <div className="rounded-xl border border-[#2A2A38] bg-white/[0.02] px-4 py-3 text-xs text-[#8F8FA3] leading-relaxed">
+                Guest sessions are temporary. Sign up later to keep your contributions.
               </div>
-              <p className="text-xs text-gray-500">
-                {sessionInfo
-                  ? "Save this ID. Sign up to keep your contributions and unlock thread creation!"
-                  : "Save this ID to identify your posts. You have full access to all features!"}
-              </p>
-            </div>
 
-            <div className="space-y-3">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {sessionInfo ? "What You Can Do" : "Quick Tour"}
-              </h3>
-              <div className="text-left space-y-2 text-sm text-gray-600">
-                {sessionInfo ? (
-                  <>
-                    <div className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2 flex-shrink-0" />
-                      <span>Browse and discover threads</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2 flex-shrink-0" />
-                      <span>Like and react to posts</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-green-500 rounded-full mt-2 flex-shrink-0" />
-                      <span>Comment on discussions</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-orange-400 rounded-full mt-2 flex-shrink-0" />
-                      <span>Create threads (sign up required)</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-purple-400 rounded-full mt-2 flex-shrink-0" />
-                      <span>Create threads to share thoughts and start discussions</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-purple-400 rounded-full mt-2 flex-shrink-0" />
-                      <span>Vote on polls and participate in community decisions</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-purple-400 rounded-full mt-2 flex-shrink-0" />
-                      <span>Join group spaces for focused conversations</span>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <div className="w-1.5 h-1.5 bg-purple-400 rounded-full mt-2 flex-shrink-0" />
-                      <span>Build trust through thoughtful participation</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
+              <button
+                onClick={handleAnonymousJoin}
+                disabled={isLoading}
+                className={heroBtnCls}
+              >
+                {isLoading ? <Spinner /> : <><Shield className="w-4 h-4" /> Join anonymously</>}
+              </button>
 
-            <button
-              onClick={skipToApp}
-              className="w-full h-12 rounded-md bg-gradient-to-r from-purple-500 to-orange-500 text-white text-sm font-medium hover:opacity-90 transition-opacity"
-            >
-              Start Exploring
-            </button>
-
-            <p className="text-xs text-gray-500">
-              Redirecting automatically in 5 seconds...
-            </p>
-          </motion.div>
-        )}
-
-        {view !== 'forgot' && view !== 'anonymous' && view !== 'welcome' && view !== 'main' && (
-          <div className="grid grid-cols-3 gap-2 mb-6 w-full sm:flex sm:justify-center sm:gap-4">
-            <button
-              className={`w-full sm:w-auto px-2 sm:px-4 py-2 text-xs sm:text-sm rounded-md transition-colors whitespace-nowrap ${view === 'login' ? 'text-white bg-purple-600' : 'text-gray-600 hover:text-gray-900'}`}
-              onClick={() => setView('login')}
-            >
-              Log In
-            </button>
-            <button
-              className={`w-full sm:w-auto px-2 sm:px-4 py-2 text-xs sm:text-sm rounded-md transition-colors whitespace-nowrap ${view === 'signup' ? 'text-white bg-purple-600' : 'text-gray-600 hover:text-gray-900'}`}
-              onClick={() => setView('signup')}
-            >
-              Sign Up
-            </button>
-            <button
-              className="w-full sm:w-auto px-2 sm:px-4 py-2 text-xs sm:text-sm rounded-md transition-colors text-gray-600 hover:text-gray-900 whitespace-nowrap"
-              onClick={() => setView('main')}
-            >
-              Back
-            </button>
-          </div>
-        )}
-
-        {view === 'login' && (
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label className="block text-gray-700 mb-2 text-sm">Email address</label>
-              <input
-                type="email"
-                value={loginForm.email}
-                onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
-                className="w-full h-11 bg-white border border-gray-300 rounded-md px-4 py-2 text-gray-900 text-sm focus:outline-none focus:border-purple-500"
-                placeholder="Enter your email"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-gray-700 mb-2 text-sm">Password</label>
-              <div className="relative">
-                <input
-                  type={showLoginPassword ? 'text' : 'password'}
-                  value={loginForm.password}
-                  onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                  className="w-full h-11 bg-white border border-gray-300 rounded-md px-4 py-2 pr-11 text-gray-900 text-sm focus:outline-none focus:border-purple-500"
-                  placeholder="Enter your password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowLoginPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
-                  aria-label={showLoginPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showLoginPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
+              <label className="flex items-start gap-2 text-xs text-[#5C5C6E] cursor-pointer">
                 <input
                   type="checkbox"
-                  id="remember"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="rounded bg-white border-gray-300 text-purple-600 focus:ring-purple-600"
+                  checked={legalConsentChecked}
+                  onChange={(e) => setLegalConsentChecked(e.target.checked)}
+                  className="mt-0.5 rounded border-[#2A2A38] bg-transparent text-[#8B5CF6] focus:ring-[#8B5CF6]/30"
                 />
-                <label htmlFor="remember" className="ml-2 text-sm text-gray-700">
-                  Remember me
-                </label>
-              </div>
-              <button
-                type="button"
-                onClick={() => setView('forgot')}
-                className="text-sm text-purple-600 hover:text-orange-500 transition-colors"
-              >
-                Forgot password?
+                <span>
+                  I agree to the{' '}
+                  <Link href="/privacy-policy" target="_blank" className="text-[#C4B5FD] hover:text-[#F2F2F6] transition-colors">Privacy Policy</Link>
+                  {' '}and{' '}
+                  <Link href="/community-guidelines" target="_blank" className="text-[#C4B5FD] hover:text-[#F2F2F6] transition-colors">Community Guidelines</Link>.
+                </span>
+              </label>
+            </motion.div>
+          )}
+
+          {/* ── Login ── */}
+          {view === 'login' && (
+            <motion.div key="login" {...enter} className="space-y-5">
+              <button onClick={() => setView('main')} className="flex items-center gap-1.5 text-[#5C5C6E] hover:text-[#8F8FA3] text-sm transition-colors mb-2">
+                <ArrowLeft className="w-3.5 h-3.5" /> Back
               </button>
-            </div>
+              <h2 className="text-xl font-medium text-[#F2F2F6] tracking-[-0.3px]">Sign in</h2>
 
-            <button
-              type="submit"
-              disabled={
-                isLoading ||
-                !loginForm.email.trim() ||
-                !loginForm.password.trim()
-              }
-              className="w-full h-11 rounded-md bg-gradient-to-r from-purple-500 to-orange-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Signing in...
-                </>
-              ) : (
-                'Sign In'
-              )}
-            </button>
-          </form>
-        )}
-
-        {view === 'signup' && (
-          <form onSubmit={handleSignup} className="space-y-6">
-            <div>
-              <label className="block text-gray-700 mb-2 text-sm">Email address</label>
-              <input
-                type="email"
-                value={signupForm.email}
-                onChange={(e) => setSignupForm(prev => ({ ...prev, email: e.target.value }))}
-                className="w-full h-11 bg-white border border-gray-300 rounded-md px-4 py-2 text-gray-900 text-sm focus:outline-none focus:border-[#7E22CE]"
-                placeholder="Enter your email"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-gray-700 mb-2 text-sm">Password</label>
-              <div className="relative">
-                <input
-                  type={showSignupPassword ? 'text' : 'password'}
-                  value={signupForm.password}
-                  onChange={(e) => setSignupForm(prev => ({ ...prev, password: e.target.value }))}
-                  className="w-full h-11 bg-white border border-gray-300 rounded-md px-4 py-2 pr-11 text-gray-900 text-sm focus:outline-none focus:border-[#7E22CE]"
-                  placeholder="Choose a password"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowSignupPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 transition-colors"
-                  aria-label={showSignupPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showSignupPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <label className="flex items-start gap-2 text-xs text-gray-600 text-left">
-              <input
-                type="checkbox"
-                checked={legalConsentChecked}
-                onChange={(e) => setLegalConsentChecked(e.target.checked)}
-                className="mt-0.5 rounded border-gray-300 text-purple-600 focus:ring-purple-600"
-                required
-              />
-              <span>
-                I agree to the{' '}
-                <Link href="/privacy-policy" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-orange-500">
-                  Privacy Policy
-                </Link>{' '}
-                and{' '}
-                <Link href="/community-guidelines" target="_blank" rel="noopener noreferrer" className="text-purple-600 hover:text-orange-500">
-                  Community Guidelines
-                </Link>
-                .
-              </span>
-            </label>
-
-            <button
-              type="submit"
-              disabled={
-                isLoading ||
-                !signupForm.email.trim() ||
-                !signupForm.password.trim() ||
-                !legalConsentChecked
-              }
-              className="w-full h-11 rounded-md bg-gradient-to-r from-purple-500 to-orange-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {isLoading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Creating account...
-                </>
-              ) : (
-                'Create Account'
-              )}
-            </button>
-          </form>
-        )}
-
-        {view === 'forgot' && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
-            <div className="text-center mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">Reset Password</h2>
-              <p className="text-gray-600 text-sm">Enter your email address to receive a password reset link</p>
-            </div>
-
-            <form onSubmit={handleForgotPassword} className="space-y-6">
-              <div>
-                <label className="block text-gray-700 mb-2 text-sm">Email address</label>
-                <input
-                  type="email"
-                  value={forgotEmail}
-                  onChange={(e) => setForgotEmail(e.target.value)}
-                  className="w-full h-11 bg-white border border-gray-300 rounded-md px-4 py-2 text-gray-900 text-sm focus:outline-none focus:border-purple-500"
-                  placeholder="Enter your email"
-                  required
-                  disabled={forgotLoading}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-xs text-blue-800">
-                    <strong>Note:</strong> Password reset is only available for registered accounts. Guests accounts cannot reset passwords.
-                  </p>
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className={labelCls}>Email</label>
+                  <input
+                    type="email"
+                    value={loginForm.email}
+                    onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
+                    className={inputCls}
+                    placeholder="you@example.com"
+                    required
+                  />
                 </div>
 
+                <div>
+                  <label className={labelCls}>Password</label>
+                  <div className="relative">
+                    <input
+                      type={showLoginPassword ? 'text' : 'password'}
+                      value={loginForm.password}
+                      onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
+                      className={`${inputCls} pr-11`}
+                      placeholder="••••••••"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5C5C6E] hover:text-[#8F8FA3] transition-colors"
+                    >
+                      {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-xs text-[#8F8FA3] cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="rounded border-[#2A2A38] bg-transparent text-[#8B5CF6] focus:ring-[#8B5CF6]/30"
+                    />
+                    Remember me
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setView('forgot')}
+                    className="text-xs text-[#C4B5FD] hover:text-[#F2F2F6] transition-colors"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+
+                <button type="submit" disabled={isLoading} className={heroBtnCls}>
+                  {isLoading ? <><Spinner /> Signing in…</> : 'Sign in'}
+                </button>
+              </form>
+
+              <button onClick={() => setView('signup')} className={ghostBtnCls}>
+                No account? Create one
+              </button>
+            </motion.div>
+          )}
+
+          {/* ── Signup ── */}
+          {view === 'signup' && (
+            <motion.div key="signup" {...enter} className="space-y-5">
+              <button onClick={() => setView('main')} className="flex items-center gap-1.5 text-[#5C5C6E] hover:text-[#8F8FA3] text-sm transition-colors mb-2">
+                <ArrowLeft className="w-3.5 h-3.5" /> Back
+              </button>
+              <h2 className="text-xl font-medium text-[#F2F2F6] tracking-[-0.3px]">Create account</h2>
+
+              <form onSubmit={handleSignup} className="space-y-4">
+                <div>
+                  <label className={labelCls}>Email</label>
+                  <input
+                    type="email"
+                    value={signupForm.email}
+                    onChange={(e) => setSignupForm(prev => ({ ...prev, email: e.target.value }))}
+                    className={inputCls}
+                    placeholder="you@example.com"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className={labelCls}>Password</label>
+                  <div className="relative">
+                    <input
+                      type={showSignupPassword ? 'text' : 'password'}
+                      value={signupForm.password}
+                      onChange={(e) => setSignupForm(prev => ({ ...prev, password: e.target.value }))}
+                      className={`${inputCls} pr-11`}
+                      placeholder="••••••••"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSignupPassword(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5C5C6E] hover:text-[#8F8FA3] transition-colors"
+                    >
+                      {showSignupPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <label className="flex items-start gap-2 text-xs text-[#5C5C6E] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={legalConsentChecked}
+                    onChange={(e) => setLegalConsentChecked(e.target.checked)}
+                    className="mt-0.5 rounded border-[#2A2A38] bg-transparent text-[#8B5CF6] focus:ring-[#8B5CF6]/30"
+                    required
+                  />
+                  <span>
+                    I agree to the{' '}
+                    <Link href="/privacy-policy" target="_blank" className="text-[#C4B5FD] hover:text-[#F2F2F6] transition-colors">Privacy Policy</Link>
+                    {' '}and{' '}
+                    <Link href="/community-guidelines" target="_blank" className="text-[#C4B5FD] hover:text-[#F2F2F6] transition-colors">Community Guidelines</Link>.
+                  </span>
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={isLoading || !signupForm.email.trim() || !signupForm.password.trim() || !legalConsentChecked}
+                  className={heroBtnCls}
+                >
+                  {isLoading ? <><Spinner /> Creating account…</> : 'Create account'}
+                </button>
+              </form>
+
+              <button onClick={() => setView('login')} className={ghostBtnCls}>
+                Already have an account? Sign in
+              </button>
+            </motion.div>
+          )}
+
+          {/* ── Forgot ── */}
+          {view === 'forgot' && (
+            <motion.div key="forgot" {...enter} className="space-y-5">
+              <button onClick={() => setView('login')} className="flex items-center gap-1.5 text-[#5C5C6E] hover:text-[#8F8FA3] text-sm transition-colors mb-2">
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to sign in
+              </button>
+              <div className="space-y-1">
+                <h2 className="text-xl font-medium text-[#F2F2F6] tracking-[-0.3px]">Reset password</h2>
+                <p className="text-[#8F8FA3] text-sm">Enter your email and we'll send a reset link.</p>
+              </div>
+
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div>
+                  <label className={labelCls}>Email</label>
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    className={inputCls}
+                    placeholder="you@example.com"
+                    required
+                    disabled={forgotLoading}
+                  />
+                </div>
+                <p className="text-xs text-[#5C5C6E]">
+                  Only registered accounts can reset passwords. Guest accounts cannot.
+                </p>
+                <button type="submit" disabled={forgotLoading} className={heroBtnCls}>
+                  {forgotLoading ? <><Spinner /> Sending…</> : 'Send reset link'}
+                </button>
+              </form>
+            </motion.div>
+          )}
+
+          {/* ── Welcome ── */}
+          {view === 'welcome' && (session.user || sessionInfo) && (
+            <motion.div
+              key="welcome"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              className="space-y-6 text-center"
+            >
+              {/* Check ring entrance */}
+              <div className="flex justify-center">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center border border-[#5DCAA5]/30 bg-[#5DCAA5]/10">
+                  <CheckCircle className="w-7 h-7 text-[#5DCAA5]" />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <h2 className="text-xl font-medium text-[#F2F2F6] tracking-[-0.3px]">
+                  {sessionInfo ? 'You\'re in.' : 'Welcome.'}
+                </h2>
+                <p className="text-[#8F8FA3] text-sm leading-relaxed">
+                  {sessionInfo
+                    ? 'Browse, like, comment — anonymously. Sign up to create threads.'
+                    : 'Your account is ready. Full access unlocked.'}
+                </p>
+              </div>
+
+              {(session.user?.anonymousId || sessionInfo?.anonymousId) && (
+                <div className="rounded-xl border border-[#23232E] bg-white/[0.02] p-4 space-y-2 text-left">
+                  <p className="text-[11px] text-[#5C5C6E] uppercase tracking-wide">Your anonymous ID</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[#8F8FA3] font-mono text-xs truncate">
+                      {session.user?.anonymousId || sessionInfo?.anonymousId}
+                    </span>
+                    <button onClick={copyAnonymousId} className="flex-shrink-0 text-[#5C5C6E] hover:text-[#C4B5FD] transition-colors">
+                      {copiedId ? <CheckCircle className="w-4 h-4 text-[#5DCAA5]" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-[#5C5C6E]">Save this. It identifies your posts.</p>
+                </div>
+              )}
+
+              <button onClick={() => router.push(redirectTo)} className={heroBtnCls}>
+                Go to feed
+              </button>
+              <p className="text-[11px] text-[#5C5C6E]">Redirecting in 5 seconds…</p>
+            </motion.div>
+          )}
+
+          {/* ── Handle picker ── */}
+          {view === 'handle-picker' && (
+            <motion.div key="handle-picker" {...enter} className="space-y-5">
+              <div className="text-center space-y-1">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-[16px] flex items-center justify-center"
+                  style={{ background: 'linear-gradient(100deg, #231D3D, #3D3555)' }}>
+                  <Link2 className="w-5 h-5 text-[#A78BFA]" />
+                </div>
+                <h2 className="text-xl font-medium text-[#F2F2F6] tracking-[-0.3px]">Claim your handle</h2>
+                <p className="text-[#8F8FA3] text-sm">This becomes your inbox link. People send you anonymous messages here.</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-[11px] text-[#5C5C6E]">whisprspace.com/message/</p>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={handleValue}
+                    onChange={(e) => onHandleChange(e.target.value)}
+                    className={`${inputCls} pr-11`}
+                    placeholder="your-handle"
+                    maxLength={30}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={regenerateHandle}
+                    title="Generate another"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#5C5C6E] hover:text-[#C4B5FD] transition-colors"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="h-5 flex items-center">
+                  {handleAvailability === 'checking' && (
+                    <span className="text-xs text-[#5C5C6E] flex items-center gap-1.5">
+                      <div className="w-3 h-3 border border-[#5C5C6E] border-t-transparent rounded-full animate-spin" />
+                      Checking…
+                    </span>
+                  )}
+                  {handleAvailability === 'available' && (
+                    <span className="text-xs text-[#5DCAA5] flex items-center gap-1">
+                      <CheckCircle className="w-3 h-3" /> {handleValue} is available
+                    </span>
+                  )}
+                  {handleAvailability === 'taken' && (
+                    <span className="text-xs text-[#E24B4A]">That handle is taken. Try another.</span>
+                  )}
+                  {handleAvailability === 'invalid' && (
+                    <span className="text-xs text-[#EF9F27]">Letters, numbers, and hyphens only (3–30 chars)</span>
+                  )}
+                </div>
               </div>
 
               <button
-                type="submit"
-                disabled={forgotLoading}
-                className="w-full h-11 rounded-md bg-gradient-to-r from-purple-500 to-orange-500 text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+                onClick={claimHandle}
+                disabled={handleSaving || handleAvailability !== 'available'}
+                className={heroBtnCls}
               >
-                {forgotLoading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  'Send Reset Link'
-                )}
+                {handleSaving ? <><Spinner /> Claiming…</> : 'Claim this handle'}
               </button>
 
-              <button
-                type="button"
-                onClick={() => setView('login')}
-                disabled={forgotLoading}
-                className="w-full text-sm text-purple-600 hover:text-orange-500 transition-colors disabled:opacity-50"
-              >
-                Back to Login
+              <button onClick={() => setView('welcome')} className={ghostBtnCls}>
+                Skip — I'll set it later
               </button>
-            </form>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
+
+          {/* ── Inbox welcome ── */}
+          {view === 'inbox-welcome' && (
+            <motion.div
+              key="inbox-welcome"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              className="space-y-6 text-center"
+            >
+              <div className="flex justify-center">
+                <div className="w-14 h-14 rounded-full flex items-center justify-center border border-[#5DCAA5]/30 bg-[#5DCAA5]/10">
+                  <CheckCircle className="w-7 h-7 text-[#5DCAA5]" />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <h2 className="text-xl font-medium text-[#F2F2F6] tracking-[-0.3px]">Your inbox is live.</h2>
+                <p className="text-[#8F8FA3] text-sm">Share this link and let people tell you the truth — anonymously.</p>
+              </div>
+
+              <div className="rounded-xl border border-[#23232E] bg-white/[0.02] p-4 space-y-2 text-left">
+                <p className="text-[11px] text-[#5C5C6E] uppercase tracking-wide">Your inbox link</p>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[#8F8FA3] font-mono text-xs truncate">
+                    whisprspace.com/message/{claimedHandle}
+                  </span>
+                  <button onClick={copyInboxLink} className="flex-shrink-0 text-[#5C5C6E] hover:text-[#C4B5FD] transition-colors">
+                    {copiedInboxLink ? <CheckCircle className="w-4 h-4 text-[#5DCAA5]" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <button onClick={shareInbox} className={heroBtnCls}>
+                Share to WhatsApp Status
+              </button>
+
+              <button onClick={() => router.push(redirectTo)} className={ghostBtnCls}>
+                Go to my feed
+              </button>
+            </motion.div>
+          )}
+
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { usePremiumThread } from '@/lib/stripe/usePremiumThread'
 import { getUserCountry } from '@/lib/payments/geo'
-import { getCurrencyForCountry, convertPrice, formatCurrency } from '@/lib/payments/currency'
+import { getCurrencyForCountry, formatCurrency, SupportedCurrency } from '@/lib/payments/currency'
 
 interface DualGatewayPremiumGateProps {
   threadId: string
@@ -24,8 +24,11 @@ export function DualGatewayPremiumGate({
 }: DualGatewayPremiumGateProps) {
   const [userCountry, setUserCountry] = useState<string>('US')
   const [isDetecting, setIsDetecting] = useState(true)
+  const [localPrice, setLocalPrice] = useState<number | null>(null)
+  const [localCurrency, setLocalCurrency] = useState<SupportedCurrency>('USD')
   const [showInviteInput, setShowInviteInput] = useState(false)
   const [inviteCode, setInviteCode] = useState('')
+  const [buyerLikes, setBuyerLikes] = useState<{ liked: number; total: number } | null>(null)
 
   const {
     hasAccess,
@@ -38,11 +41,42 @@ export function DualGatewayPremiumGate({
   } = usePremiumThread(threadId)
 
   useEffect(() => {
-    getUserCountry().then((country) => {
+    getUserCountry().then(async (country) => {
       setUserCountry(country)
+      const currency = getCurrencyForCountry(country)
+      setLocalCurrency(currency)
+
+      try {
+        const res = await fetch(
+          `/api/flutterwave/rate?currency=${currency}&amount=${price}`
+        )
+        if (res.ok) {
+          const data = await res.json()
+          setLocalPrice(data.convertedAmount)
+        } else {
+          // Fallback: keep null → show loading state replaced by USD price
+          setLocalPrice(price)
+        }
+      } catch {
+        setLocalPrice(price)
+        setLocalCurrency('USD')
+      }
+
       setIsDetecting(false)
     })
-  }, [])
+  }, [price])
+
+  useEffect(() => {
+    // Fetch buyer likes signal — only surfaces on paywall once ≥10 paid buyers exist
+    fetch(`/api/threads/${threadId}/buyer-likes`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.paid_buyer_count >= 10) {
+          setBuyerLikes({ liked: data.liked_count, total: data.paid_buyer_count })
+        }
+      })
+      .catch(() => {})
+  }, [threadId])
 
   useEffect(() => {
     if (hasAccess) return
@@ -70,9 +104,10 @@ export function DualGatewayPremiumGate({
     return <>{children}</>
   }
 
-  const currency = getCurrencyForCountry(userCountry)
-  const localPrice = convertPrice(price, currency)
-  const displayPrice = formatCurrency(localPrice, currency)
+  const currency = localCurrency
+  const displayPrice = localPrice != null
+    ? formatCurrency(localPrice, currency)
+    : formatCurrency(price, 'USD')
 
   const modal = (
     <div className="fixed inset-0 z-[1200] bg-black/75 backdrop-blur-sm flex items-center justify-center modal-safe-overlay">
@@ -92,6 +127,11 @@ export function DualGatewayPremiumGate({
         <div className="rounded-xl border border-gray-800 bg-gray-900/60 p-4 text-center mb-4">
           <div className="text-3xl font-bold text-white">{displayPrice}</div>
           <div className="text-xs text-gray-400 mt-1">One-time payment · Lifetime access</div>
+          {buyerLikes && (
+            <div className="mt-2 text-xs text-purple-300">
+              {buyerLikes.liked} of {buyerLikes.total} buyers liked this
+            </div>
+          )}
         </div>
 
         {error && (
