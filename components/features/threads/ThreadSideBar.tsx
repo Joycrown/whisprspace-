@@ -1,23 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from 'react';
 import { FaRegBell, FaBell, FaEnvelope, FaUserMinus, FaGlobe, FaLock, FaFlag } from 'react-icons/fa';
-import { Eye, Settings } from 'lucide-react'; // Import Settings icon
+import { Eye, Settings } from 'lucide-react';
 import { Thread, Message, Participant, ThreadPrivacy } from '@/types';
 import { useSearch } from '@/hooks/hooks/ThreadSearchHook';
 import { SearchBar, SearchResults } from './ThreadSearchBar';
 import { DeleteModal, RemoveModal, ReportModal as ThreadReportModal, VisibilityModal, LeaveModal } from '@/components/modals/ThreadModals';
-import ThreadSettingsPanel from './ThreadSettingsPanel'; // Import the new settings panel
+import ThreadSettingsPanel from './ThreadSettingsPanel';
 import { formatDistanceToNow } from 'date-fns';
-import { useToast } from '@/components/ui/Toast'; // Import useToast
+import { useToast } from '@/components/ui/Toast';
 import { createThreadInvite } from '@/lib/threads';
-import { getAvatarUrl } from '@/lib/utils/avatar';
 import { buildThreadPath } from '@/lib/threads/thread-url';
 
 interface ThreadSidebarProps {
-  thread: Thread & {
-    reportCount: number;
-    participants: Participant[]; // Ensure participants are always present
-  };
+  thread: Thread & { reportCount: number; participants: Participant[] };
   isMuted: boolean;
   setIsMuted: (muted: boolean) => void;
   isCreator: boolean;
@@ -28,18 +24,40 @@ interface ThreadSidebarProps {
   onLeaveThread?: () => void;
   onDeleteThread?: () => void;
   onReportThread?: (data: { reason: string; customReason?: string }) => void | Promise<void>;
-  onUpdateThreadPrivacy?: (privacy: ThreadPrivacy, memberLimit?: number) => void; // New prop for privacy update
-  onSetMessageFilter?: (filter: { senderId?: string; keyword?: string }) => void; // New prop for setting message filter
-  currentMessageFilter?: { senderId?: string; keyword?: string }; // New prop for current message filter state
-  onLockThread?: (threadId: string, isLocked: boolean) => void; // New prop for locking/unlocking thread
-  onViewReportedMessages?: (threadId: string) => void; // New prop for viewing reported messages
-  onInviteParticipant?: (threadId: string, participantId: string) => void; // Add onInviteParticipant here
-  isMobileDrawer?: boolean; // Add prop to indicate if rendering in mobile drawer
-  isDeleting?: boolean; // New prop for deletion loading state
-  onJoinThread?: () => void; // New prop for joining thread
-  isJoined?: boolean; // New prop for joined status
-  joinErrorMessage?: string; // Optional join/leave error
-  isBanned?: boolean; // Optional ban status
+  onUpdateThreadPrivacy?: (privacy: ThreadPrivacy, memberLimit?: number) => void;
+  onSetMessageFilter?: (filter: { senderId?: string; keyword?: string }) => void;
+  currentMessageFilter?: { senderId?: string; keyword?: string };
+  onLockThread?: (threadId: string, isLocked: boolean) => void;
+  onViewReportedMessages?: (threadId: string) => void;
+  onInviteParticipant?: (threadId: string, participantId: string) => void;
+  isMobileDrawer?: boolean;
+  isDeleting?: boolean;
+  onJoinThread?: () => void;
+  isJoined?: boolean;
+  joinErrorMessage?: string;
+  isBanned?: boolean;
+}
+
+// Deterministic identicon — no human photos in sidebar participant list
+function Identicon({ seed, size = 32 }: { seed: string; size?: number }) {
+  const char = (seed || '?').charAt(0).toUpperCase();
+  const code = (seed || '').charCodeAt(0) || 63;
+  const hue = (code * 47) % 360;
+  const hue2 = (hue + 55) % 360;
+  return (
+    <div
+      className="flex-shrink-0 flex items-center justify-center font-semibold select-none rounded-[22%]"
+      style={{
+        width: size,
+        height: size,
+        background: `linear-gradient(135deg, hsl(${hue},65%,42%), hsl(${hue2},65%,52%))`,
+        fontSize: size * 0.4,
+        color: 'rgba(255,255,255,0.92)',
+      }}
+    >
+      {char}
+    </div>
+  );
 }
 
 const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
@@ -59,11 +77,11 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
   currentMessageFilter,
   onLockThread,
   onViewReportedMessages,
-  onInviteParticipant, // Destructure onInviteParticipant here
-  isMobileDrawer = false, // Destructure with default value
-  isDeleting = false, // Destructure deletion state
-  onJoinThread, // Destructure
-  isJoined = false, // Destructure
+  onInviteParticipant,
+  isMobileDrawer = false,
+  isDeleting = false,
+  onJoinThread,
+  isJoined = false,
   joinErrorMessage,
   isBanned = false,
 }) => {
@@ -74,13 +92,13 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
   const [showVisibilityModal, setShowVisibilityModal] = useState(false);
   const [isPublic, setIsPublic] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
-  const [showSettingsPanel, setShowSettingsPanel] = useState(false); // State for settings panel
-  const [showDeleteModal, setShowDeleteModal] = useState(false); // State for delete modal
-  const [showLeaveModal, setShowLeaveModal] = useState(false); // State for leave modal
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  const { showToast } = useToast(); // Initialize toast
+  const { showToast } = useToast();
   const threadId = thread?.id;
   const threadPrivacy = thread?.privacy;
 
@@ -101,107 +119,60 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
   };
 
   const handleParticipantClick = (participantId: string) => {
-    const participant = participants.find(p => p.id === participantId);
-    if (participant) {
-      setSelectedParticipant(participant);
-    }
-  };
-
-  const handleMessageSearch = (messageId: string) => {
-    console.log('Navigate to message:', messageId);
+    const p = participants.find(p => p.id === participantId);
+    if (p) setSelectedParticipant(p);
   };
 
   const handleReport = async ({ reason, customReason }: { reason: string; customReason?: string }) => {
     if (thread.isLocked) {
-      showToast({
-        type: 'error',
-        title: 'Thread Blocked',
-        message: 'This thread is already blocked due to community reports.',
-        duration: 4000,
-      });
+      showToast({ type: 'error', title: 'Thread blocked', message: 'This thread is already blocked.', duration: 4000 });
       setShowReportModal(false);
       return;
     }
-
-    try {
-      await onReportThread?.({ reason, customReason });
-    } finally {
-      setShowReportModal(false);
-    }
+    try { await onReportThread?.({ reason, customReason }); } finally { setShowReportModal(false); }
   };
 
-  interface TooltipProps {
-    text: string;
-    children: React.ReactNode;
-  }
-
-  const CustomTooltip: React.FC<TooltipProps> = ({ text, children }) => {
-    return (
-      <div className="group relative inline-block">
-        {children}
-        <div className="invisible opacity-0 group-hover:visible group-hover:opacity-100 transition-all duration-300 absolute z-50 px-3 py-2 text-sm bg-gray-800 text-gray-200 rounded-md shadow-lg bottom-full left-0 mb-2 w-64">
-          <div className="relative text-xs">
-            {text}
-            <div className="absolute w-2 h-2 bg-gray-800 rotate-45 top-full -mt-1 left-4"></div>
-          </div>
-        </div>
+  const CustomTooltip: React.FC<{ text: string; children: React.ReactNode }> = ({ text, children }) => (
+    <div className="group relative inline-block">
+      {children}
+      <div className="invisible opacity-0 group-hover:visible group-hover:opacity-100 transition-all duration-200 absolute z-50 px-3 py-2 text-xs bg-[#1A1A24] border border-[#23232E] text-[#8F8FA3] rounded-xl shadow-xl bottom-full left-0 mb-2 w-56 pointer-events-none">
+        {text}
       </div>
-    );
-  };
+    </div>
+  );
 
-  const buildThreadLink = () => `${window.location.origin}/auth?redirect=${encodeURIComponent(`${buildThreadPath({ id: thread.id, title: thread.title })}?from=share`)}`;
+  const buildThreadLink = () =>
+    `${window.location.origin}/auth?redirect=${encodeURIComponent(`${buildThreadPath({ id: thread.id, title: thread.title })}?from=share`)}`;
 
   const copyToClipboard = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
-      showToast({
-        type: 'success',
-        title: 'Link Copied',
-        message: 'Invite link copied to clipboard.',
-        duration: 3000,
-      });
+      showToast({ type: 'success', title: 'Link copied', message: 'Invite link copied to clipboard.', duration: 3000 });
       return true;
     } catch {
-      showToast({
-        type: 'error',
-        title: 'Copy Failed',
-        message: 'Unable to copy link. Please copy manually.',
-        duration: 4000,
-      });
+      showToast({ type: 'error', title: 'Copy failed', message: 'Unable to copy link.', duration: 4000 });
       return false;
     }
   };
 
-  const generateInviteLink = async (forceNew: boolean = false) => {
+  const generateInviteLink = async (forceNew = false) => {
     if (thread.privacy !== 'public' && !isCreator) {
-      showToast({
-        type: 'error',
-        title: 'Invite Link Restricted',
-        message: 'Only the thread creator can generate invite links.',
-        duration: 4000,
-      });
+      showToast({ type: 'error', title: 'Restricted', message: 'Only the thread creator can generate invite links.', duration: 4000 });
       return null;
     }
-
     if (thread.privacy !== 'public') {
       setIsGeneratingLink(true);
       const { code, error } = await createThreadInvite(thread.id, null, 7, forceNew);
       setIsGeneratingLink(false);
       if (error || !code) {
-        showToast({
-          type: 'error',
-          title: 'Invite Link Failed',
-          message: error || 'Unable to generate invite link.',
-          duration: 4000,
-        });
+        showToast({ type: 'error', title: 'Link failed', message: error || 'Unable to generate invite link.', duration: 4000 });
         return null;
       }
       return `${window.location.origin}/invite/${code}`;
-    } else {
-      return buildThreadLink();
     }
+    return buildThreadLink();
   };
 
   const handleLinkClick = async () => {
@@ -220,298 +191,239 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
     await copyToClipboard(link);
   };
 
+  // ── Section components ──────────────────────────────────────────────────────
+
+  const sectionCls = 'border-b border-[#23232E] px-4 py-4';
+  const labelCls = 'text-xs text-[#5C5C6E] uppercase tracking-wide';
+  const subLabelCls = 'text-[11px] text-[#5C5C6E]';
+
   const ThreadLinkSection = () => (
-    <div className='border-b border-gray-800 p-4'>
+    <div className={sectionCls}>
       <div className="flex items-center justify-between">
-        <CustomTooltip text="Generate a unique link to invite others to join this thread. Perfect for collaboration and discussion.">
+        <CustomTooltip text="Generate a unique link to invite others to join this thread.">
           <div className="cursor-help">
-            <h2 className="text-sm text-gray-400">Thread Link</h2>
-            <p className="text-xs text-gray-400">Share and connect with others</p>
+            <p className={labelCls}>Thread link</p>
+            <p className={subLabelCls}>Share and connect</p>
           </div>
         </CustomTooltip>
         <button
           onClick={handleLinkClick}
           disabled={!isCreator}
-          className={`p-1.5 rounded transition-colors ${
-            isCreator ? 'hover:bg-gray-700' : 'opacity-40 cursor-not-allowed'
-          }`}
+          className={`p-1.5 rounded-lg transition-colors ${isCreator ? 'text-[#5C5C6E] hover:text-[#F2F2F6] hover:bg-white/[0.05]' : 'opacity-30 cursor-not-allowed'}`}
         >
-          <Eye className="w-4 h-4 text-gray-400" />
+          <Eye className="w-4 h-4" />
         </button>
       </div>
-      <div>
-        {isLinkVisible && isCreator && (
-          <div className="flex items-start gap-2">
+      {isLinkVisible && isCreator && (
+        <div className="flex items-start gap-2 mt-2">
+          <button
+            type="button"
+            onClick={handleLinkClick}
+            className="text-xs text-[#8F8FA3] break-all text-left hover:text-[#F2F2F6] transition-colors"
+          >
+            {isGeneratingLink ? 'Generating…' : (inviteLink || buildThreadLink())}
+          </button>
+          {inviteLink && (
             <button
               type="button"
-              onClick={handleLinkClick}
-              className="text-sm text-gray-300 break-all text-left hover:text-white transition-colors"
+              onClick={handleRegenerateLink}
+              className="text-[11px] px-2 py-0.5 rounded-full border border-[#2A2A38] text-[#8F8FA3] hover:border-[#8B5CF6]/50 hover:text-[#C4B5FD] transition-colors flex-shrink-0"
             >
-              {isGeneratingLink ? 'Generating link...' : (inviteLink || buildThreadLink())}
+              Regenerate
             </button>
-            {inviteLink && (
-              <button
-                type="button"
-                onClick={handleRegenerateLink}
-                className="text-[11px] px-2 py-0.5 rounded-full border border-gray-600 text-gray-300 hover:border-purple-400 hover:text-purple-300 transition-colors"
-                title="Generate a new link (old one will stop working)"
-              >
-                Regenerate
-              </button>
-            )}
-          </div>
-        )}
-        {!isCreator && (
-          <div className="text-xs text-gray-500 mt-2">Only the creator can generate a link.</div>
-        )}
-        {linkCopied && (
-          <span className="inline-block mt-2 text-[11px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
-            Copied
-          </span>
-        )}
-      </div>
+          )}
+        </div>
+      )}
+      {!isCreator && <p className={`${subLabelCls} mt-1`}>Only the creator can generate a link.</p>}
+      {linkCopied && (
+        <span className="inline-block mt-1.5 text-[11px] px-2 py-0.5 rounded-full bg-[#5DCAA5]/10 text-[#5DCAA5]">Copied</span>
+      )}
     </div>
-
   );
 
-  const ThreadStatusSection = () => {
-    return (
-      <div className="border-b border-gray-800 p-4">
-        <CustomTooltip text="Manage who can access this thread. Public threads are visible to all members, while private threads are invitation-only.">
-          <div className="cursor-help mb-2">
-            <h2 className="text-sm text-gray-400">Thread Status</h2>
-            <p className="text-xs text-gray-400">Control thread visibility</p>
-          </div>
-        </CustomTooltip>
-
-        <div className="flex items-center justify-between mt-1">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowVisibilityModal(true)}
-              className="p-1.5 rounded hover:bg-gray-700 transition-colors duration-200"
-            >
-              {thread.privacy === 'public' ? (
-                <FaGlobe className="text-green-400" />
-              ) : (
-                <FaLock className="text-yellow-400" />
-              )}
-            </button>
-            <span className="text-sm text-gray-300">
-              {thread.privacy === 'public'
-                ? 'Public'
-                : thread.privacy === 'invite_only'
-                  ? 'Invite Only'
-                  : 'Private'}
-            </span>
-          </div>
-          <span className="text-xs text-gray-400">
-            {thread.privacy === 'public' ? 'Anyone can join' : 'Invitation required'}
-          </span>
-        </div>
-      </div>
-    );
-  };
-
-  const ReportSection = ({ reportCount }: any) => (
-    <div className="flex items-center justify-between">
-      <CustomTooltip text="Number of times this thread has been reported by participants. High report counts may trigger moderation review.">
-        <div className="flex items-center gap-2 cursor-help">
-          <span className="text-sm text-gray-400">Reports</span>
+  const ThreadStatusSection = () => (
+    <div className={sectionCls}>
+      <CustomTooltip text="Manage who can access this thread.">
+        <div className="cursor-help mb-2">
+          <p className={labelCls}>Thread status</p>
+          <p className={subLabelCls}>Control visibility</p>
         </div>
       </CustomTooltip>
-      <span className="text-sm text-gray-300">{reportCount}</span>
-    </div>
-  );
-
-  const ReportButton = ({ onReportClick, disabled = false }: any) => (
-    <button
-      onClick={onReportClick}
-      disabled={disabled}
-      className={`text-gray-400 transition-colors ${disabled ? 'cursor-not-allowed opacity-50' : 'hover:text-red-400'}`}
-    >
-      <CustomTooltip text="Report this thread if you find any content that violates community guidelines">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-sm">Report Thread</span>
-          <FaFlag className="w-4 h-4" />
+          <button onClick={() => setShowVisibilityModal(true)} className="p-1.5 rounded-lg hover:bg-white/[0.05] transition-colors">
+            {thread.privacy === 'public'
+              ? <FaGlobe className="text-[#5DCAA5]" />
+              : <FaLock className="text-[#EF9F27]" />}
+          </button>
+          <span className="text-sm text-[#8F8FA3]">
+            {thread.privacy === 'public' ? 'Public' : thread.privacy === 'invite_only' ? 'Invite only' : 'Private'}
+          </span>
         </div>
-      </CustomTooltip>
-    </button>
-  );
-
-  const MuteSection = ({ isMuted, setIsMuted }: any) => (
-    <div className="flex items-center justify-between">
-      <CustomTooltip text="Control notifications for this thread. When muted, you won't receive any notifications from new messages or updates.">
-        <span className="text-sm text-gray-400 cursor-help">{isMuted ? 'Unmute Thread' : 'Mute Thread'}</span>
-      </CustomTooltip>
-      <button
-        onClick={() => setIsMuted(!isMuted)}
-        className="p-1.5 rounded hover:bg-gray-700 transition-colors"
-      >
-        {isMuted ? (
-          <FaBell className="w-4 h-4 text-purple-400" />
-        ) : (
-          <FaRegBell className="w-4 h-4 text-gray-400 hover:text-purple-400" />
-        )}
-      </button>
+        <span className={subLabelCls}>{thread.privacy === 'public' ? 'Anyone can join' : 'Invite required'}</span>
+      </div>
     </div>
   );
 
   if (!thread) return null;
 
   return (
-    <div className={`flex flex-col w-full h-full ${isMobileDrawer ? '' : 'hidden lg:flex border-l border-gray-800'}`}>
-      {/* Search Section */}
-      <div className={`sticky top-0 bg-[#121212] z-10 p-4 border-b border-gray-800 flex-shrink-0`}>
-        <SearchBar
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-        />
+    <div className={`flex flex-col w-full h-full bg-[#0E0E16] ${isMobileDrawer ? '' : 'hidden lg:flex border-l border-[#23232E]'}`}>
+
+      {/* Search */}
+      <div className="sticky top-0 bg-[#0E0E16] z-10 px-4 py-3 border-b border-[#23232E] flex-shrink-0">
+        <SearchBar searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
       </div>
-      {/* Scrollable Content Area */}
+
+      {/* Scrollable body */}
       <div className="flex-grow overflow-y-auto scrollbar-hide">
-        <div className="mt-4">
+        <div className="mt-2">
           {searchQuery.trim() ? (
             <SearchResults
               onParticipantClick={handleParticipantClick}
-              onMessageClick={handleMessageSearch}
+              onMessageClick={(id) => { console.log('Navigate to message:', id); }}
               searchQuery={searchQuery}
               searchResults={{
                 ...searchResults,
                 participants: searchResults.participants.map(p => ({
                   ...p,
-                  anonymousId: p.id, // Fallback or correct mapping
-                  status: 'offline', // Default status
+                  anonymousId: p.id,
+                  status: 'offline',
                   isPremium: false,
-                  reportCount: 0
-                }))
+                  reportCount: 0,
+                })),
               }}
               isLoading={isSearching}
             />
           ) : (
-            <div className="space-y-4">
-              {/* Thread Overview */}
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="text-sm font-semibold text-gray-400 mb-2">Thread Overview</h3>
-                <div className="space-y-2 text-gray-300 text-sm">
-                  <p><strong>Total Messages:</strong> {messages.length}</p>
-                  <p><strong>Total Participants:</strong> {thread.participantCount ?? participants.length}</p>
-                  <p><strong>Created:</strong> {(() => {
-                    const start = new Date(thread.createdAt);
-                    const end = new Date();
-                    const diffTime = Math.abs(end.getTime() - start.getTime());
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                    if (diffDays < 30) return formatDistanceToNow(start, { addSuffix: true });
-
-                    const months = Math.floor(diffDays / 30);
-                    const days = diffDays % 30;
-
-                    if (days === 0) return `${months} month${months > 1 ? 's' : ''} ago`;
-                    return `${months} month${months > 1 ? 's' : ''} ${days} day${days > 1 ? 's' : ''} ago`;
-                  })()}</p>
-                  <p><strong>Likes:</strong> {thread.likes}</p>
-                  <p><strong>Rating:</strong> {thread.rating.toFixed(1)} ({thread.ratingCount} votes)</p>
+            <div className="space-y-0">
+              {/* Overview */}
+              <div className={sectionCls}>
+                <p className={`${labelCls} mb-2`}>Thread overview</p>
+                <div className="space-y-1.5 text-sm text-[#8F8FA3]">
+                  <div className="flex justify-between">
+                    <span>Messages</span>
+                    <span className="text-[#F2F2F6]">{messages.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Participants</span>
+                    <span className="text-[#F2F2F6]">{thread.participantCount ?? participants.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Likes</span>
+                    <span className="text-[#F2F2F6]">{thread.likes}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Created</span>
+                    <span className="text-[#F2F2F6] text-xs">{(() => {
+                      const start = new Date(thread.createdAt);
+                      const diffDays = Math.ceil(Math.abs(Date.now() - start.getTime()) / 86400000);
+                      if (diffDays < 30) return formatDistanceToNow(start, { addSuffix: true });
+                      const m = Math.floor(diffDays / 30), d = diffDays % 30;
+                      return d === 0 ? `${m}mo ago` : `${m}mo ${d}d ago`;
+                    })()}</span>
+                  </div>
                 </div>
               </div>
 
-              {/* About Section - Merged with Participants */}
-              <div className="p-4">
-                <h2 className="text-lg font-bold text-white mb-4">About</h2>
-                <div className="space-y-4">
+              {/* About / Creator */}
+              <div className={sectionCls}>
+                <p className={`${labelCls} mb-3`}>About</p>
+                <div className="flex items-center gap-2.5">
+                  <Identicon seed={thread.author?.id || thread.author?.name || 'anon'} size={32} />
                   <div>
-                    <h3 className="text-sm text-gray-400 mb-2">Created by</h3>
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={thread.author?.avatar || getAvatarUrl(thread.author?.id || thread.creatorId)}
-                        alt={thread.author?.name || 'Anonymous'}
-                        className="w-8 h-8 rounded-full"
-                      />
-                      <span className="text-white">{thread.author?.name || 'Anonymous'}</span>
-                    </div>
+                    <p className="text-sm text-[#F2F2F6]">{thread.author?.name || 'Anonymous'}</p>
+                    <p className={subLabelCls}>Creator</p>
                   </div>
+                </div>
 
-                  {/* Settings button, visible to creator for private/invite-only threads */}
-                  {isCreator && (thread.privacy !== 'public') && (
-                    <button
-                      onClick={() => setShowSettingsPanel(true)}
-                      className="w-full py-2 px-4 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Settings className="w-4 h-4" />
-                      Manage Private Thread
-                    </button>
-                  )}
+                {isCreator && thread.privacy !== 'public' && (
+                  <button
+                    onClick={() => setShowSettingsPanel(true)}
+                    className="mt-3 w-full py-2 px-4 rounded-xl border border-[#2A2A38] text-sm text-[#8F8FA3] hover:text-[#F2F2F6] hover:border-[#8B5CF6]/40 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Settings className="w-4 h-4" />
+                    Manage private thread
+                  </button>
+                )}
+              </div>
 
-                  {isCreator && <ThreadLinkSection />}
-                  {isCreator && <ThreadStatusSection />}
+              {isCreator && <ThreadLinkSection />}
+              {isCreator && <ThreadStatusSection />}
 
-                  <ReportSection reportCount={thread.reportCount} />
+              {/* Reports */}
+              <div className={`${sectionCls} flex items-center justify-between`}>
+                <CustomTooltip text="Number of times this thread has been reported.">
+                  <span className={`${labelCls} cursor-help`}>Reports</span>
+                </CustomTooltip>
+                <span className="text-sm text-[#8F8FA3]">{thread.reportCount}</span>
+              </div>
 
-                  {thread.isLocked && (
-                    <div className="rounded-md border border-red-800 bg-red-950/40 px-3 py-2 text-xs text-red-200">
-                      This thread is blocked due to community reports.
-                    </div>
-                  )}
+              {thread.isLocked && (
+                <div className="mx-4 my-2 rounded-xl border border-[#E24B4A]/30 bg-[#E24B4A]/[0.07] px-3 py-2 text-xs text-[#F2F2F6]">
+                  This thread is blocked due to community reports.
+                </div>
+              )}
 
-                  {!isCreator && (
-                    <ReportButton
-                      disabled={thread.isLocked}
-                      onReportClick={() => setShowReportModal(true)}
-                    />
-                  )}
+              {/* Mute */}
+              <div className={`${sectionCls} flex items-center justify-between`}>
+                <CustomTooltip text="Mute to stop notifications from this thread.">
+                  <span className={`${labelCls} cursor-help`}>{isMuted ? 'Unmute' : 'Mute'} thread</span>
+                </CustomTooltip>
+                <button
+                  onClick={() => setIsMuted(!isMuted)}
+                  className="p-1.5 rounded-lg text-[#5C5C6E] hover:text-[#F2F2F6] hover:bg-white/[0.05] transition-colors"
+                >
+                  {isMuted
+                    ? <FaBell className="w-4 h-4 text-[#C4B5FD]" />
+                    : <FaRegBell className="w-4 h-4" />}
+                </button>
+              </div>
 
-                  <MuteSection isMuted={isMuted} setIsMuted={setIsMuted} />
+              {!isCreator && (
+                <div className={`${sectionCls} flex items-center justify-between`}>
+                  <button
+                    onClick={() => setShowReportModal(true)}
+                    disabled={thread.isLocked}
+                    className={`text-sm flex items-center gap-2 transition-colors ${thread.isLocked ? 'opacity-40 cursor-not-allowed text-[#5C5C6E]' : 'text-[#8F8FA3] hover:text-[#E24B4A]'}`}
+                  >
+                    Report thread <FaFlag className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
 
-                  {/* Participants moved here */}
-                  <h2 className="text-lg font-bold text-white mb-4 mt-4">Participants</h2>
-                  <div className="space-y-3">
-                    {participants.map(participant => {
-                      const isValidUrl = (s?: string) => !!s && s.startsWith('http');
-                      const avatarSrc = isValidUrl(participant.avatar)
-                        ? participant.avatar
-                        : getAvatarUrl(participant.id || participant.anonymousId);
-                      const initials = (participant.name || participant.anonymousId || '?').charAt(0).toUpperCase();
-                      return (
-                      <div key={participant.id} className="flex items-center gap-3">
-                        <img
-                          src={avatarSrc}
-                          alt={participant.name || 'Anonymous'}
-                          className="w-8 h-8 rounded-full object-cover object-top flex-shrink-0"
-                          onError={(e) => {
-                            const target = e.currentTarget;
-                            target.style.display = 'none';
-                            const fallback = target.nextElementSibling as HTMLElement;
-                            if (fallback) fallback.style.display = 'flex';
-                          }}
-                        />
-                        <div
-                          className="w-8 h-8 rounded-full flex-shrink-0 items-center justify-center bg-purple-700 text-white text-xs font-bold"
-                          style={{ display: 'none' }}
-                        >
-                          {initials}
-                        </div>
+              {/* Participants */}
+              <div className="px-4 py-4">
+                <p className={`${labelCls} mb-3`}>Participants</p>
+                <div className="space-y-3">
+                  {participants.map(participant => {
+                    const seed = participant.anonymousId || participant.id || participant.name || '?';
+                    return (
+                      <div key={participant.id} className="flex items-center gap-2.5">
+                        <Identicon seed={seed} size={32} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-white truncate">{participant.name || 'Anonymous'}</p>
-                          <p className="text-sm text-gray-400">{participant.messageCount ?? 0} messages</p>
+                          <p className="text-sm text-[#F2F2F6] truncate">{participant.name || 'Anonymous'}</p>
+                          <p className={subLabelCls}>{participant.messageCount ?? 0} messages</p>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-1">
                           <button
                             onClick={() => handleMessageClick(participant)}
-                            className="text-gray-400 hover:text-purple-400 transition-colors p-1.5 rounded hover:bg-gray-700"
+                            className="text-[#5C5C6E] hover:text-[#C4B5FD] transition-colors p-1.5 rounded-lg hover:bg-white/[0.05]"
                           >
-                            <FaEnvelope />
+                            <FaEnvelope className="w-3.5 h-3.5" />
                           </button>
                           {isCreator && participant.id !== thread.author?.id && (
                             <button
                               onClick={() => handleRemoveClick(participant)}
-                              className="text-gray-400 hover:text-red-400 transition-colors p-1.5 rounded hover:bg-gray-700"
+                              className="text-[#5C5C6E] hover:text-[#E24B4A] transition-colors p-1.5 rounded-lg hover:bg-white/[0.05]"
                             >
-                              <FaUserMinus />
+                              <FaUserMinus className="w-3.5 h-3.5" />
                             </button>
                           )}
                         </div>
                       </div>
-                    )})}
-                  </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -519,157 +431,114 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
         </div>
       </div>
 
-      {/* Bottom Action Button */}
-      <div className="p-4 border-t border-gray-800 flex-shrink-0">
+      {/* Bottom actions */}
+      <div className="px-4 py-4 border-t border-[#23232E] flex-shrink-0 space-y-2">
         {joinErrorMessage && (
-          <div className="mb-2 text-xs text-red-400 bg-red-900/30 border border-red-800 rounded px-3 py-2">
+          <div className="text-xs text-[#E24B4A] bg-[#E24B4A]/[0.07] border border-[#E24B4A]/30 rounded-xl px-3 py-2">
             {joinErrorMessage}
           </div>
         )}
+
         {isCreator ? (
-          <div className="mt-6 space-y-2">
-            {/* Save Thread Button - Premium Feature (show to all creators) */}
+          <div className="space-y-2">
             {thread.expiresAt && !thread.isSaved && (
-              <button
-                onClick={() => {
-                  // Check if user is premium
-                  const userIsPremium = thread.author?.isPremium;
-
-                  if (!userIsPremium) {
-                    // Show upgrade prompt for non-premium users
-                    showToast({
-                      type: 'warning',
-                      title: '🌟 Premium Feature',
-                      message: 'Save Thread is a premium feature. Upgrade to Premium to save threads permanently, remove expiration dates, and keep them private!',
-                      duration: 7000
-                    });
-                    return;
-                  }
-
-                  // Premium user - proceed with save
-                  import('@/lib/threads/thread-service').then(({ saveThread }) => {
-                    const userId = thread.author?.id || thread.authorId;
-                    if (userId) {
-                      saveThread(thread.id, userId).then(result => {
-                        if (result.success) {
-                          showToast({
-                            type: 'success',
-                            title: 'Thread Saved!',
-                            message: 'Your thread will never expire and is now private to you.',
-                          });
-                          window.location.reload();
-                        } else {
-                          showToast({
-                            type: 'error',
-                            title: 'Failed to Save',
-                            message: result.error || 'Could not save thread',
-                          });
-                        }
-                      });
+              <>
+                <button
+                  onClick={() => {
+                    const userIsPremium = thread.author?.isPremium;
+                    if (!userIsPremium) {
+                      showToast({ type: 'warning', title: 'Premium feature', message: 'Upgrade to save threads permanently.', duration: 7000 });
+                      return;
                     }
-                  });
-                }}
-                className={`w-full px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${thread.author?.isPremium
-                  ? 'bg-green-600 hover:bg-green-700 text-white'
-                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300 border border-yellow-500/50'
+                    import('@/lib/threads/thread-service').then(({ saveThread }) => {
+                      const userId = thread.author?.id || thread.authorId;
+                      if (userId) {
+                        saveThread(thread.id, userId).then(result => {
+                          if (result.success) {
+                            showToast({ type: 'success', title: 'Thread saved', message: 'Your thread will never expire.' });
+                            window.location.reload();
+                          } else {
+                            showToast({ type: 'error', title: 'Failed to save', message: result.error || 'Could not save thread' });
+                          }
+                        });
+                      }
+                    });
+                  }}
+                  className={`w-full px-4 py-2 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors ${
+                    thread.author?.isPremium
+                      ? 'bg-[#5DCAA5]/10 border border-[#5DCAA5]/30 text-[#5DCAA5] hover:bg-[#5DCAA5]/20'
+                      : 'bg-white/[0.03] border border-[#2A2A38] text-[#5C5C6E]'
                   }`}
-              >
-                <span>💾</span>
-                Save Thread
-                {!thread.author?.isPremium && <span className="text-yellow-400 text-xs ml-1">★ Premium</span>}
-              </button>
+                >
+                  Save thread
+                  {!thread.author?.isPremium && <span className="text-[#EF9F27] text-[11px]">Premium</span>}
+                </button>
+
+                <button
+                  onClick={() => {
+                    const userIsPremium = thread.author?.isPremium;
+                    if (!userIsPremium) {
+                      showToast({ type: 'warning', title: 'Premium feature', message: 'Upgrade to extend thread expiration.', duration: 7000 });
+                      return;
+                    }
+                    import('@/lib/threads/thread-service').then(({ extendThreadExpiration }) => {
+                      const userId = thread.author?.id || thread.authorId;
+                      if (userId) {
+                        extendThreadExpiration(thread.id, userId).then(result => {
+                          if (result.success) {
+                            showToast({ type: 'success', title: 'Extended', message: `New expiration: ${result.newExpiresAt ? new Date(result.newExpiresAt).toLocaleString() : ''}` });
+                            window.location.reload();
+                          } else {
+                            showToast({ type: 'error', title: 'Failed', message: result.error || 'Could not extend thread' });
+                          }
+                        });
+                      }
+                    });
+                  }}
+                  className={`w-full px-4 py-2 rounded-xl text-sm flex items-center justify-center gap-2 transition-colors ${
+                    thread.author?.isPremium
+                      ? 'bg-[#8B5CF6]/10 border border-[#8B5CF6]/30 text-[#C4B5FD] hover:bg-[#8B5CF6]/20'
+                      : 'bg-white/[0.03] border border-[#2A2A38] text-[#5C5C6E]'
+                  }`}
+                >
+                  Extend +7 days
+                  {!thread.author?.isPremium && <span className="text-[#EF9F27] text-[11px]">Premium</span>}
+                </button>
+              </>
             )}
 
-            {/* Extend Expiration Button - Premium Feature (show to all creators) */}
-            {thread.expiresAt && !thread.isSaved && (
-              <button
-                onClick={() => {
-                  // Check if user is premium
-                  const userIsPremium = thread.author?.isPremium;
-
-                  if (!userIsPremium) {
-                    // Show upgrade prompt for non-premium users
-                    showToast({
-                      type: 'warning',
-                      title: '🌟 Premium Feature',
-                      message: 'Extend Thread is a premium feature. Upgrade to Premium to extend thread expiration by 7 days and keep popular threads alive longer!',
-                      duration: 7000
-                    });
-                    return;
-                  }
-
-                  // Premium user - proceed with extend
-                  import('@/lib/threads/thread-service').then(({ extendThreadExpiration }) => {
-                    const userId = thread.author?.id || thread.authorId;
-                    if (userId) {
-                      extendThreadExpiration(thread.id, userId).then(result => {
-                        if (result.success) {
-                          const newDate = result.newExpiresAt ? new Date(result.newExpiresAt).toLocaleString() : '';
-                          showToast({
-                            type: 'success',
-                            title: 'Thread Extended!',
-                            message: `New expiration: ${newDate}`,
-                          });
-                          window.location.reload();
-                        } else {
-                          showToast({
-                            type: 'error',
-                            title: 'Failed to Extend',
-                            message: result.error || 'Could not extend thread',
-                          });
-                        }
-                      });
-                    }
-                  });
-                }}
-                className={`w-full px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-2 ${thread.author?.isPremium
-                  ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300 border border-yellow-500/50'
-                  }`}
-              >
-                <span>⏰</span>
-                Extend +7 Days
-                {!thread.author?.isPremium && <span className="text-yellow-400 text-xs ml-1">★ Premium</span>}
-              </button>
-            )}
-
-            {/* Saved Thread Indicator */}
             {thread.isSaved && (
-              <div className="w-full bg-green-900/30 border border-green-500/30 text-green-400 px-4 py-2 rounded-lg flex items-center justify-center gap-2">
-                <span>✅</span>
-                Saved (Never Expires)
+              <div className="w-full text-sm text-[#5DCAA5] border border-[#5DCAA5]/30 bg-[#5DCAA5]/[0.06] px-4 py-2 rounded-xl flex items-center justify-center gap-2">
+                Never expires
               </div>
             )}
 
             <button
               onClick={() => setShowDeleteModal(true)}
-              className="w-full bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors"
+              className="w-full bg-[#E24B4A]/[0.08] border border-[#E24B4A]/30 hover:bg-[#E24B4A]/[0.15] text-[#E24B4A] px-4 py-2 rounded-xl text-sm transition-colors"
             >
-              Delete Thread
+              Delete thread
             </button>
           </div>
+        ) : isBanned ? (
+          <div className="text-center text-sm text-[#E24B4A] bg-[#E24B4A]/[0.07] border border-[#E24B4A]/30 px-4 py-3 rounded-xl">
+            You have been removed from this thread.
+          </div>
+        ) : isJoined ? (
+          <button
+            onClick={() => setShowLeaveModal(true)}
+            className="w-full py-2 px-4 bg-[#E24B4A]/[0.08] border border-[#E24B4A]/30 hover:bg-[#E24B4A]/[0.15] text-[#E24B4A] rounded-xl text-sm transition-colors"
+          >
+            Leave thread
+          </button>
         ) : (
-          isBanned ? (
-            <div className="w-full text-center bg-red-900/30 border border-red-800 text-red-300 px-4 py-3 rounded-lg">
-              You have been removed from this thread.
-            </div>
-          ) : (
-            isJoined ? (
-              <button
-                onClick={() => setShowLeaveModal(true)}
-                className="w-full py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-              >
-                Leave Thread
-              </button>
-            ) : (
-              <button
-                onClick={onJoinThread}
-                className="w-full py-2 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors flex items-center justify-center gap-2"
-              >
-                <span>👋</span> Join Thread
-              </button>
-            )
-          )
+          <button
+            onClick={onJoinThread}
+            className="w-full py-2 px-4 rounded-xl text-sm font-medium text-white flex items-center justify-center gap-2 active:scale-[0.97] transition-all"
+            style={{ background: 'linear-gradient(100deg, #8B5CF6, #F97316)' }}
+          >
+            Join thread
+          </button>
         )}
       </div>
 
@@ -680,56 +549,43 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
         participantName={selectedParticipant?.name || ''}
         onRemove={() => onRemoveParticipant?.(selectedParticipant?.id || '')}
       />
-
       <ThreadReportModal
         isOpen={showReportModal}
         onClose={() => setShowReportModal(false)}
         onReport={handleReport}
       />
-
       <VisibilityModal
         isOpen={showVisibilityModal}
         onClose={() => setShowVisibilityModal(false)}
         isPublic={isPublic}
         onToggleVisibility={() => setIsPublic(!isPublic)}
       />
-
-
       <DeleteModal
         isOpen={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         onDelete={() => onDeleteThread?.()}
         isLoading={isDeleting}
       />
-
-      {/* Settings Panel */}
       <ThreadSettingsPanel
         isOpen={showSettingsPanel}
         onClose={() => setShowSettingsPanel(false)}
         thread={thread}
         onUpdatePrivacy={onUpdateThreadPrivacy}
         onRemoveParticipant={onRemoveParticipant}
-        onInviteParticipant={onInviteParticipant} // Pass onInviteParticipant here
-        participants={participants} // Pass participants to settings panel for member management
-        onSetMessageFilter={onSetMessageFilter} // Pass message filter setter
-        currentMessageFilter={currentMessageFilter} // Pass current message filter state
-        onLockThread={onLockThread} // Pass new handler
-        onViewReportedMessages={onViewReportedMessages} // Pass new handler
+        onInviteParticipant={onInviteParticipant}
+        participants={participants}
+        onSetMessageFilter={onSetMessageFilter}
+        currentMessageFilter={currentMessageFilter}
+        onLockThread={onLockThread}
+        onViewReportedMessages={onViewReportedMessages}
       />
       <LeaveModal
         isOpen={showLeaveModal}
         onClose={() => setShowLeaveModal(false)}
-        onConfirm={() => {
-          onLeaveThread?.();
-          setShowLeaveModal(false);
-        }}
+        onConfirm={() => { onLeaveThread?.(); setShowLeaveModal(false); }}
       />
     </div>
   );
 };
 
 export default ThreadSidebar;
-
-
-
-

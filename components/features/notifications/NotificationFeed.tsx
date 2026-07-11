@@ -3,7 +3,7 @@ import { useUserStore } from '@/store/userStore';
 import { useNotifications, NotificationCategory, NotificationType } from '@/lib/notifications';
 import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
-import { FaCheckCircle, FaHeart, FaUsers, FaBell, FaAt, FaReply, FaClock, FaTrophy, FaTrash, FaEnvelopeOpenText } from 'react-icons/fa';
+import { FaCheckCircle, FaHeart, FaUsers, FaBell, FaAt, FaReply, FaClock, FaTrash, FaEnvelopeOpenText } from 'react-icons/fa';
 import AppLoadingState from '@/components/ui/AppLoadingState';
 import { buildThreadPath } from '@/lib/threads/thread-url';
 
@@ -64,7 +64,6 @@ const NotificationFeed: React.FC = () => {
     thread_invite: <FaUsers className="text-purple-400" />,
     poll_ending_soon: <FaClock className="text-yellow-400" />,
     thread_expiring_soon: <FaClock className="text-orange-400" />,
-    achievement_unlocked: <FaTrophy className="text-yellow-500" />,
   };
 
   const filterOptions: { value: NotificationCategory; label: string }[] = [

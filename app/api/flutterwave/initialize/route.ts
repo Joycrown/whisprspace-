@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
-import { convertPrice, formatCurrency, SupportedCurrency, SUPPORTED_CURRENCIES } from '@/lib/payments/currency'
+import { formatCurrency, SupportedCurrency, SUPPORTED_CURRENCIES } from '@/lib/payments/currency'
+import { convertWithLiveRate } from '@/lib/payments/flutterwave-rates'
 import { buildThreadPath } from '@/lib/threads/thread-url'
 import { getTrustedAppBaseUrl } from '@/lib/security/app-url'
 import { enforceRateLimit, withRateLimitHeaders } from '@/lib/security/rate-limit'
@@ -160,11 +161,11 @@ export async function POST(request: NextRequest) {
       typeof metadata.full_name === 'string' ? metadata.full_name : undefined
 
     // Determine final currency and amount
-    const currency = (requestedCurrency && Object.values(SUPPORTED_CURRENCIES).includes(requestedCurrency)) 
-      ? requestedCurrency as SupportedCurrency 
+    const currency = (requestedCurrency && Object.values(SUPPORTED_CURRENCIES).includes(requestedCurrency))
+      ? requestedCurrency as SupportedCurrency
       : 'USD';
-    
-    const finalAmount = convertPrice(price, currency);
+
+    const { amount: finalAmount } = await convertWithLiveRate(flutterwaveSecretKey, price, currency);
 
     const response = await fetch('https://api.flutterwave.com/v3/payments', {
       method: 'POST',

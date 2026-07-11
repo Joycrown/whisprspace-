@@ -14,17 +14,17 @@ interface CardProps {
 }
 
 const variantStyles = {
-  default: 'bg-gray-800 border border-gray-700',
-  elevated: 'bg-gray-800 shadow-lg',
-  bordered: 'bg-gray-800 border-2 border-gray-700',
-  gradient: 'bg-gradient-to-br from-purple-900/30 to-orange-900/30 border border-purple-500/50',
+  default:  'bg-[#12121A] border border-[#23232E]',
+  elevated: 'bg-[#12121A] border border-[#23232E]',
+  bordered: 'bg-[#12121A] border-2 border-[#23232E]',
+  gradient: 'bg-[#15101E] border border-[#8B5CF6]/25',
 };
 
 const paddingStyles = {
   none: '',
-  sm: 'p-3 md:p-4',
-  md: 'p-4 md:p-6',
-  lg: 'p-6 md:p-8',
+  sm:   'p-3 md:p-4',
+  md:   'p-4 md:p-6',
+  lg:   'p-6 md:p-8',
 };
 
 export function Card({
@@ -37,14 +37,14 @@ export function Card({
   onClick,
 }: CardProps) {
   const Component = clickable || onClick ? motion.div : 'div';
-  
+
   return (
     <Component
       className={`
         ${variantStyles[variant]}
         ${paddingStyles[padding]}
-        rounded-xl transition-all duration-200
-        ${hover ? 'hover:border-purple-500/50 hover:shadow-lg' : ''}
+        rounded-2xl transition-colors
+        ${hover ? 'hover:border-[#8B5CF6]/40' : ''}
         ${clickable ? 'cursor-pointer active:scale-[0.98]' : ''}
         ${className}
       `}
@@ -57,16 +57,12 @@ export function Card({
 }
 
 export function CardHeader({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`mb-4 ${className}`}>
-      {children}
-    </div>
-  );
+  return <div className={`mb-4 ${className}`}>{children}</div>;
 }
 
 export function CardTitle({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <h3 className={`text-lg md:text-xl font-semibold text-white ${className}`}>
+    <h3 className={`text-base font-medium text-[#F2F2F6] tracking-[-0.3px] ${className}`}>
       {children}
     </h3>
   );
@@ -74,24 +70,16 @@ export function CardTitle({ children, className = '' }: { children: React.ReactN
 
 export function CardDescription({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <p className={`text-sm md:text-base text-gray-400 ${className}`}>
-      {children}
-    </p>
+    <p className={`text-sm text-[#8F8FA3] ${className}`}>{children}</p>
   );
 }
 
 export function CardContent({ children, className = '' }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={className}>
-      {children}
-    </div>
-  );
+  return <div className={className}>{children}</div>;
 }
 
 export function CardFooter({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`mt-4 pt-4 border-t border-gray-700 ${className}`}>
-      {children}
-    </div>
+    <div className={`mt-4 pt-4 border-t border-[#23232E] ${className}`}>{children}</div>
   );
 }

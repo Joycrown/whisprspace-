@@ -9,13 +9,6 @@ import {
   sanitizeUuid,
 } from '@/lib/security/input-sanitization'
 
-// Generate anonymous user ID
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const generateAnonymousId = (): string => {
-  const randomNum = Math.floor(Math.random() * 100000000)
-  return `ANON_${randomNum.toString().padStart(8, '0')}`
-}
-
 // Convert raw auth user to WhisprSpace User
 const convertAuthUserToUser = async (userId: string): Promise<User> => {
   // Fetch user data from our users table
@@ -52,8 +45,6 @@ const convertAuthUserToUser = async (userId: string): Promise<User> => {
     username: user.username,
     lastUsernameChange: user.last_username_change,
     isAnonymous: user.is_anonymous,
-    points: user.points || 0,
-    level: user.level || 1,
     joinedAt: user.created_at,
     lastActiveAt: user.last_active_at,
     preferences: user.preferences,
@@ -65,34 +56,12 @@ const convertAuthUserToUser = async (userId: string): Promise<User> => {
   }
 }
 
-const ACCOUNT_EXISTS_ERROR = 'Account already exsit'
-
 const sendWelcome = (payload: { userId: string; inboxHandle: string; email?: string }) => {
   fetch('/api/welcome', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).catch((err) => console.warn('[AuthService] Welcome message failed silently:', err))
-}
-
-const emailAlreadyExists = async (email: string): Promise<boolean> => {
-  const normalizedEmail = sanitizeEmailAddress(email)
-  if (!normalizedEmail) return false
-
-  const { data, error } = await rawDb.select<{ id: string }>('users', {
-    select: 'id',
-    filters: {
-      email: rawDb.filter.ilike(normalizedEmail),
-    },
-    limit: 1,
-  })
-
-  if (error) {
-    console.warn('[AuthService] Email pre-check failed, continuing with signup request:', error)
-    return false
-  }
-
-  return Array.isArray(data) ? data.length > 0 : !!data
 }
 
 /**
@@ -151,31 +120,27 @@ export const signUpWithEmail = async (
       throw new Error('Password is required')
     }
 
-    const emailExists = await emailAlreadyExists(normalizedEmail)
-    if (emailExists) {
-      throw new Error(ACCOUNT_EXISTS_ERROR)
-    }
-
-    // Check if user is currently anonymous
-    const currentSession = rawAuth.getSession()
-    
-    if (currentSession?.user?.is_anonymous) {
-      // For anonymous users, we can't link - just create new account
-      // (Supabase's updateUser for linking requires SDK features we're removing)
-
-    }
-
     // Create new account (auto-confirm without email verification)
     const { session, error: signUpError } = await rawAuth.signUp(normalizedEmail, sanitizedPassword)
 
     if (signUpError) throw signUpError
     if (!session) throw new Error('No session returned')
 
-    // Wait for trigger to create user record
-    await new Promise(resolve => setTimeout(resolve, 100))
+    // Wait for the DB trigger to create the public.users record, retrying up to 10 times.
+    // Mirrors the anonymous sign-in retry pattern — the trigger can take up to ~3 seconds.
+    const maxAttempts = 10
+    let user: User | null = null
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        user = await convertAuthUserToUser(session.user.id)
+        break
+      } catch (err) {
+        if (attempt === maxAttempts) throw err
+        await new Promise(resolve => setTimeout(resolve, 300))
+      }
+    }
 
-    // Fetch user record created by trigger
-    const user = await convertAuthUserToUser(session.user.id)
+    if (!user) throw new Error('Failed to create user profile after sign up')
 
     // Fire-and-forget: send welcome inbox message + email
     sendWelcome({ userId: user.id, inboxHandle: user.anonymousId, email: normalizedEmail })

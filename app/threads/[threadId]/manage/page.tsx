@@ -250,6 +250,11 @@ export default function ThreadManagePage({ params }: PageProps) {
           isGenerating={isGenerating || codesLoading}
           errorMessage={codesError}
           isThreadActive={isThreadActive}
+          threadUrl={
+            typeof window !== 'undefined'
+              ? `${window.location.origin}${threadPath}`
+              : undefined
+          }
         />
       </div>
     </div>

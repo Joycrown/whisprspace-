@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react'
 import { useUserStore } from '@/store/userStore'
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://whisprspace.com'
+const FALLBACK_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://whisprspace.com'
 
 const SHARE_TEXT =
   "Drop me an anonymous message — a secret, a question, or just say hi. No identity, pure honesty 👀🔥"
@@ -15,7 +15,11 @@ export function useInboxShare() {
   const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
 
   const handle = session?.user?.username || session?.user?.anonymousId || ''
-  const link = handle ? `${APP_URL}/message/${handle}` : ''
+
+  // Use the actual origin at runtime so the link always matches the deployed domain.
+  // Falls back to the env var for SSR contexts where window is unavailable.
+  const origin = typeof window !== 'undefined' ? window.location.origin : FALLBACK_URL
+  const link = handle ? `${origin}/message/${handle}` : ''
 
   const copyLink = useCallback(() => {
     if (!link) return

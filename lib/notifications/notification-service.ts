@@ -15,7 +15,6 @@ export type NotificationType =
   | 'mention'
   | 'group_invite'
   | 'thread_invite'
-  | 'achievement_unlocked'
   | 'poll_ending_soon'
   | 'thread_expiring_soon'
 
@@ -439,8 +438,6 @@ export const getNotificationIcon = (type: NotificationType): string => {
       return '\u{1F3AB}'
     case 'thread_invite':
       return '\u{1F3AB}'
-    case 'achievement_unlocked':
-      return '\u{1F3C6}'
     case 'poll_ending_soon':
       return '\u{23F0}'
     case 'thread_expiring_soon':
@@ -469,8 +466,6 @@ export const getNotificationColor = (type: NotificationType): string => {
       return 'text-green-500'
     case 'thread_invite':
       return 'text-purple-500'
-    case 'achievement_unlocked':
-      return 'text-yellow-500'
     case 'poll_ending_soon':
       return 'text-orange-500'
     case 'thread_expiring_soon':

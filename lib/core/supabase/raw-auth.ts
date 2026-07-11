@@ -4,10 +4,11 @@
  * Replaces @supabase/supabase-js auth methods with direct API calls
  */
 import { hasRequiredLegalConsent, LEGAL_CONSENT_REQUIRED_ERROR } from '@/lib/legal/consent'
+import { clearCachedToken } from '@/lib/utils/auth-token-cache'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const ACCOUNT_EXISTS_ERROR = 'Account already exsit';
+const ACCOUNT_EXISTS_ERROR = 'Account already exists';
 
 interface Session {
   access_token: string;
@@ -33,6 +34,18 @@ interface AnonymousSignInOptions {
 }
 
 const SESSION_KEY = 'supabase.auth.session';
+const ANON_SESSION_KEY = 'supabase.auth.anon_session';
+
+/** Read the persisted anonymous session (survives registered sign-ins overwriting the primary slot). */
+function readStoredAnonSession(): Session | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(ANON_SESSION_KEY);
+    return raw ? (JSON.parse(raw) as Session) : null;
+  } catch {
+    return null;
+  }
+}
 
 function getAuthHeaders(): Record<string, string> {
   return {
@@ -130,15 +143,34 @@ export function getStoredSession(): Session | null {
 }
 
 /**
- * Save session to localStorage
+ * Save session to localStorage.
+ * Anonymous sessions are also persisted to a separate key so they survive
+ * a registered sign-in overwriting the primary session slot.
  */
 function saveSession(session: Session | null) {
   if (typeof window === 'undefined') return;
-  
+
   if (session) {
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    if (session.user?.is_anonymous) {
+      localStorage.setItem(ANON_SESSION_KEY, JSON.stringify(session));
+    }
   } else {
     localStorage.removeItem(SESSION_KEY);
+  }
+}
+
+/**
+ * Inject a pre-built session into localStorage and emit SIGNED_IN.
+ * Used by the claim flow: the server mints a session via the admin API,
+ * returns it to the browser, and the claim page calls this to log the user in
+ * without going through a normal signIn() call.
+ */
+export function setSession(session: Session): void {
+  saveSession(session);
+  emitAuthEvent('SIGNED_IN', session);
+  if (session.expires_in) {
+    scheduleTokenRefresh(session.expires_in);
   }
 }
 
@@ -233,7 +265,13 @@ export async function signUp(email: string, password: string): Promise<AuthRespo
 }
 
 /**
- * Sign in anonymously
+ * Sign in anonymously.
+ *
+ * Returns the same anonymous account across visits on the same device by
+ * attempting to restore the stored session before creating a new one:
+ *   1. Valid stored session → return it directly (no network call).
+ *   2. Expired access token but valid refresh token → refresh and return.
+ *   3. No session / refresh failed → create a fresh anonymous user.
  */
 export async function signInAnonymously(options: AnonymousSignInOptions = {}): Promise<AuthResponse> {
   try {
@@ -242,14 +280,34 @@ export async function signInAnonymously(options: AnonymousSignInOptions = {}): P
       throw new Error(LEGAL_CONSENT_REQUIRED_ERROR)
     }
 
-    // Supabase anonymous auth - creates an anonymous user/session
-    // Mirrors supabase-js signInAnonymously implementation
+    // ── Attempt to restore the previous anonymous session ─────────────────────
+    // Check primary slot first, then the dedicated anon slot (survives registered sign-ins).
+    const primarySession = readStoredSession();
+    const storedSession: Session | null =
+      primarySession?.user?.is_anonymous ? primarySession : readStoredAnonSession();
+
+    if (storedSession?.user?.is_anonymous) {
+      if (!isSessionExpired(storedSession)) {
+        // Access token still valid — reuse it, no network call needed
+        emitAuthEvent('SIGNED_IN', storedSession);
+        scheduleTokenRefresh(storedSession.expires_in);
+        return { session: storedSession, user: storedSession.user, error: null };
+      }
+
+      // Access token expired — try the refresh token (valid for up to 60 days)
+      const refreshed = await refreshToken();
+      if (refreshed.session) {
+        // Same anonymous user, new access token
+        return refreshed;
+      }
+      // Refresh failed (token rotated away or truly expired) — fall through to create new
+    }
+
+    // ── No restorable session — create a new anonymous user ───────────────────
     const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
       method: 'POST',
       headers: getAuthHeaders(),
-      body: JSON.stringify({
-        data: {},
-      }),
+      body: JSON.stringify({ data: {} }),
     });
 
     if (!res.ok) {
@@ -303,6 +361,8 @@ export async function signOut(): Promise<{ error: Error | null }> {
     }
 
     saveSession(null);
+    if (typeof window !== 'undefined') localStorage.removeItem(ANON_SESSION_KEY);
+    clearCachedToken();
     emitAuthEvent('SIGNED_OUT', null);
     cancelTokenRefresh();
 

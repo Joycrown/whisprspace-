@@ -26,27 +26,23 @@ export function EmptyState({
   return (
     <div className={`flex flex-col items-center justify-center text-center p-8 md:p-12 ${className}`}>
       {Icon && (
-        <div className="mb-4 text-gray-600">
-          <Icon className="w-12 h-12 md:w-16 md:h-16" />
+        <div className="mb-4 text-[#5C5C6E]">
+          <Icon className="w-10 h-10 md:w-12 md:h-12" />
         </div>
       )}
-      
-      <h3 className="text-lg md:text-xl font-semibold text-white mb-2">
+
+      <h3 className="text-base font-medium text-[#F2F2F6] tracking-[-0.3px] mb-1">
         {title}
       </h3>
-      
+
       {description && (
-        <p className="text-sm md:text-base text-gray-400 mb-6 max-w-md">
+        <p className="text-sm text-[#8F8FA3] mb-6 max-w-sm leading-relaxed">
           {description}
         </p>
       )}
-      
+
       {action && (
-        <Button
-          onClick={action.onClick}
-          leftIcon={action.icon}
-          size="md"
-        >
+        <Button onClick={action.onClick} leftIcon={action.icon} size="md">
           {action.label}
         </Button>
       )}
@@ -54,12 +50,11 @@ export function EmptyState({
   );
 }
 
-// Preset empty states for common scenarios
 export function EmptyThreads() {
   return (
     <EmptyState
-      title="No Threads Yet"
-      description="Be the first to start a conversation. Create a thread and share your thoughts anonymously."
+      title="No threads yet"
+      description="Be the first to start a conversation. Create a thread and speak freely."
     />
   );
 }
@@ -67,8 +62,8 @@ export function EmptyThreads() {
 export function EmptyMessages() {
   return (
     <EmptyState
-      title="No Messages Yet"
-      description="Share your DM link to start receiving anonymous messages from anyone."
+      title="No messages yet"
+      description="Share your inbox link to start receiving anonymous messages from anyone."
     />
   );
 }
@@ -76,8 +71,8 @@ export function EmptyMessages() {
 export function EmptySearchResults() {
   return (
     <EmptyState
-      title="No Results Found"
-      description="Try adjusting your search terms or filters to find what you're looking for."
+      title="No results"
+      description="Try adjusting your search terms or filters."
     />
   );
 }
@@ -85,8 +80,8 @@ export function EmptySearchResults() {
 export function EmptyNotifications() {
   return (
     <EmptyState
-      title="All Caught Up!"
-      description="You don't have any new notifications right now."
+      title="All caught up"
+      description="No new notifications right now."
     />
   );
 }

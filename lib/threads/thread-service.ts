@@ -377,15 +377,13 @@ export const createThread = async (
         }
 
         const minPrice = 1.0;
-        const maxPrice = isUserPremium ? 4.99 : 2.99;
         if (price < minPrice) {
           throw new Error(`Minimum price is $${minPrice.toFixed(2)} for premium threads.`);
         }
 
-        if (price > maxPrice) {
-          throw new Error(
-            `Maximum price for ${isUserPremium ? 'premium' : 'free'} creators is $${maxPrice.toFixed(2)}.`
-          );
+        // Free users are capped at $2.99; premium users set their own price
+        if (!isUserPremium && price > 2.99) {
+          throw new Error('Free creators can charge up to $2.99. Upgrade to Premium to set any price.');
         }
       }
 
@@ -1126,17 +1124,34 @@ export const saveThread = async (
       return { success: false, error: 'Invalid thread or user reference' }
     }
 
-    // Fetch the thread to verify ownership
-    const { data: threadData, error: fetchError } = await rawDb.select<any>('threads', {
-      select: 'id, creator_id, is_saved',
-      filters: { 'id': rawDb.filter.eq(safeThreadId) },
-      single: true
-    })
+    // Fetch thread and user premium status together
+    const [{ data: threadData, error: fetchError }, { data: userData, error: userError }] = await Promise.all([
+      rawDb.select<any>('threads', {
+        select: 'id, creator_id, is_saved',
+        filters: { 'id': rawDb.filter.eq(safeThreadId) },
+        single: true,
+      }),
+      rawDb.select<any>('users', {
+        select: 'id, is_premium',
+        filters: { 'id': rawDb.filter.eq(safeUserId) },
+        single: true,
+      }),
+    ])
 
-    const thread = threadData as any;
+    const thread = threadData as any
+    const userRecord = userData as any
 
     if (fetchError || !thread) {
       return { success: false, error: 'Thread not found' }
+    }
+
+    if (userError || !userRecord) {
+      return { success: false, error: 'User not found' }
+    }
+
+    // Only premium users can save threads
+    if (!userRecord.is_premium) {
+      return { success: false, error: 'Saving threads is a Premium feature' }
     }
 
     // Verify user is the creator
