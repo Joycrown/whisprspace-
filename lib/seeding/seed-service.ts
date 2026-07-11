@@ -79,8 +79,6 @@ export async function createSeedUsers(): Promise<{ created: number; skipped: num
         username: profile.username,
         is_anonymous: true,
         is_seed: true,
-        points: Math.floor(Math.random() * 200) + 50,
-        level: Math.floor(Math.random() * 3) + 1,
         preferences: {
           theme: 'system',
           notifications: { email: false, push: false, inApp: false, likes: false, replies: false, mentions: false, groupInvites: false },

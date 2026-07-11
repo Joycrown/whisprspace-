@@ -180,7 +180,8 @@ export const redeemThreadInvite = async (
       .insert({
         thread_id: invite.thread_id,
         user_id: userId,
-        amount: 0, // Free access via invite
+        amount: 0,
+        acquisition_type: 'invite',
       })
 
     if (purchaseError) {

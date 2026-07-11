@@ -32,7 +32,6 @@ export default function robots(): MetadataRoute.Robots {
           '/groups',
           '/threads',
           '/invite/',
-          '/anonymous-messages',
         ],
       },
     ],
