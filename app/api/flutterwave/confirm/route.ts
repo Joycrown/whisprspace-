@@ -327,6 +327,7 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         amount: amountUsd,
         stripe_payment_intent_id: transactionRef,
+        acquisition_type: 'paid',
       })
 
     if (purchaseError && purchaseError.code !== '23505') {

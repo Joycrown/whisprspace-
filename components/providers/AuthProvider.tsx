@@ -1,354 +1,222 @@
 'use client'
 
-import { useCallback, useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import * as rawAuth from '@/lib/core/supabase/raw-auth'
 import { useUserStore } from '@/store/userStore'
 import { getCurrentSession } from '@/lib/auth/auth-service'
 import { initializeStorage } from '@/lib/utils/storage-migration'
 import { getAnonymousSessionExpiry, getRegisteredSessionExpiry } from '@/lib/utils/session-expiry'
+import { setAccessToken } from '@/lib/utils/auth-token-cache'
+
+// Stable outside component — never recreated
+const PUBLIC_PREFIXES = ['/auth', '/privacy-policy', '/community-guidelines', '/getting-started', '/profile', '/invite', '/message']
+
+function isPublicRoute(path: string): boolean {
+  return path === '/' || PUBLIC_PREFIXES.some(p => path.startsWith(p))
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
 
-  // Helper function to check if session is expired
-  const isSessionExpired = useCallback((sessionExpiry: string | null): boolean => {
-    if (!sessionExpiry) return false
-    return new Date() >= new Date(sessionExpiry)
-  }, [])
+  // Mutable ref so mount-only callbacks always read the current pathname without
+  // needing to be re-registered on every navigation.
+  const pathnameRef = useRef(pathname)
+  useEffect(() => { pathnameRef.current = pathname }, [pathname])
 
-  const isPublicRoute = (path: string) => {
-    return (
-      path === '/' ||
-      path === '/auth' ||
-      path.startsWith('/auth') ||
-      path === '/privacy-policy' ||
-      path === '/community-guidelines' ||
-      path === '/getting-started' ||
-      path.startsWith('/profile') ||
-      path.startsWith('/invite') ||
-      path.startsWith('/message')
-    )
-  }
-
-  const redirectToAuth = useCallback(() => {
-    const safePath = pathname && pathname.startsWith('/') ? pathname : '/threads'
-    if (safePath.startsWith('/auth')) {
-      router.replace('/auth')
-      return
-    }
-    router.replace(`/auth?redirect=${encodeURIComponent(safePath)}`)
-  }, [pathname, router])
-
+  // ── Effect 1: mount-only ──────────────────────────────────────────────────
+  // Validates the session once on load and registers the auth-state listener
+  // for the entire lifetime of the app. Never re-runs on navigation.
   useEffect(() => {
-    // Initialize storage and cleanup old mock data BEFORE checking session
     initializeStorage()
 
-    // IMPORTANT: Always validate against backend, not localStorage
-    // localStorage is only a cache, backend is source of truth
+    let cancelled = false
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+
+    const redirectToAuth = () => {
+      const current = pathnameRef.current
+      if (current.startsWith('/auth')) {
+        router.replace('/auth')
+        return
+      }
+      router.replace(`/auth?redirect=${encodeURIComponent(current)}`)
+    }
 
     const validateSessionFromBackend = async (retryCount = 0) => {
+      if (cancelled) return
+
       try {
+        // If the stored token is already expired, try refreshing before anything else
         const storedSession = rawAuth.getStoredSession()
         if (storedSession && rawAuth.isSessionExpired(storedSession)) {
           const refreshed = await rawAuth.refreshToken()
           if (!refreshed.session) {
             useUserStore.setState({
-              session: {
-                user: null,
-                isAuthenticated: false,
-                sessionExpiry: null,
-              },
+              session: { user: null, isAuthenticated: false, sessionExpiry: null },
               sessionInfo: null,
               sessionValidated: true,
             })
-
-            if (!isPublicRoute(pathname)) {
-              redirectToAuth()
-            }
+            if (!isPublicRoute(pathnameRef.current)) redirectToAuth()
             return
           }
         }
 
-
-        // Get session from raw auth (source of truth)
         const user = await getCurrentSession()
 
         if (!user) {
-          // Check if we actually have a session token but just failed to fetch the profile
-          const session = rawAuth.getSession()
-
-          if (session) {
-            console.warn('[AuthProvider] Session token exists but profile fetch failed.')
-
-            // Retry logic: if token exists but user profile fetch failed, it might be a race condition (e.g. trigger delay)
+          // Token exists but profile fetch failed — could be a DB trigger race
+          if (rawAuth.getSession()) {
             if (retryCount < 3) {
-
-              setTimeout(() => validateSessionFromBackend(retryCount + 1), 500)
+              retryTimer = setTimeout(() => validateSessionFromBackend(retryCount + 1), 500)
               return
             }
-
-            console.warn('[AuthProvider] Max retries reached. NOT redirecting to landing page to avoid loop.')
-            // Valid token exists, so don't kick the user. 
-            // They might be a new user where the trigger is still running.
+            // Max retries with a valid token: leave the user on the page
             useUserStore.setState({ sessionValidated: true })
             return
           }
 
-          // No backend session AND no local token - clear localStorage cache
-
           useUserStore.setState({
-            session: {
-              user: null,
-              isAuthenticated: false,
-              sessionExpiry: null,
-            },
+            session: { user: null, isAuthenticated: false, sessionExpiry: null },
             sessionInfo: null,
             sessionValidated: true,
           })
-
-          // Redirect to auth page if not already on public routes
-          if (!isPublicRoute(pathname)) {
-            redirectToAuth()
-          }
+          if (!isPublicRoute(pathnameRef.current)) redirectToAuth()
           return
         }
 
-        // Backend session exists - validate expiry from localStorage
-        const storedState = useUserStore.getState()
-        const sessionExpiry = storedState.session.sessionExpiry
-        const expired = sessionExpiry && isSessionExpired(sessionExpiry);
+        // Check our app-level session expiry (separate from JWT expiry)
+        const { session: storedState, rememberMe } = useUserStore.getState()
+        const appExpiry = storedState.sessionExpiry
 
-        if (expired) {
-          // Session expired - sign out silently and redirect to landing page
-
-
-          await rawAuth.signOut()
-
+        if (appExpiry && new Date() >= new Date(appExpiry)) {
+          if (!user.isAnonymous) {
+            // Registered users: full sign-out — revoke the session on the backend
+            await rawAuth.signOut()
+          }
+          // Anonymous users: don't revoke the Supabase session. The refresh token
+          // stays intact in localStorage so the same anonymous account can be
+          // restored next time the user clicks "Join Anonymously".
           useUserStore.setState({
-            session: {
-              user: null,
-              isAuthenticated: false,
-              sessionExpiry: null,
-            },
+            session: { user: null, isAuthenticated: false, sessionExpiry: null },
             sessionInfo: null,
             sessionValidated: true,
           })
-
-          if (!isPublicRoute(pathname)) {
-            redirectToAuth()
-          }
+          if (!isPublicRoute(pathnameRef.current)) redirectToAuth()
           return
         }
 
-        // Valid backend session - update state
-
-
-        // Calculate session expiry if not already set
-        let validSessionExpiry = sessionExpiry
-        if (!validSessionExpiry) {
-          // Session exists but no expiry set - calculate one based on user type
-          if (user.isAnonymous) {
-            // Anonymous users: 24 hours
-            validSessionExpiry = getAnonymousSessionExpiry()
-
-          } else {
-            // Registered users: 72 hours (or remember me duration)
-            const { rememberMe } = useUserStore.getState()
-            validSessionExpiry = getRegisteredSessionExpiry(rememberMe)
-
-          }
-        }
+        const sessionExpiry = appExpiry ?? (
+          user.isAnonymous ? getAnonymousSessionExpiry() : getRegisteredSessionExpiry(rememberMe)
+        )
 
         useUserStore.setState({
           session: {
             user,
             isAuthenticated: !user.isAnonymous,
-            sessionExpiry: validSessionExpiry,
+            sessionExpiry,
           },
           sessionInfo: user.isAnonymous
-            ? {
-              anonymousId: user.anonymousId,
-              sessionToken: '',
-              isAnonymous: true,
-              createdAt: user.joinedAt,
-            }
+            ? { anonymousId: user.anonymousId, sessionToken: '', isAnonymous: true, createdAt: user.joinedAt }
             : null,
           sessionValidated: true,
         })
 
-        // Handle landing page redirect
-        if (pathname === '/') {
-
-          router.push('/threads')
-        }
-
+        if (pathnameRef.current === '/') router.push('/threads')
       } catch (error) {
-        console.error('Backend session validation error:', error)
-        // Backend validation failed - clear localStorage cache
+        if (cancelled) return
+        console.error('[AuthProvider] Session validation error:', error)
         useUserStore.setState({
-          session: {
-            user: null,
-            isAuthenticated: false,
-            sessionExpiry: null,
-          },
+          session: { user: null, isAuthenticated: false, sessionExpiry: null },
           sessionInfo: null,
           sessionValidated: true,
         })
-
-        if (!isPublicRoute(pathname)) {
-          const session = rawAuth.getSession()
-          if (!session) {
-            redirectToAuth()
-          } else {
-            console.error('[AuthProvider] Backend validation error, but session token exists. Staying on page.')
-          }
-        }
-      }
-    }
-
-    // Skip backend validation on auth page ONLY if no session exists
-    // If user just logged in, we need to validate to prevent redirect loops
-    if (pathname === '/auth' || pathname.startsWith('/auth/reset-password')) {
-      const currentSession = rawAuth.getSession()
-      if (!currentSession) {
-        // No session yet - user is about to login, skip validation
-
-        useUserStore.setState({ sessionValidated: true })
-        return
-      }
-      // Session exists on auth page - validate it before any redirect happens
-
-    }
-
-    // Always validate against backend on all other routes (or auth page with session)
-    validateSessionFromBackend()
-
-
-    // Listen for auth changes using raw-auth
-    const unsubscribe = rawAuth.onAuthStateChange(async (event, session) => {
-
-
-      if (event === 'SIGNED_IN' && session) {
-        // Proactively update cached token
-        const { setAccessToken } = await import('@/lib/utils/auth-token-cache')
-        if (session?.access_token) {
-          setAccessToken(session.access_token)
-        }
-
-        const user = await getCurrentSession()
-        if (user) {
-          const { rememberMe } = useUserStore.getState()
-          const sessionExpiry = user.isAnonymous
-            ? getAnonymousSessionExpiry()
-            : getRegisteredSessionExpiry(rememberMe)
-          useUserStore.setState({
-            session: {
-              user,
-              isAuthenticated: !user.isAnonymous,
-              sessionExpiry,
-            },
-            sessionInfo: user.isAnonymous
-              ? {
-                anonymousId: user.anonymousId,
-                sessionToken: '',
-                isAnonymous: true,
-                createdAt: user.joinedAt,
-              }
-              : null,
-            sessionValidated: true,
-          })
-        }
-      } else if (event === 'SIGNED_OUT') {
-
-        useUserStore.setState({
-          session: {
-            user: null,
-            isAuthenticated: false,
-            sessionExpiry: null,
-          },
-          sessionInfo: null,
-        })
-        // Redirect to auth page on sign out
-        if (!isPublicRoute(pathname)) {
+        // Only redirect if there is genuinely no token — backend errors shouldn't kick users
+        if (!isPublicRoute(pathnameRef.current) && !rawAuth.getSession()) {
           redirectToAuth()
         }
-      } else if (event === 'TOKEN_REFRESHED') {
-        // Proactively update cached token when it refreshes
-        const { setAccessToken } = await import('@/lib/utils/auth-token-cache')
-        if (session?.access_token) {
-          setAccessToken(session.access_token)
+      }
+    }
 
-        }
+    // On the auth page with no session, skip backend validation entirely
+    if (pathname.startsWith('/auth') && !rawAuth.getSession()) {
+      useUserStore.setState({ sessionValidated: true })
+    } else {
+      validateSessionFromBackend()
+    }
 
-        // Only refresh for registered users, not anonymous
-        const { session: currentSession } = useUserStore.getState()
+    // Stable listener — registered once, never torn down on navigation.
+    // Guard: if sessionValidated is still false, the immediate SIGNED_IN callback
+    // from onAuthStateChange would race with validateSessionFromBackend — skip it.
+    const unsubscribe = rawAuth.onAuthStateChange(async (event, session) => {
+      if (!useUserStore.getState().sessionValidated) return
 
-        if (currentSession.isAuthenticated && !currentSession.user?.isAnonymous) {
-          // Registered user - extend session by configured duration
-          const { rememberMe } = useUserStore.getState()
-          const newExpiry = getRegisteredSessionExpiry(rememberMe)
-
+      if (event === 'SIGNED_IN' && session) {
+        setAccessToken(session.access_token)
+        const user = await getCurrentSession()
+        if (!user) return
+        const { rememberMe } = useUserStore.getState()
+        const sessionExpiry = user.isAnonymous
+          ? getAnonymousSessionExpiry()
+          : getRegisteredSessionExpiry(rememberMe)
+        useUserStore.setState({
+          session: { user, isAuthenticated: !user.isAnonymous, sessionExpiry },
+          sessionInfo: user.isAnonymous
+            ? { anonymousId: user.anonymousId, sessionToken: '', isAnonymous: true, createdAt: user.joinedAt }
+            : null,
+          sessionValidated: true,
+        })
+      } else if (event === 'SIGNED_OUT') {
+        useUserStore.setState({
+          session: { user: null, isAuthenticated: false, sessionExpiry: null },
+          sessionInfo: null,
+        })
+        if (!isPublicRoute(pathnameRef.current)) redirectToAuth()
+      } else if (event === 'TOKEN_REFRESHED' && session) {
+        setAccessToken(session.access_token)
+        const { session: current, rememberMe } = useUserStore.getState()
+        // Only extend expiry for registered users — anonymous sessions have a fixed 24h lifetime
+        if (current.isAuthenticated && !current.user?.isAnonymous) {
           useUserStore.setState((state) => ({
-            session: {
-              ...state.session,
-              sessionExpiry: newExpiry,
-            },
+            session: { ...state.session, sessionExpiry: getRegisteredSessionExpiry(rememberMe) },
           }))
-
-
         }
-        // Anonymous users don't get token refresh - they expire after 24h
       }
     })
 
     return () => {
+      cancelled = true
+      if (retryTimer) clearTimeout(retryTimer)
       unsubscribe()
     }
-  }, [pathname, router, redirectToAuth, isSessionExpired])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps — mount-only, router is stable
 
-  // Periodic session validation (every 5 minutes)
+  // ── Effect 2: periodic expiry check ──────────────────────────────────────
+  // Runs on a 5-minute timer independently of navigation. Uses pathnameRef
+  // so it always checks against the current route without re-registering.
   useEffect(() => {
-    const validateSession = async () => {
+    const checkExpiry = async () => {
       const { session, sessionValidated } = useUserStore.getState()
+      if (!sessionValidated || !session.sessionExpiry) return
+      if (new Date() < new Date(session.sessionExpiry)) return
 
-      // Don't do periodic checks until initial validation is complete
-      if (!sessionValidated) {
-
-        return
-      }
-
-      // Check if session has expired
-      if (session.sessionExpiry && isSessionExpired(session.sessionExpiry)) {
-        // Session expired - sign out silently and redirect to landing page
-
-
+      if (!session.user?.isAnonymous) {
+        // Only revoke on the backend for registered users
         await rawAuth.signOut()
-
-        useUserStore.setState({
-          session: {
-            user: null,
-            isAuthenticated: false,
-            sessionExpiry: null,
-          },
-          sessionInfo: null,
-        })
-
-        if (!isPublicRoute(pathname)) {
-          redirectToAuth()
-        }
+      }
+      // Anonymous users: leave the raw session intact for restoration on next visit
+      useUserStore.setState({
+        session: { user: null, isAuthenticated: false, sessionExpiry: null },
+        sessionInfo: null,
+      })
+      if (!isPublicRoute(pathnameRef.current)) {
+        router.replace(`/auth?redirect=${encodeURIComponent(pathnameRef.current)}`)
       }
     }
 
-    // Check immediately
-    validateSession()
-
-    // Then check every 5 minutes
-    const interval = setInterval(validateSession, 5 * 60 * 1000)
-
+    const interval = setInterval(checkExpiry, 5 * 60 * 1000)
     return () => clearInterval(interval)
-  }, [pathname, router, isSessionExpired, redirectToAuth])
+  }, [router])
 
   return <>{children}</>
 }

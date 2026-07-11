@@ -986,8 +986,8 @@ export const getUnreadCount = async (): Promise<{ count: number; error: string |
     const session = rawAuth.getSession();
     const user = session?.user;
 
-    if (!user) {
-      return { count: 0, error: 'User not authenticated' }
+    if (!user?.id) {
+      return { count: 0, error: null }
     }
 
     const { data, error } = await rawDb.rpc<number>('get_unread_dm_count', { p_user_id: user.id });

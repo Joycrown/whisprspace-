@@ -411,6 +411,7 @@ async function handleChargeCompleted(data: any, flutterwaveSecretKey: string) {
           user_id: userId,
           amount: amountDecimal,
           stripe_payment_intent_id: transactionRef,
+          acquisition_type: 'paid',
         })
 
       if (purchaseError) {
