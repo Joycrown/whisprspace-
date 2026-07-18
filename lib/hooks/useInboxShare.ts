@@ -56,8 +56,10 @@ export function useInboxShare() {
   }, [link, closeDropdown])
 
   const shareOnWhatsApp = useCallback(() => {
+    // URL must come first so WhatsApp renders the preview card.
+    // Text after a newline appears below the card.
     window.open(
-      `https://api.whatsapp.com/send?text=${encodeURIComponent(SHARE_TEXT + ' ' + link)}`,
+      `https://api.whatsapp.com/send?text=${encodeURIComponent(link + '\n\n' + SHARE_TEXT)}`,
       '_blank'
     )
     closeDropdown()
