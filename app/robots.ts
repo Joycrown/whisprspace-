@@ -24,7 +24,6 @@ export default function robots(): MetadataRoute.Robots {
           '/_next/',
           '/auth',
           '/inbox',
-          '/message/',
           '/dm/',
           '/my-threads',
           '/notifications',
