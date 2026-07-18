@@ -37,14 +37,9 @@ export async function generateMetadata({ params }: MessageLinkPageProps): Promis
   const description = 'No name. No trace. Just what you actually think. Send an anonymous message on WhisprSpace.';
   const url = `${siteConfig.url}/message/${handle}`;
 
-  // Use the request origin so the OG image URL always matches the actual deployment
-  // (staging vs production). metadataBase resolves relative image paths automatically.
-  const requestOrigin = process.env.NEXT_PUBLIC_APP_URL || siteConfig.url;
-
   return {
     title,
     description,
-    metadataBase: new URL(requestOrigin),
     alternates: { canonical: url },
     openGraph: {
       title,
@@ -54,7 +49,7 @@ export async function generateMetadata({ params }: MessageLinkPageProps): Promis
       type: 'website',
       images: [
         {
-          url: `/message/${handle}/opengraph-image`,
+          url: `${siteConfig.url}/message/${handle}/opengraph-image`,
           width: 1200,
           height: 630,
           alt: `Send ${displayName} an anonymous message`,
@@ -65,7 +60,7 @@ export async function generateMetadata({ params }: MessageLinkPageProps): Promis
       card: 'summary_large_image',
       title,
       description,
-      images: [`/message/${handle}/opengraph-image`],
+      images: [`${siteConfig.url}/message/${handle}/opengraph-image`],
     },
   };
 }
