@@ -103,7 +103,7 @@ function InboxPageContent() {
   };
 
   const handleWhatsappShare = () => {
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(shareText + ' ' + myProfileLink)}`, '_blank');
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(myProfileLink + '\n\n' + shareText)}`, '_blank');
     setShowShareDropdown(false);
   };
 
