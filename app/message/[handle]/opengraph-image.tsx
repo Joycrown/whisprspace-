@@ -8,47 +8,9 @@ interface Props {
   params: Promise<{ handle: string }>
 }
 
-async function resolveDisplayName(handle: string): Promise<string> {
-  const normalized = decodeURIComponent(handle).trim()
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!supabaseUrl || !supabaseKey) return normalized
-
-  const headers = {
-    apikey: supabaseKey,
-    Authorization: `Bearer ${supabaseKey}`,
-    'Content-Type': 'application/json',
-  }
-
-  try {
-    const byUsernameRes = await fetch(
-      `${supabaseUrl}/rest/v1/users?select=username,anonymous_id&username=ilike.${encodeURIComponent(normalized)}&limit=1`,
-      { headers }
-    )
-    if (byUsernameRes.ok) {
-      const rows = await byUsernameRes.json()
-      if (rows.length > 0) return rows[0].username || rows[0].anonymous_id || normalized
-    }
-
-    const byAnonRes = await fetch(
-      `${supabaseUrl}/rest/v1/users?select=username,anonymous_id&anonymous_id=eq.${encodeURIComponent(normalized)}&limit=1`,
-      { headers }
-    )
-    if (byAnonRes.ok) {
-      const rows = await byAnonRes.json()
-      if (rows.length > 0) return rows[0].username || rows[0].anonymous_id || normalized
-    }
-  } catch {
-    // fall through to raw handle
-  }
-
-  return normalized
-}
-
 export default async function OgImage({ params }: Props) {
   const { handle } = await params
-  const displayName = await resolveDisplayName(handle)
+  const displayName = decodeURIComponent(handle)
 
   return new ImageResponse(
     (
@@ -64,7 +26,7 @@ export default async function OgImage({ params }: Props) {
           fontFamily: 'system-ui, sans-serif',
         }}
       >
-        {/* Top purple glow band — linear-gradient simulating radial (Satori safe) */}
+        {/* Top purple glow */}
         <div
           style={{
             position: 'absolute',
@@ -83,7 +45,6 @@ export default async function OgImage({ params }: Props) {
             display: 'flex',
             flexDirection: 'row',
             marginBottom: 36,
-            position: 'relative',
           }}
         >
           <span style={{ fontSize: 28, fontWeight: 700, color: '#8B5CF6', letterSpacing: '-0.5px' }}>
@@ -105,22 +66,8 @@ export default async function OgImage({ params }: Props) {
             borderRadius: 24,
             padding: '48px 72px',
             width: 840,
-            position: 'relative',
           }}
         >
-          {/* Gradient top accent bar */}
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 80,
-              right: 80,
-              height: 2,
-              background: 'linear-gradient(90deg, #8B5CF6 0%, #F97316 100%)',
-              borderRadius: 2,
-            }}
-          />
-
           {/* Icon circle */}
           <div
             style={{
@@ -138,7 +85,7 @@ export default async function OgImage({ params }: Props) {
             👀
           </div>
 
-          {/* Headline — single line, no flexWrap */}
+          {/* Headline */}
           <div
             style={{
               display: 'flex',
@@ -186,7 +133,7 @@ export default async function OgImage({ params }: Props) {
           </div>
         </div>
 
-        {/* Bottom domain tag */}
+        {/* Bottom domain */}
         <div
           style={{
             position: 'absolute',
@@ -194,7 +141,6 @@ export default async function OgImage({ params }: Props) {
             display: 'flex',
             fontSize: 14,
             color: '#5C5C6E',
-            letterSpacing: '0.5px',
           }}
         >
           whisprspace.com
