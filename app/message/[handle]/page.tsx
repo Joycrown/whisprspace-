@@ -41,6 +41,18 @@ export async function generateMetadata({ params }: MessageLinkPageProps): Promis
     title,
     description,
     alternates: { canonical: url },
+    // Allow social crawlers (WhatsApp, Twitter, Facebook) to fetch the OG image
+    // even though global indexing is off. noindex keeps it out of search results;
+    // removing nofollow/noimageindex lets crawlers fetch og:image.
+    robots: {
+      index: false,
+      follow: true,
+      googleBot: {
+        index: false,
+        follow: true,
+        noimageindex: false,
+      },
+    },
     openGraph: {
       title,
       description,
