@@ -49,7 +49,7 @@ export async function generateMetadata({ params }: MessageLinkPageProps): Promis
       type: 'website',
       images: [
         {
-          url: `${siteConfig.url}/message/${handle}/opengraph-image`,
+          url: `${siteConfig.appUrl}/message/${handle}/opengraph-image`,
           width: 1200,
           height: 630,
           alt: `Send ${displayName} an anonymous message`,
@@ -60,7 +60,7 @@ export async function generateMetadata({ params }: MessageLinkPageProps): Promis
       card: 'summary_large_image',
       title,
       description,
-      images: [`${siteConfig.url}/message/${handle}/opengraph-image`],
+      images: [`${siteConfig.appUrl}/message/${handle}/opengraph-image`],
     },
   };
 }
