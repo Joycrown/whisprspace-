@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useUserStore } from '@/store/userStore'
 
 const FALLBACK_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://whisprspace.com'
@@ -13,6 +13,8 @@ export function useInboxShare() {
   const [copied, setCopied] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
   const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
+  const [isGeneratingCard, setIsGeneratingCard] = useState(false)
+  const shareCardRef = useRef<HTMLDivElement>(null)
 
   const handle = session?.user?.username || session?.user?.anonymousId || ''
 
@@ -20,6 +22,9 @@ export function useInboxShare() {
   // Falls back to the env var for SSR contexts where window is unavailable.
   const origin = typeof window !== 'undefined' ? window.location.origin : FALLBACK_URL
   const link = handle ? `${origin}/message/${handle}` : ''
+
+  // Card always shows the canonical production URL, never localhost.
+  const cardLink = handle ? `${FALLBACK_URL}/message/${handle}` : link
 
   const copyLink = useCallback(() => {
     if (!link) return
@@ -89,12 +94,33 @@ export function useInboxShare() {
     closeDropdown()
   }, [link, closeDropdown])
 
+  const downloadShareCard = useCallback(async () => {
+    if (!shareCardRef.current || isGeneratingCard) return
+    setIsGeneratingCard(true)
+    closeDropdown()
+    try {
+      const { toPng } = await import('html-to-image')
+      const dataUrl = await toPng(shareCardRef.current, { pixelRatio: 1, cacheBust: true })
+      const a = document.createElement('a')
+      a.href = dataUrl
+      a.download = `whisprspace-${handle || 'card'}.png`
+      a.click()
+    } catch (err) {
+      console.error('Share card generation failed', err)
+    } finally {
+      setIsGeneratingCard(false)
+    }
+  }, [handle, isGeneratingCard, closeDropdown])
+
   return {
     link,
+    cardLink,
     handle,
     copied,
     showDropdown,
     dropdownPos,
+    shareCardRef,
+    isGeneratingCard,
     copyLink,
     openDropdown,
     closeDropdown,
@@ -104,5 +130,6 @@ export function useInboxShare() {
     shareOnLinkedIn,
     shareOnInstagram,
     shareViaEmail,
+    downloadShareCard,
   }
 }
