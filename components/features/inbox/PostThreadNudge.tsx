@@ -5,6 +5,8 @@ import { X, Copy, Check, Share2, MessageCircle } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useInboxShare } from '@/lib/hooks/useInboxShare'
 import { ShareDropdown } from './ShareDropdown'
+import UserShareCard from './UserShareCard'
+import { useUserStore } from '@/store/userStore'
 
 // ThreadComposer dispatches this event right after a thread is successfully created.
 // MainLayout renders PostThreadNudge, so both are alive simultaneously — the event
@@ -20,12 +22,16 @@ export function PostThreadNudge() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const { session } = useUserStore()
   const {
     link,
+    cardLink,
     handle,
     copied,
     showDropdown,
     dropdownPos,
+    shareCardRef,
+    isGeneratingCard,
     copyLink,
     openDropdown,
     closeDropdown,
@@ -35,7 +41,9 @@ export function PostThreadNudge() {
     shareOnLinkedIn,
     shareOnInstagram,
     shareViaEmail,
+    downloadShareCard,
   } = useInboxShare()
+  const displayName = session?.user?.username || session?.user?.anonymousId || handle
 
   useEffect(() => {
     const show = () => {
@@ -171,8 +179,20 @@ export function PostThreadNudge() {
           onLinkedIn={shareOnLinkedIn}
           onInstagram={shareOnInstagram}
           onEmail={shareViaEmail}
+          onDownloadCard={downloadShareCard}
+          isGeneratingCard={isGeneratingCard}
         />
       )}
+
+      {/* Hidden off-screen card for html-to-image capture */}
+      <div style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none', zIndex: -1 }}>
+        <UserShareCard
+          ref={shareCardRef}
+          displayName={displayName}
+          handle={handle}
+          inboxUrl={cardLink}
+        />
+      </div>
     </>
   )
 }
