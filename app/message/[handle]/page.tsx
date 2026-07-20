@@ -35,7 +35,7 @@ export async function generateMetadata({ params }: MessageLinkPageProps): Promis
   const displayName = user?.username || user?.anonymous_id || handle;
   const title = `Tell ${displayName} the truth.`;
   const description = 'No name. No trace. Just what you actually think. Send an anonymous message on WhisprSpace.';
-  const url = `${siteConfig.url}/message/${handle}`;
+  const url = `${siteConfig.appUrl}/message/${handle}`;
 
   return {
     title,
