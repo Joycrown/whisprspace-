@@ -46,11 +46,17 @@ async function resolveDisplayName(handle: string): Promise<string> {
   return normalized
 }
 
+/**
+ * 1200×630 landscape link-preview card (WhatsApp / Twitter / Facebook).
+ * Shares the visual language of the downloadable square card (UserShareCard.tsx):
+ * gradient identity, ghosted last headline line, centered recipient + shimmer-style
+ * CTA. Static render (next/og / Satori) — no CSS animations, flexbox only.
+ */
 export default async function OgImage({ params }: Props) {
   const { handle } = await params
   const displayName = await resolveDisplayName(handle)
   const initial = displayName.charAt(0).toUpperCase()
-  const nameFontSize = displayName.length > 14 ? 42 : displayName.length > 10 ? 52 : 62
+  const nameFontSize = displayName.length > 14 ? 40 : displayName.length > 10 ? 48 : 58
 
   return new ImageResponse(
     (
@@ -59,258 +65,160 @@ export default async function OgImage({ params }: Props) {
           width: '100%',
           height: '100%',
           display: 'flex',
+          flexDirection: 'row',
           fontFamily: 'system-ui, sans-serif',
-          background: '#07070E',
+          background: '#0A0A10',
           position: 'relative',
           overflow: 'hidden',
         }}
       >
-        {/* ── BACKGROUND TEXTURE — vertical light bars ── */}
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          flexDirection: 'row',
-        }}>
-          {[...Array(24)].map((_, i) => (
-            <div key={i} style={{
-              flex: 1,
-              height: '100%',
-              borderRight: '1px solid rgba(255,255,255,0.018)',
-            }} />
-          ))}
-        </div>
-
-        {/* ── PURPLE GLOW — top left ── */}
-        <div style={{
-          position: 'absolute',
-          top: -180,
-          left: -120,
-          width: 560,
-          height: 560,
-          borderRadius: '50%',
-          background: 'linear-gradient(135deg, rgba(109,40,217,0.55) 0%, rgba(109,40,217,0) 70%)',
-        }} />
-
-        {/* ── ORANGE GLOW — bottom center-right ── */}
-        <div style={{
-          position: 'absolute',
-          bottom: -160,
-          right: 200,
-          width: 480,
-          height: 480,
-          borderRadius: '50%',
-          background: 'linear-gradient(315deg, rgba(194,65,12,0.40) 0%, rgba(194,65,12,0) 70%)',
-        }} />
-
-        {/* ── TOP ACCENT BAR ── */}
+        {/* ── Top accent bar ── */}
         <div style={{
           position: 'absolute',
           top: 0, left: 0, right: 0,
-          height: 3,
-          background: 'linear-gradient(90deg, #7C3AED 0%, #EA580C 100%)',
+          height: 5,
+          background: 'linear-gradient(90deg, #8B5CF6 0%, #F97316 100%)',
           display: 'flex',
         }} />
 
-        {/* ── MAIN CONTENT ROW ── */}
+        {/* ── Purple glow — top left ── */}
         <div style={{
           position: 'absolute',
-          inset: 0,
+          top: -180, left: -120,
+          width: 620, height: 620,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(139,92,246,0.28) 0%, rgba(139,92,246,0) 68%)',
           display: 'flex',
-          flexDirection: 'row',
-          alignItems: 'stretch',
+        }} />
+
+        {/* ── Orange glow — bottom right ── */}
+        <div style={{
+          position: 'absolute',
+          bottom: -160, right: -100,
+          width: 520, height: 520,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(249,115,22,0.20) 0%, rgba(249,115,22,0) 68%)',
+          display: 'flex',
+        }} />
+
+        {/* ── LEFT — brand + headline ── */}
+        <div style={{
+          width: '60%',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          padding: '52px 60px 44px 60px',
+          position: 'relative',
         }}>
+          {/* Wordmark */}
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
+            <span style={{ fontSize: 26, fontWeight: 800, color: '#8B5CF6', letterSpacing: '-0.4px' }}>Whispr</span>
+            <span style={{ fontSize: 26, fontWeight: 800, color: '#F97316', letterSpacing: '-0.4px' }}>Space</span>
+          </div>
 
-          {/* ── LEFT — 62% — brand + headline ── */}
-          <div style={{
-            width: '62%',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            padding: '52px 64px 48px 64px',
-            position: 'relative',
-          }}>
-
-            {/* Wordmark row */}
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
-              <div style={{
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 8,
-                padding: '6px 14px',
-              }}>
-                <span style={{ fontSize: 15, fontWeight: 800, color: '#A78BFA', letterSpacing: '-0.2px' }}>Whispr</span>
-                <span style={{ fontSize: 15, fontWeight: 800, color: '#FB923C', letterSpacing: '-0.2px' }}>Space</span>
-              </div>
-              <div style={{
-                marginLeft: 16,
-                display: 'flex',
-                flexDirection: 'row',
-                alignItems: 'center',
-                background: 'rgba(93,202,165,0.1)',
-                border: '1px solid rgba(93,202,165,0.2)',
-                borderRadius: 50,
-                padding: '5px 12px',
-              }}>
-                <div style={{
-                  width: 6, height: 6,
-                  borderRadius: '50%',
-                  background: '#5DCAA5',
-                  marginRight: 7,
-                }} />
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#5DCAA5', letterSpacing: '0.5px' }}>
-                  ANONYMOUS
-                </span>
-              </div>
+          {/* Headline */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: '#5C5C6E',
+              letterSpacing: '4px',
+              textTransform: 'uppercase',
+              marginBottom: 22,
+              display: 'flex',
+            }}>
+              Anonymous Inbox
             </div>
-
-            {/* Headline block */}
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: '#3D3D52',
-                letterSpacing: '3.5px',
-                textTransform: 'uppercase',
-                marginBottom: 22,
-              }}>
-                Anonymous Inbox
-              </div>
-              <div style={{
-                fontSize: 76,
-                fontWeight: 900,
-                color: '#FFFFFF',
-                lineHeight: 1.0,
-                letterSpacing: '-3px',
-              }}>
-                The truth
-              </div>
-              <div style={{
-                fontSize: 76,
-                fontWeight: 900,
-                color: '#FFFFFF',
-                lineHeight: 1.0,
-                letterSpacing: '-3px',
-              }}>
-                you&apos;ve been
-              </div>
-              <div style={{
-                fontSize: 76,
-                fontWeight: 900,
-                color: 'rgba(255,255,255,0.18)',
-                lineHeight: 1.0,
-                letterSpacing: '-3px',
-              }}>
-                holding back.
-              </div>
+            <div style={{ fontSize: 74, fontWeight: 900, color: '#F2F2F6', lineHeight: 1.02, letterSpacing: '-2.5px', display: 'flex' }}>
+              Be honest.
             </div>
-
-            {/* Bottom trust row */}
-            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
-              <span style={{ fontSize: 13, color: '#3D3D52', letterSpacing: '0.3px' }}>
-                No name · No trace · No identity
-              </span>
+            <div style={{ fontSize: 74, fontWeight: 900, color: '#F2F2F6', lineHeight: 1.02, letterSpacing: '-2.5px', display: 'flex' }}>
+              I&apos;ll never
+            </div>
+            <div style={{ fontSize: 74, fontWeight: 900, color: 'rgba(242,242,246,0.22)', lineHeight: 1.02, letterSpacing: '-2.5px', display: 'flex' }}>
+              know it&apos;s you.
             </div>
           </div>
 
-          {/* ── DIVIDER ── */}
-          <div style={{
-            width: 1,
-            margin: '0',
-            background: 'linear-gradient(180deg, transparent 0%, rgba(60,60,80,0.6) 20%, rgba(60,60,80,0.6) 80%, transparent 100%)',
-            flexShrink: 0,
-          }} />
+          {/* Footer trust line */}
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#5DCAA5', marginRight: 11, display: 'flex' }} />
+            <span style={{ fontSize: 15, color: '#5C5C6E', letterSpacing: '0.2px', display: 'flex' }}>
+              No name. No trace. Always anonymous.
+            </span>
+          </div>
+        </div>
 
-          {/* ── RIGHT — 38% — recipient card ── */}
+        {/* ── DIVIDER ── */}
+        <div style={{
+          width: 1,
+          margin: '52px 0',
+          background: 'linear-gradient(180deg, transparent 0%, #2A2A38 20%, #2A2A38 80%, transparent 100%)',
+          display: 'flex',
+        }} />
+
+        {/* ── RIGHT — recipient ── */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '48px 44px',
+          position: 'relative',
+        }}>
+          {/* Avatar with gradient ring */}
           <div style={{
-            flex: 1,
+            width: 108,
+            height: 108,
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #8B5CF6 0%, #F97316 100%)',
             display: 'flex',
-            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            padding: '48px 44px',
-            position: 'relative',
+            boxShadow: '0 0 0 4px rgba(139,92,246,0.22), 0 0 0 10px rgba(249,115,22,0.08)',
           }}>
-
-            {/* Card container */}
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.07)',
-              borderRadius: 20,
-              padding: '36px 32px',
-              width: '100%',
-            }}>
-
-              {/* Avatar */}
-              <div style={{
-                width: 80,
-                height: 80,
-                borderRadius: '50%',
-                background: 'linear-gradient(135deg, #7C3AED 0%, #EA580C 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 34,
-                fontWeight: 800,
-                color: '#ffffff',
-              }}>
-                {initial}
-              </div>
-
-              {/* Name block */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 20 }}>
-                <span style={{ fontSize: 12, color: '#3D3D52', fontWeight: 600, letterSpacing: '2px', textTransform: 'uppercase' }}>
-                  Send to
-                </span>
-                <span style={{
-                  fontSize: nameFontSize,
-                  fontWeight: 900,
-                  color: '#F4F4F8',
-                  letterSpacing: '-1.5px',
-                  lineHeight: 1.05,
-                  textAlign: 'center',
-                  marginTop: 8,
-                }}>
-                  {displayName}
-                </span>
-              </div>
-
-              {/* Divider line */}
-              <div style={{
-                width: '100%',
-                height: 1,
-                background: 'rgba(255,255,255,0.06)',
-                marginTop: 28,
-                marginBottom: 28,
-              }} />
-
-              {/* CTA */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'linear-gradient(90deg, #7C3AED 0%, #EA580C 100%)',
-                borderRadius: 12,
-                padding: '16px 24px',
-                width: '100%',
-              }}>
-                <span style={{ fontSize: 15, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px' }}>
-                  Send anonymous message →
-                </span>
-              </div>
-
-              {/* URL */}
-              <span style={{ fontSize: 11, color: '#2E2E42', letterSpacing: '0.3px', marginTop: 18 }}>
-                whisprspace.com/message/{handle}
-              </span>
-            </div>
+            <span style={{ fontSize: 46, fontWeight: 800, color: '#ffffff', display: 'flex' }}>{initial}</span>
           </div>
+
+          {/* Recipient */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 22 }}>
+            <span style={{ fontSize: 15, color: '#5C5C6E', fontWeight: 500, letterSpacing: '0.5px', display: 'flex' }}>Tell</span>
+            <span style={{
+              fontSize: nameFontSize,
+              fontWeight: 800,
+              color: '#F2F2F6',
+              letterSpacing: '-1.5px',
+              lineHeight: 1.05,
+              textAlign: 'center',
+              marginTop: 6,
+              marginBottom: 6,
+              display: 'flex',
+            }}>
+              {displayName}
+            </span>
+            <span style={{ fontSize: 15, color: '#5C5C6E', fontWeight: 500, letterSpacing: '0.5px', display: 'flex' }}>the truth.</span>
+          </div>
+
+          {/* CTA */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'linear-gradient(90deg, #8B5CF6 0%, #F97316 100%)',
+            borderRadius: 50,
+            padding: '16px 34px',
+            marginTop: 30,
+          }}>
+            <span style={{ fontSize: 17, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px', display: 'flex' }}>
+              Send anonymous message →
+            </span>
+          </div>
+
+          {/* URL */}
+          <span style={{ fontSize: 13, color: '#3A3A4E', letterSpacing: '0.3px', marginTop: 20, display: 'flex' }}>
+            whisprspace.com/message/{handle}
+          </span>
         </div>
       </div>
     ),
