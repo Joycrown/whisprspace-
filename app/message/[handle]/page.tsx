@@ -10,7 +10,7 @@ interface MessageLinkPageProps {
 // Bump this whenever the OG card design changes so social scrapers
 // (WhatsApp/Facebook/Twitter) treat the preview as fresh and re-fetch the image
 // instead of serving a stale, imageless cache. Format: ISO date of the change.
-const OG_VERSION = '2026-07-24T02:00:00Z';
+const OG_VERSION = '2026-07-24T03:00:00Z';
 
 async function resolveUser(handle: string) {
   const supabase = await createClient();
@@ -41,7 +41,9 @@ export async function generateMetadata({ params }: MessageLinkPageProps): Promis
   const title = `Tell ${displayName} the truth.`;
   const description = 'No name. No trace. Just what you actually think. Send an anonymous message on WhisprSpace.';
   const url = `${siteConfig.appUrl}/message/${handle}`;
-  const ogImageUrl = `${siteConfig.appUrl}/message/${handle}/opengraph-image`;
+  // Point at the /og route handler (not the opengraph-image convention): it sets an
+  // explicit Content-Length, which WhatsApp requires to render the thumbnail.
+  const ogImageUrl = `${siteConfig.appUrl}/message/${handle}/og`;
 
   return {
     title,
