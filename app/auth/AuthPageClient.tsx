@@ -146,11 +146,17 @@ const AuthPage = () => {
         });
       } else if (view === 'signup') {
         if (reasonParam === 'inbox') {
-          const generated = generatePseudonym();
-          setHandleValue(generated);
+          // Prefill the picker with the user's EXISTING handle (upgraded guests
+          // already have one — it's the link they shared and that received
+          // messages). Only fall back to a generated pseudonym for brand-new
+          // accounts with no handle yet. This keeps their shared link intact by
+          // default while still letting them customize.
+          const existingHandle = session.user?.username || session.user?.anonymousId;
+          const initialHandle = existingHandle || generatePseudonym();
+          setHandleValue(initialHandle);
           setHandleAvailability('checking');
           setView('handle-picker');
-          checkUsernameAvailability(generated, session.user?.id).then(available => {
+          checkUsernameAvailability(initialHandle, session.user?.id).then(available => {
             setHandleAvailability(available ? 'available' : 'taken');
           });
         } else {
@@ -552,7 +558,7 @@ const AuthPage = () => {
               </button>
               <div className="space-y-1">
                 <h2 className="text-xl font-medium text-[#F2F2F6] tracking-[-0.3px]">Reset password</h2>
-                <p className="text-[#8F8FA3] text-sm">Enter your email and we'll send a reset link.</p>
+                <p className="text-[#8F8FA3] text-sm">Enter your email and we&apos;ll send a reset link.</p>
               </div>
 
               <form onSubmit={handleForgotPassword} className="space-y-4">
@@ -691,7 +697,7 @@ const AuthPage = () => {
               </button>
 
               <button onClick={() => setView('welcome')} className={ghostBtnCls}>
-                Skip — I'll set it later
+                Skip — I&apos;ll set it later
               </button>
             </motion.div>
           )}
