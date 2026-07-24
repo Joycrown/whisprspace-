@@ -225,8 +225,11 @@ const ThreadsPage = () => {
           )}
         </div>
 
-        {/* Inbox link nudge — shown once per 14 days for authenticated users */}
-        {canCreate && <InboxLinkNudge />}
+        {/* Inbox link nudge — shown once per 14 days to ANY account with a handle
+            (guests included). Receiving anonymous messages is the core growth loop:
+            a guest shares their link, messages arrive, and reading them is the
+            sign-up trigger. Guests still can't create threads (see canCreate above). */}
+        <InboxLinkNudge />
 
         {/* Navigation Tabs - Mobile optimized with horizontal scroll */}
         <div className="pt-2 md:pt-4 border-b border-gray-800 flex-shrink-0 w-full overflow-hidden">

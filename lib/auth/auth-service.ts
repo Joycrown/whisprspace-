@@ -153,6 +153,61 @@ export const signUpWithEmail = async (
 }
 
 /**
+ * Upgrade the current ANONYMOUS account into a permanent one.
+ *
+ * Keeps the same user id / handle / conversations / messages by setting an
+ * email + password on the existing anonymous auth user (Supabase updateUser),
+ * then flipping the profile row to non-anonymous server-side.
+ *
+ * Throws if there's no anonymous session to upgrade — callers should fall back
+ * to signUpWithEmail in that case.
+ */
+export const upgradeAnonymousAccount = async (
+  email: string,
+  password: string
+): Promise<User> => {
+  const normalizedEmail = sanitizeEmailAddress(email)
+  if (!normalizedEmail) {
+    throw new Error('Please enter a valid email address')
+  }
+  const sanitizedPassword = sanitizePasswordInput(password)
+  if (!sanitizedPassword) {
+    throw new Error('Password is required')
+  }
+
+  const current = rawAuth.getSession()
+  if (!current?.user?.is_anonymous) {
+    throw new Error('No anonymous account to upgrade')
+  }
+
+  // Same UUID, now with email+password — messages and handle are preserved.
+  const { session, error } = await rawAuth.updateUserCredentials(normalizedEmail, sanitizedPassword)
+  if (error) throw error
+  if (!session) throw new Error('Account upgrade failed')
+
+  // Flip the profile row to a permanent account (RLS-safe, server-side).
+  try {
+    await fetch('/api/auth/promote-anon', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ userId: session.user.id }),
+    })
+  } catch (err) {
+    console.warn('[AuthService] promote-anon call failed (non-fatal):', err)
+  }
+
+  const user = await convertAuthUserToUser(session.user.id)
+
+  // Fire-and-forget: welcome email now that we have an address (inbox handle unchanged).
+  sendWelcome({ userId: user.id, inboxHandle: user.username || user.anonymousId, email: normalizedEmail })
+
+  return user
+}
+
+/**
  * Sign in with email/password
  */
 export const signInWithEmail = async (
