@@ -5,6 +5,27 @@ export default function robots(): MetadataRoute.Robots {
   if (!siteConfig.indexingEnabled) {
     return {
       rules: [
+        // Allow social media crawlers to fetch OG images for share cards
+        {
+          userAgent: 'facebookexternalhit',
+          allow: '/message/',
+          disallow: '/',
+        },
+        {
+          userAgent: 'Twitterbot',
+          allow: '/message/',
+          disallow: '/',
+        },
+        {
+          userAgent: 'WhatsApp',
+          allow: '/message/',
+          disallow: '/',
+        },
+        {
+          userAgent: 'LinkedInBot',
+          allow: '/message/',
+          disallow: '/',
+        },
         {
           userAgent: '*',
           disallow: '/',
@@ -24,7 +45,6 @@ export default function robots(): MetadataRoute.Robots {
           '/_next/',
           '/auth',
           '/inbox',
-          '/message/',
           '/dm/',
           '/my-threads',
           '/notifications',
@@ -32,7 +52,6 @@ export default function robots(): MetadataRoute.Robots {
           '/groups',
           '/threads',
           '/invite/',
-          '/anonymous-messages',
         ],
       },
     ],

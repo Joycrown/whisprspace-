@@ -24,22 +24,15 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  const hideToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
   const showToast = useCallback((toast: Omit<Toast, 'id'>) => {
     const id = Math.random().toString(36).substr(2, 9);
-    const newToast = { ...toast, id };
-    
-    setToasts((prev) => [...prev, newToast]);
-
-    // Auto dismiss after duration
-    const duration = toast.duration || 5000;
-    setTimeout(() => {
-      hideToast(id);
-    }, duration);
-  }, []);
-
-  const hideToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
-  }, []);
+    setToasts((prev) => [...prev, { ...toast, id }]);
+    setTimeout(() => hideToast(id), toast.duration || 5000);
+  }, [hideToast]);
 
   return (
     <ToastContext.Provider value={{ showToast, hideToast }}>
@@ -50,90 +43,68 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 export function useToast() {
-  const context = useContext(ToastContext);
-  if (!context) {
-    throw new Error('useToast must be used within ToastProvider');
-  }
-  return context;
+  const ctx = useContext(ToastContext);
+  if (!ctx) throw new Error('useToast must be used within ToastProvider');
+  return ctx;
 }
 
-// Toast Container Component
 function ToastContainer({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: string) => void }) {
   return (
-    <div className="fixed top-4 right-4 z-[9999] space-y-2 max-w-sm w-full px-4 md:px-0">
+    <div className="fixed top-4 right-4 z-[9999] space-y-2 max-w-sm w-full px-4 md:px-0 pointer-events-none">
       <AnimatePresence>
-        {toasts.map((toast) => (
-          <ToastItem key={toast.id} toast={toast} onDismiss={onDismiss} />
+        {toasts.map((t) => (
+          <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />
         ))}
       </AnimatePresence>
     </div>
   );
 }
 
-// Individual Toast Component
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: (id: string) => void }) {
-  const icons = {
-    success: <CheckCircle className="w-5 h-5" />,
-    error: <XCircle className="w-5 h-5" />,
-    warning: <AlertCircle className="w-5 h-5" />,
-    info: <Info className="w-5 h-5" />,
-  };
-
-  const styles = {
-    success: 'bg-green-900/90 border-green-500 text-green-100',
-    error: 'bg-red-900/90 border-red-500 text-red-100',
-    warning: 'bg-orange-900/90 border-orange-500 text-orange-100',
-    info: 'bg-blue-900/90 border-blue-500 text-blue-100',
-  };
+  const config = {
+    success: { icon: <CheckCircle className="w-4 h-4" />, accent: '#5DCAA5',  bg: 'rgba(93,202,165,0.08)',  border: 'rgba(93,202,165,0.25)'  },
+    error:   { icon: <XCircle    className="w-4 h-4" />, accent: '#E24B4A',  bg: 'rgba(226,75,74,0.08)',   border: 'rgba(226,75,74,0.25)'   },
+    warning: { icon: <AlertCircle className="w-4 h-4" />, accent: '#EF9F27', bg: 'rgba(239,159,39,0.08)',  border: 'rgba(239,159,39,0.25)'  },
+    info:    { icon: <Info        className="w-4 h-4" />, accent: '#C4B5FD', bg: 'rgba(139,92,246,0.08)',  border: 'rgba(139,92,246,0.25)'  },
+  }[toast.type];
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: -20, x: 100 }}
+      initial={{ opacity: 0, y: -12, x: 40 }}
       animate={{ opacity: 1, y: 0, x: 0 }}
-      exit={{ opacity: 0, x: 100 }}
-      transition={{ duration: 0.2 }}
-      className={`
-        ${styles[toast.type]}
-        border-l-4 rounded-lg p-4 shadow-lg backdrop-blur-lg
-        flex items-start gap-3
-      `}
+      exit={{ opacity: 0, x: 40 }}
+      transition={{ duration: 0.18 }}
+      className="pointer-events-auto rounded-xl px-4 py-3 flex items-start gap-3 border-l-2"
+      style={{
+        background: `${config.bg}`,
+        borderColor: config.accent,
+        border: `1px solid ${config.border}`,
+        borderLeftColor: config.accent,
+        borderLeftWidth: 2,
+        backdropFilter: 'none',
+      }}
     >
-      <div className="flex-shrink-0 mt-0.5">
-        {icons[toast.type]}
-      </div>
-      
+      <span style={{ color: config.accent }} className="flex-shrink-0 mt-0.5">{config.icon}</span>
       <div className="flex-1 min-w-0">
-        <h4 className="font-semibold text-sm md:text-base">{toast.title}</h4>
-        {toast.message && (
-          <p className="text-xs md:text-sm mt-1 opacity-90">{toast.message}</p>
-        )}
+        <p className="text-sm font-medium text-[#F2F2F6]">{toast.title}</p>
+        {toast.message && <p className="text-xs text-[#8F8FA3] mt-0.5 leading-relaxed">{toast.message}</p>}
       </div>
-      
       <button
         onClick={() => onDismiss(toast.id)}
-        className="flex-shrink-0 text-current opacity-70 hover:opacity-100 transition-opacity"
+        className="flex-shrink-0 text-[#5C5C6E] hover:text-[#F2F2F6] transition-colors mt-0.5"
       >
-        <X className="w-4 h-4" />
+        <X className="w-3.5 h-3.5" />
       </button>
     </motion.div>
   );
 }
 
-// Helper hook for common toast patterns
 export function useToastHelpers() {
   const { showToast } = useToast();
-
   return {
-    success: (title: string, message?: string) => 
-      showToast({ type: 'success', title, message }),
-    
-    error: (title: string, message?: string) => 
-      showToast({ type: 'error', title, message }),
-    
-    warning: (title: string, message?: string) => 
-      showToast({ type: 'warning', title, message }),
-    
-    info: (title: string, message?: string) => 
-      showToast({ type: 'info', title, message }),
+    success: (title: string, message?: string) => showToast({ type: 'success', title, message }),
+    error:   (title: string, message?: string) => showToast({ type: 'error',   title, message }),
+    warning: (title: string, message?: string) => showToast({ type: 'warning', title, message }),
+    info:    (title: string, message?: string) => showToast({ type: 'info',    title, message }),
   };
 }

@@ -75,31 +75,54 @@ export default function PremiumThreadComposer({
           )}
         </div>
 
-        {/* Price Slider */}
+        {/* Price Input */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Thread Price
             </label>
-            <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-              ${price.toFixed(2)}
+            {user.isPremium && (
+              <span className="text-xs text-purple-500 dark:text-purple-400 font-medium">
+                Set any price — no limit
+              </span>
+            )}
+          </div>
+
+          {user.isPremium ? (
+            /* Premium users: free-form number input with $1.00 floor */
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 font-semibold">$</span>
+              <input
+                type="number"
+                min={rules.priceRange.min}
+                step={0.01}
+                value={price}
+                onChange={(e) => handlePriceChange(parseFloat(e.target.value) || 0)}
+                className="w-full pl-7 pr-4 py-3 text-2xl font-bold text-purple-600 dark:text-purple-400 bg-white dark:bg-gray-800 border-2 border-purple-300 dark:border-purple-700 rounded-xl focus:outline-none focus:border-purple-500 dark:focus:border-purple-400"
+                placeholder="1.00"
+              />
             </div>
-          </div>
-
-          <input
-            type="range"
-            min={rules.priceRange.min * 100}
-            max={rules.priceRange.max * 100}
-            step={25}
-            value={price * 100}
-            onChange={(e) => handlePriceChange(parseInt(e.target.value) / 100)}
-            className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-600"
-          />
-
-          <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-            <span>${rules.priceRange.min.toFixed(2)}</span>
-            <span>${rules.priceRange.max.toFixed(2)} max</span>
-          </div>
+          ) : (
+            /* Free users: slider capped at $2.99 */
+            <>
+              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400 mb-2">
+                ${price.toFixed(2)}
+              </div>
+              <input
+                type="range"
+                min={rules.priceRange.min * 100}
+                max={299}
+                step={25}
+                value={price * 100}
+                onChange={(e) => handlePriceChange(parseInt(e.target.value) / 100)}
+                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-600"
+              />
+              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+                <span>${rules.priceRange.min.toFixed(2)}</span>
+                <span>$2.99 max</span>
+              </div>
+            </>
+          )}
 
           {error && (
             <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
@@ -197,7 +220,7 @@ export default function PremiumThreadComposer({
               <div className="space-y-1.5 sm:space-y-2 mb-3 sm:mb-4">
                 <div className="flex items-start gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                   <Check className="text-green-500 flex-shrink-0 mt-0.5" size={14} />
-                  <span>Charge up to <strong>$4.99</strong> (vs $2.99 max now)</span>
+                  <span><strong>Set any price</strong> — no cap (vs $2.99 max now)</span>
                 </div>
                 <div className="flex items-start gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                   <Check className="text-green-500 flex-shrink-0 mt-0.5" size={14} />
@@ -205,7 +228,7 @@ export default function PremiumThreadComposer({
                 </div>
                 <div className="flex items-start gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                   <Check className="text-green-500 flex-shrink-0 mt-0.5" size={14} />
-                  <span>Threads last <strong>14 days</strong> (vs 24 hours)</span>
+                  <span>Threads last <strong>7 days</strong> (vs 48 hours) — and can be saved forever</span>
                 </div>
                 <div className="flex items-start gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                   <Check className="text-green-500 flex-shrink-0 mt-0.5" size={14} />

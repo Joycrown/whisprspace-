@@ -33,25 +33,13 @@ export function Modal({
   closeOnBackdrop = true,
   className = '',
 }: ModalProps) {
-  // Prevent body scroll when modal is open
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
+    document.body.style.overflow = isOpen ? 'hidden' : 'unset';
+    return () => { document.body.style.overflow = 'unset'; };
   }, [isOpen]);
 
-  // Close on Escape key
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose();
-      }
-    };
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen) onClose(); };
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose]);
@@ -60,52 +48,39 @@ export function Modal({
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[1040]"
+            className="fixed inset-0 bg-black/60 z-[1040]"
             onClick={closeOnBackdrop ? onClose : undefined}
           />
 
-          {/* Modal */}
-          <div className="fixed inset-0 z-[1050] flex items-center justify-center modal-safe-overlay">
+          <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4 modal-safe-overlay">
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              transition={{ duration: 0.2 }}
-              className={`
-                bg-gray-800 rounded-xl shadow-2xl
-                w-full ${sizeStyles[size]} modal-safe-panel overflow-y-auto
-                ${className}
-              `}
+              exit={{ opacity: 0, scale: 0.95, y: 16 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              className={`bg-[#12121A] border border-[#23232E] rounded-2xl w-full ${sizeStyles[size]} modal-safe-panel overflow-y-auto ${className}`}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Header */}
               {(title || showCloseButton) && (
-                <div className="flex items-center justify-between p-4 md:p-6 border-b border-gray-700">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-[#23232E]">
                   {title && (
-                    <h2 className="text-lg md:text-xl font-semibold text-white">
-                      {title}
-                    </h2>
+                    <h2 className="text-base font-medium text-[#F2F2F6] tracking-[-0.3px]">{title}</h2>
                   )}
                   {showCloseButton && (
                     <button
                       onClick={onClose}
-                      className="text-gray-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-700"
+                      className="text-[#5C5C6E] hover:text-[#F2F2F6] transition-colors p-1.5 rounded-lg hover:bg-white/[0.05] ml-auto"
                     >
-                      <X className="w-5 h-5" />
+                      <X className="w-4 h-4" />
                     </button>
                   )}
                 </div>
               )}
-
-              {/* Content */}
-              <div className="p-4 md:p-6">
-                {children}
-              </div>
+              <div className="px-5 py-4">{children}</div>
             </motion.div>
           </div>
         </>
@@ -114,27 +89,14 @@ export function Modal({
   );
 }
 
-// Modal subcomponents for better composition
 export function ModalHeader({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`mb-4 ${className}`}>
-      {children}
-    </div>
-  );
+  return <div className={`mb-4 ${className}`}>{children}</div>;
 }
 
 export function ModalBody({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={className}>
-      {children}
-    </div>
-  );
+  return <div className={className}>{children}</div>;
 }
 
 export function ModalFooter({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`flex gap-3 mt-6 ${className}`}>
-      {children}
-    </div>
-  );
+  return <div className={`flex gap-3 mt-5 ${className}`}>{children}</div>;
 }

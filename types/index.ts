@@ -7,8 +7,6 @@ export interface User {
   lastUsernameChange?: string; // Timestamp of last username change (for cooldown enforcement)
   isAnonymous: boolean;
   sessionToken?: string;
-  points: number;
-  level: number;
   joinedAt: string;
   lastActiveAt: string;
   preferences: UserPreferences;

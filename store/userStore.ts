@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User, UserSession, UserPreferences } from '@/types';
@@ -40,54 +39,6 @@ export interface UserStore {
   canCreateThread: () => boolean;
   canInteract: () => boolean;
 }
-
-// Generate anonymous user ID
-const generateAnonymousId = (): string => {
-  const randomNum = Math.floor(Math.random() * 100000000);
-  return `ANON_${randomNum.toString().padStart(8, '0')}`;
-};
-
-// Generate session token (mock JWT)
-const generateSessionToken = (): string => {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let result = '';
-  for (let i = 0; i < 64; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return result;
-};
-
-// Create mock anonymous user
-const createMockAnonymousUser = (): User => {
-  const now = new Date().toISOString();
-  const anonymousId = generateAnonymousId();
-  return {
-    id: `anon_${anonymousId}`,
-    anonymousId,
-    sessionToken: generateSessionToken(),
-    isAnonymous: true,
-    points: 0,
-    level: 1,
-    joinedAt: now,
-    lastActiveAt: now,
-    preferences: {
-        theme: 'system',
-        notifications: {
-          email: false,
-          push: true,
-          inApp: true,
-          likes: true,
-          replies: true,
-          mentions: true,
-          groupInvites: true,
-        },
-        privacy: {
-          showOnlineStatus: false, // Anonymous users default to hidden status
-          allowDirectMessages: false, // Anonymous users can't receive DMs
-        },
-      },
-  };
-};
 
 export const useUserStore = create<UserStore>()(
   persist(

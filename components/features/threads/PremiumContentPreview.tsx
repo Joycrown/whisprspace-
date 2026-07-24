@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react';
-import { Crown, Lock, Eye } from 'lucide-react';
+import { Crown, Lock } from 'lucide-react';
 import PaymentModal from '../modals/PaymentModal';
 import { redeemThreadAccessCode } from '@/lib/threads/thread-service';
 
@@ -29,93 +29,78 @@ export default function PremiumContentPreview({
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [userHasAccess, setUserHasAccess] = useState(hasAccess);
 
-  // Get preview text
   const previewText = content.slice(0, previewLength);
   const hasMoreContent = content.length > previewLength;
 
   const handlePaymentSuccess = () => {
     setUserHasAccess(true);
-    if (onAccessGranted) {
-      onAccessGranted();
-    }
+    onAccessGranted?.();
   };
 
-  // If user has access, show full content
   if (userHasAccess) {
     return (
       <div className="relative">
-        <div className="flex items-center gap-2 mb-3 text-sm text-purple-600">
-          <Crown className="w-4 h-4" />
-          <span className="font-medium">Premium Content - Access Granted</span>
+        <div className="flex items-center gap-2 mb-3 text-xs text-[#C4B5FD]">
+          <Crown className="w-3.5 h-3.5" />
+          <span>Premium — access granted</span>
         </div>
-        <div className="prose prose-sm max-w-none text-gray-700">
-          {content}
-        </div>
+        <p className="text-sm text-[#8F8FA3] whitespace-pre-wrap break-words">{content}</p>
       </div>
     );
   }
 
-  // Show preview with blur overlay
   return (
     <>
-      <div className="relative">
-        {/* Premium Badge */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-purple-100 to-orange-100 border border-purple-200 rounded-full">
-            <Crown className="w-4 h-4 text-purple-600" />
-            <span className="text-sm font-semibold text-purple-900">Premium Content</span>
-          </div>
-          <div className="flex items-center gap-2 text-purple-600 font-bold text-lg">
-            <span>${price.toFixed(2)}</span>
-          </div>
+      <div className="space-y-4">
+        {/* Premium label */}
+        <div className="flex items-center justify-between">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-[#8B5CF6]/40 text-xs text-[#C4B5FD]">
+            <Crown className="w-3.5 h-3.5" />
+            Premium content
+          </span>
+          <span className="text-[#F2F2F6] font-medium text-sm">${price.toFixed(2)}</span>
         </div>
 
-        {/* Content Preview with Blur */}
-        <div className="relative">
-          <div className="prose prose-sm max-w-none text-gray-700">
-            {previewText}
-            {hasMoreContent && '...'}
-          </div>
-          
-          {/* Blur Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/50 to-white backdrop-blur-sm"></div>
-        </div>
-
-        {/* Locked Content Indicator */}
-        <div className="relative mt-8 p-6 bg-gradient-to-br from-purple-50 to-orange-50 border-2 border-dashed border-purple-300 rounded-xl text-center">
-          <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Lock className="w-8 h-8 text-white" />
-          </div>
-          
-          <h3 className="text-xl font-bold text-gray-900 mb-2">
-            Unlock Premium Content
-          </h3>
-          <p className="text-gray-600 mb-4 max-w-md mx-auto">
-            Get instant access to the full thread and support the creator. 70% of your payment goes directly to them.
+        {/* Blurred preview */}
+        <div className="relative overflow-hidden rounded-xl">
+          <p className="text-sm text-[#8F8FA3] whitespace-pre-wrap break-words">
+            {previewText}{hasMoreContent ? '…' : ''}
           </p>
+          <div
+            className="absolute inset-0"
+            style={{
+              background: 'linear-gradient(to bottom, transparent 30%, #0A0A10 90%)',
+            }}
+          />
+        </div>
+
+        {/* Paywall card */}
+        <div className="rounded-2xl border border-dashed border-[#8B5CF6]/30 bg-[#8B5CF6]/[0.04] p-6 text-center space-y-4">
+          <div
+            className="w-12 h-12 rounded-full flex items-center justify-center mx-auto"
+            style={{ background: 'linear-gradient(135deg, #8B5CF6, #F97316)' }}
+          >
+            <Lock className="w-5 h-5 text-white" />
+          </div>
+
+          <div className="space-y-1">
+            <h3 className="text-base font-medium text-[#F2F2F6]">Unlock premium content</h3>
+            <p className="text-sm text-[#8F8FA3]">
+              Full thread access. 70% goes directly to the creator.
+            </p>
+          </div>
 
           <button
             onClick={() => setShowPaymentModal(true)}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-purple-600 to-orange-500 text-white rounded-lg font-semibold hover:opacity-90 transition-opacity transform hover:scale-105 duration-200"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-[11px] text-sm font-medium text-white active:scale-[0.97] transition-all"
+            style={{ background: 'linear-gradient(100deg, #8B5CF6, #F97316)' }}
           >
-            <Crown className="w-5 h-5" />
-            <span>Unlock for ${price.toFixed(2)}</span>
+            <Crown className="w-4 h-4" />
+            Unlock for ${price.toFixed(2)}
           </button>
-
-          <div className="mt-4 flex items-center justify-center gap-4 text-sm text-gray-600">
-            <div className="flex items-center gap-1">
-              <Eye className="w-4 h-4" />
-              <span>Full access</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Lock className="w-4 h-4" />
-              <span>Secure payment</span>
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Payment Modal */}
       <PaymentModal
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}

@@ -9,7 +9,7 @@ export function getPremiumThreadRules(user: User): PremiumThreadCreationRules {
       canCreate: true,
       priceRange: {
         min: 1.00,
-        max: 4.99
+        max: Infinity, // Premium users set their own price — no upper cap
       },
       revenueShare: {
         creator: 0.70,  // 70% to creator
@@ -59,23 +59,26 @@ export function validatePremiumThreadPrice(
   user: User
 ): { valid: boolean; reason?: string } {
   const rules = getPremiumThreadRules(user);
-  
+
+  if (!price || isNaN(price) || price <= 0) {
+    return { valid: false, reason: 'Please enter a valid price' };
+  }
+
   if (price < rules.priceRange.min) {
     return {
       valid: false,
-      reason: `Price must be at least $${rules.priceRange.min.toFixed(2)}`
+      reason: `Price must be at least $${rules.priceRange.min.toFixed(2)}`,
     };
   }
-  
-  if (price > rules.priceRange.max) {
+
+  // Free users have a $2.99 ceiling; premium users have no upper limit
+  if (!user.isPremium && price > rules.priceRange.max) {
     return {
       valid: false,
-      reason: user.isPremium
-        ? `Price cannot exceed $${rules.priceRange.max.toFixed(2)}`
-        : `Free users can charge up to $${rules.priceRange.max.toFixed(2)}. Upgrade to Premium for higher prices!`
+      reason: `Free users can charge up to $${rules.priceRange.max.toFixed(2)}. Upgrade to Premium for higher prices!`,
     };
   }
-  
+
   return { valid: true };
 }
 
@@ -190,19 +193,15 @@ export function hasUserPurchasedThread(
 export function getUpgradeBenefits(currentPrice: number): {
   freeEarnings: number;
   premiumEarnings: number;
-  maxPriceIncrease: number;
   revenueBoost: number;
 } {
   const freeShare = currentPrice * 0.50;
   const premiumShare = currentPrice * 0.70;
-  const maxPremiumPrice = 4.99;
-  const maxPremiumEarnings = maxPremiumPrice * 0.70;
-  
+
   return {
     freeEarnings: parseFloat(freeShare.toFixed(2)),
     premiumEarnings: parseFloat(premiumShare.toFixed(2)),
-    maxPriceIncrease: parseFloat((maxPremiumPrice - currentPrice).toFixed(2)),
-    revenueBoost: parseFloat(((premiumShare - freeShare) / freeShare * 100).toFixed(0))
+    revenueBoost: parseFloat(((premiumShare - freeShare) / freeShare * 100).toFixed(0)),
   };
 }
 
