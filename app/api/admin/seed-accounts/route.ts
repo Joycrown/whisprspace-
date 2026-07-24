@@ -20,9 +20,17 @@ async function verifyAdmin(req: NextRequest): Promise<string | null> {
     .from('admin_users').select('user_id').eq('user_id', user.id).single()
   if (adminRow) return user.id
 
+  // Fallback: accept users with is_admin flag and backfill admin_users row
+  // so FK constraints on seeded_by / created_by are always satisfied.
   const { data: userRow } = await supabaseAdmin
     .from('users').select('is_admin').eq('id', user.id).single()
-  return userRow?.is_admin === true ? user.id : null
+  if (userRow?.is_admin !== true) return null
+
+  await supabaseAdmin
+    .from('admin_users')
+    .upsert({ user_id: user.id, role: 'admin' }, { onConflict: 'user_id' })
+
+  return user.id
 }
 
 function generateRawToken(): string {
@@ -144,6 +152,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (userError || !newUser) {
+    console.error('[seed-accounts] users insert failed:', userError)
     return NextResponse.json({ error: 'Failed to create account' }, { status: 500 })
   }
 
@@ -162,7 +171,7 @@ export async function POST(req: NextRequest) {
     })
 
   if (tokenError) {
-    // Roll back the user row
+    console.error('[seed-accounts] seed_claim_tokens insert failed:', tokenError)
     await supabaseAdmin.from('users').delete().eq('id', newUser.id)
     return NextResponse.json({ error: 'Failed to generate claim token' }, { status: 500 })
   }
