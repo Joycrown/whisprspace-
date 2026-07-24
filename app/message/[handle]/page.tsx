@@ -7,6 +7,11 @@ interface MessageLinkPageProps {
   params: Promise<{ handle: string }>;
 }
 
+// Bump this whenever the OG card design changes so social scrapers
+// (WhatsApp/Facebook/Twitter) treat the preview as fresh and re-fetch the image
+// instead of serving a stale, imageless cache. Format: ISO date of the change.
+const OG_VERSION = '2026-07-24T00:00:00Z';
+
 async function resolveUser(handle: string) {
   const supabase = await createClient();
   const normalizedHandle = decodeURIComponent(handle).trim();
@@ -36,6 +41,7 @@ export async function generateMetadata({ params }: MessageLinkPageProps): Promis
   const title = `Tell ${displayName} the truth.`;
   const description = 'No name. No trace. Just what you actually think. Send an anonymous message on WhisprSpace.';
   const url = `${siteConfig.appUrl}/message/${handle}`;
+  const ogImageUrl = `${siteConfig.appUrl}/message/${handle}/opengraph-image`;
 
   return {
     title,
@@ -61,18 +67,29 @@ export async function generateMetadata({ params }: MessageLinkPageProps): Promis
       type: 'website',
       images: [
         {
-          url: `${siteConfig.appUrl}/message/${handle}/opengraph-image`,
+          url: ogImageUrl,
+          // secureUrl → emits og:image:secure_url, which some scrapers
+          // (older WhatsApp, iMessage) require before rendering a thumbnail.
+          secureUrl: ogImageUrl,
+          type: 'image/png',
           width: 1200,
           height: 630,
           alt: `Send ${displayName} an anonymous message`,
         },
       ],
     },
+    // og:updated_time gives crawlers a freshness signal so a re-scrape after the
+    // image is deployed isn't served from a stale imageless cache.
+    // (og:image:secure_url and og:image:type are emitted by the openGraph.images
+    // secureUrl/type fields above — no need to repeat them here.)
+    other: {
+      'og:updated_time': OG_VERSION,
+    },
     twitter: {
       card: 'summary_large_image',
       title,
       description,
-      images: [`${siteConfig.appUrl}/message/${handle}/opengraph-image`],
+      images: [ogImageUrl],
     },
   };
 }
