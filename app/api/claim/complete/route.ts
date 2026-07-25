@@ -78,16 +78,66 @@ export async function POST(req: NextRequest) {
     createPayload.email = email.trim().toLowerCase()
   }
 
-  const { data: authUser, error: createError } = await supabaseAdmin.auth.admin.createUser(createPayload)
+  let { data: authUser, error: createError } = await supabaseAdmin.auth.admin.createUser(createPayload)
 
-  if (createError || !authUser.user) {
+  // An auth row for this reserved UUID may already exist (e.g. a prior claim attempt
+  // that partially completed). In that case, set the credentials on the existing
+  // row instead of failing — the claim is idempotent from the user's perspective.
+  if (createError) {
+    const msg = (createError.message || '').toLowerCase()
+    const alreadyExists =
+      msg.includes('already registered') ||
+      msg.includes('already been registered') ||
+      msg.includes('already exists') ||
+      msg.includes('duplicate')
+
+    if (alreadyExists) {
+      const updatePayload: { password: string; email_confirm: boolean; email?: string } = {
+        password,
+        email_confirm: true,
+      }
+      if (email && email.trim()) updatePayload.email = email.trim().toLowerCase()
+
+      const { data: updated, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+        userId,
+        updatePayload
+      )
+      if (!updateError && updated?.user) {
+        authUser = updated
+        createError = null
+      } else {
+        console.error('[Claim] Auth update fallback failed:', updateError?.message)
+      }
+    }
+  }
+
+  if (createError || !authUser?.user) {
     // Roll back the consume
     await supabaseAdmin
       .from('seed_claim_tokens')
       .update({ claimed_at: null })
       .eq('token_hash', tokenHash)
     console.error('[Claim] Auth user creation failed:', createError?.message)
-    return NextResponse.json({ error: 'Failed to create account. Please try again.' }, { status: 500 })
+
+    // Surface a specific, safe message for the common "email taken" case so the
+    // user knows to use a different email or sign in, instead of a dead-end retry.
+    const raw = (createError?.message || '').toLowerCase()
+    if (raw.includes('already registered') || raw.includes('already been registered') || (raw.includes('email') && raw.includes('exist'))) {
+      return NextResponse.json(
+        { error: 'That email is already in use. Try a different email, or leave it blank.' },
+        { status: 409 }
+      )
+    }
+    // Include the underlying reason to aid debugging on staging. Supabase auth
+    // messages are safe to surface (no secrets); this replaces the opaque
+    // "please try again" that hid the real cause.
+    return NextResponse.json(
+      {
+        error: 'Failed to create account. Please try again.',
+        detail: createError?.message || 'Unknown auth error',
+      },
+      { status: 500 }
+    )
   }
 
   // ── Flip account_state → active ─────────────────────────────────────────────
@@ -106,7 +156,7 @@ export async function POST(req: NextRequest) {
     ? { email: email.trim().toLowerCase(), password }
     : null
 
-  let sessionData: any = null
+  let sessionData: Record<string, unknown> | null = null
 
   if (signInBody) {
     const signInRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
@@ -135,7 +185,7 @@ export async function POST(req: NextRequest) {
     .from('conversation_participants')
     .select('conversation_id')
     .eq('user_id', userId)
-  const convIds = (participantRows.data ?? []).map((r: any) => r.conversation_id)
+  const convIds = (participantRows.data ?? []).map((r: { conversation_id: string }) => r.conversation_id)
   let messageCount = 0
   if (convIds.length > 0) {
     const { count } = await supabaseAdmin
@@ -146,7 +196,10 @@ export async function POST(req: NextRequest) {
     messageCount = count ?? 0
   }
 
-  const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://whisprspace.com'
+  const base =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    'https://whisprspace.com'
 
   return NextResponse.json({
     success: true,
