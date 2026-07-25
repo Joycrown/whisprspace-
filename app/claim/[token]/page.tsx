@@ -24,7 +24,7 @@ interface ValidateResult {
 interface CompleteResult {
   success: boolean
   handle: string
-  session: any
+  session: Record<string, unknown> | null
   messageCount: number
   inboxUrl: string
   inboxReadUrl: string
@@ -89,7 +89,11 @@ export default function ClaimPage({ params }: ClaimPageProps) {
     const data = await res.json()
 
     if (!res.ok || !data.success) {
-      setFormError(data.error || 'Something went wrong. Please try again.')
+      // Show the specific reason when the server provides one (e.g. email taken),
+      // otherwise the generic message. `detail` carries the underlying auth error
+      // for easier diagnosis.
+      const message = data.detail ? `${data.error} (${data.detail})` : (data.error || 'Something went wrong. Please try again.')
+      setFormError(message)
       setStage('form')
       return
     }
@@ -256,7 +260,7 @@ export default function ClaimPage({ params }: ClaimPageProps) {
                 {/* Email — optional */}
                 <div className="space-y-1.5">
                   <label className="text-xs text-gray-400 font-medium uppercase tracking-wide">
-                    Email <span className="text-gray-600 normal-case font-normal">— optional, for account recovery</span>
+                    Email <span className="text-gray-600 normal-case font-normal">— for account recovery</span>
                   </label>
                   <input
                     type="email"
@@ -266,7 +270,7 @@ export default function ClaimPage({ params }: ClaimPageProps) {
                     className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-purple-500 transition-colors"
                   />
                   <p className="text-xs text-gray-600 leading-relaxed">
-                    If you lose access, we can't restore it without one.
+                    If you lose access, we can&apos;t restore it without one.
                   </p>
                 </div>
 
@@ -312,7 +316,7 @@ export default function ClaimPage({ params }: ClaimPageProps) {
                 <div className="w-16 h-16 rounded-full bg-green-500/15 border border-green-500/25 flex items-center justify-center mx-auto mb-4">
                   <CheckCircle className="w-7 h-7 text-green-400" />
                 </div>
-                <h1 className="text-2xl font-bold text-white mb-1">You're set.</h1>
+                <h1 className="text-2xl font-bold text-white mb-1">You&apos;re set.</h1>
                 <p className="text-gray-400 text-sm leading-relaxed">
                   People can message you anonymously right now.
                 </p>
