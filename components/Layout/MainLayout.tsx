@@ -37,7 +37,10 @@ export default function MainLayout({
     publicRoutes.includes(pathname || '') ||
     (pathname?.startsWith('/auth/') ?? false) ||
     (pathname?.startsWith('/profile/') ?? false) ||
-    (pathname?.startsWith('/message/') ?? false)
+    (pathname?.startsWith('/message/') ?? false) ||
+    // Seed-account claim links (/claim/[token]) are standalone, logged-out pages —
+    // no app chrome, no other user's sidebar/session should bleed through.
+    (pathname?.startsWith('/claim/') ?? false)
 
   if (isPublicRoute) {
     return (
