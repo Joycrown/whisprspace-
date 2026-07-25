@@ -1,13 +1,25 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ThreadComposer from '@/components/features/threads/ThreadComposer';
-import { ThreadDraft } from '@/types';
+import { ThreadDraft, CreateThreadForm } from '@/types';
+import { INBOX_THREAD_DRAFT_KEY } from '@/components/features/inbox/MessageModal';
+import * as rawAuth from '@/lib/core/supabase/raw-auth';
+
+interface InboxThreadDraft {
+  conversationId: string;
+  form: Partial<CreateThreadForm>;
+}
 
 export default function CreateThreadPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromInbox = searchParams?.get('from') === 'inbox';
+
   const [draft, setDraft] = useState<ThreadDraft | undefined>();
+  const [initialForm, setInitialForm] = useState<Partial<CreateThreadForm> | undefined>();
+  const [inboxConversationId, setInboxConversationId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
   // Handle mount state
@@ -15,22 +27,71 @@ export default function CreateThreadPage() {
     setMounted(true);
   }, []);
 
-  // Load draft from localStorage on mount
+  // Load the right prefill source on mount:
+  // - inbox origin → the dedicated inbox draft (prefills form + links conversation)
+  // - otherwise → the normal saved thread draft
   useEffect(() => {
     if (!mounted) return;
+
+    if (fromInbox) {
+      const raw = localStorage.getItem(INBOX_THREAD_DRAFT_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as InboxThreadDraft;
+          setInitialForm(parsed.form);
+          setInboxConversationId(parsed.conversationId);
+          return;
+        } catch {
+          localStorage.removeItem(INBOX_THREAD_DRAFT_KEY);
+        }
+      }
+    }
 
     const savedDraft = localStorage.getItem('thread_draft');
     if (savedDraft) {
       try {
         setDraft(JSON.parse(savedDraft));
-      } catch (error) {
+      } catch {
         localStorage.removeItem('thread_draft');
       }
     }
-  }, [mounted]);
+  }, [mounted, fromInbox]);
 
   const handleClose = () => {
     router.back();
+  };
+
+  // After the thread is created from an inbox conversation, import ALL of that
+  // conversation's messages into the new thread as anonymous INBOX_USER messages.
+  // Only on full success is the conversation marked converted (server-side).
+  const importInboxMessages = async (threadId: string) => {
+    if (!inboxConversationId) return;
+    const token = rawAuth.getSession()?.access_token;
+    const res = await fetch('/api/threads/import-inbox-messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ conversationId: inboxConversationId, threadId }),
+    });
+
+    // Clear the one-shot draft either way so a refresh doesn't re-trigger it.
+    localStorage.removeItem(INBOX_THREAD_DRAFT_KEY);
+
+    // 409 = already converted — fine, treat as done. Other failures bubble up so
+    // ThreadComposer surfaces a toast (thread still created). Include the server's
+    // detail so the real cause is visible instead of a generic message.
+    if (!res.ok && res.status !== 409) {
+      let detail = '';
+      try {
+        const data = await res.json();
+        detail = data?.detail || data?.error || '';
+      } catch {
+        // ignore
+      }
+      throw new Error(detail ? `Failed to import messages: ${detail}` : 'Failed to import messages');
+    }
   };
 
   // Prevent hydration mismatch
@@ -48,6 +109,8 @@ export default function CreateThreadPage() {
         isOpen={true}
         onClose={handleClose}
         draft={draft}
+        initialForm={initialForm}
+        onCreated={inboxConversationId ? importInboxMessages : undefined}
       />
     </div>
   );

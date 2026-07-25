@@ -2225,7 +2225,22 @@ function calculateTimeRemaining(expiresAt: string | null): string | undefined {
 /**
  * Helper: Transform database message to Message type
  */
+// Messages imported from an anonymous inbox conversation are authored by the
+// shared ANON_SYSTEM_INBOX system user. They must render as "INBOX_USER" so the
+// original anonymous senders are never revealed. New replies keep their real name.
+const ANON_INBOX_SYSTEM_ID = 'ANON_SYSTEM_INBOX';
+const INBOX_USER_LABEL = 'INBOX_USER';
+
+/** Resolve a sender's display name, masking the inbox system user as INBOX_USER. */
+function resolveSenderName(
+  sender: { anonymous_id?: string; username?: string } | null | undefined
+): string {
+  if (sender?.anonymous_id === ANON_INBOX_SYSTEM_ID) return INBOX_USER_LABEL;
+  return sender?.username || sender?.anonymous_id || 'Unknown';
+}
+
 export function transformMessage(msg: any, userId?: string): Message {
+  const isInboxImport = msg.sender?.anonymous_id === ANON_INBOX_SYSTEM_ID;
   // Transform reactions from array to object format
   const reactions: any = {};
   if (msg.message_reactions && msg.message_reactions.length > 0) {
@@ -2245,11 +2260,11 @@ export function transformMessage(msg: any, userId?: string): Message {
     id: msg.id,
     threadId: msg.thread_id,
     authorId: msg.sender?.id || msg.sender_id,
-    authorName: msg.sender?.username || msg.sender?.anonymous_id || 'Unknown',
+    authorName: isInboxImport ? INBOX_USER_LABEL : (msg.sender?.username || msg.sender?.anonymous_id || 'Unknown'),
     sender: {
       id: msg.sender?.id || msg.sender_id,
-      anonymousId: msg.sender?.anonymous_id || 'Unknown',
-      name: msg.sender?.username || msg.sender?.anonymous_id || 'Unknown',
+      anonymousId: isInboxImport ? INBOX_USER_LABEL : (msg.sender?.anonymous_id || 'Unknown'),
+      name: resolveSenderName(msg.sender),
       avatar: msg.sender?.avatar_url || '#cccccc',
       status: 'online' as const,
       isPremium: msg.sender?.is_premium,
@@ -2268,8 +2283,10 @@ export function transformMessage(msg: any, userId?: string): Message {
       content: msg.parent_message.content,
       sender: msg.parent_message.sender ? {
          id: msg.parent_message.sender.id,
-         anonymousId: msg.parent_message.sender.anonymous_id,
-         name: msg.parent_message.sender.username || msg.parent_message.sender.anonymous_id,
+         anonymousId: msg.parent_message.sender.anonymous_id === ANON_INBOX_SYSTEM_ID
+           ? INBOX_USER_LABEL
+           : msg.parent_message.sender.anonymous_id,
+         name: resolveSenderName(msg.parent_message.sender),
          avatar: msg.parent_message.sender.avatar_url || '#cccccc',
          status: 'online' as const,
          isPremium: msg.parent_message.sender.is_premium,
