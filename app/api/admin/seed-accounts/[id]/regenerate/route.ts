@@ -51,7 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     handle: user.username,
   })
 
-  const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://whisprspace.com'
+  const base = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://whisprspace.com'
   const claimUrl = `${base}/claim/${rawToken}`
   const inboxUrl = `${base}/message/${user.username}`
 
