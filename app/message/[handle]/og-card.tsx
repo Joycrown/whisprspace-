@@ -49,10 +49,19 @@ export async function resolveDisplayName(handle: string): Promise<string> {
  * Returns a raw ImageResponse. Callers decide how to serve it — the route handler
  * buffers it with an explicit Content-Length so WhatsApp renders the thumbnail.
  */
+function getBaseHost(): string {
+  const url =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    'https://whisprspace.com'
+  try { return new URL(url).host } catch { return 'whisprspace.com' }
+}
+
 export async function renderOgCard(handle: string): Promise<ImageResponse> {
   const displayName = await resolveDisplayName(handle)
   const initial = displayName.charAt(0).toUpperCase()
   const nameFontSize = displayName.length > 14 ? 40 : displayName.length > 10 ? 48 : 58
+  const baseHost = getBaseHost()
 
   return new ImageResponse(
     (
@@ -126,13 +135,13 @@ export async function renderOgCard(handle: string): Promise<ImageResponse> {
               Anonymous Inbox
             </div>
             <div style={{ fontSize: 74, fontWeight: 900, color: '#F2F2F6', lineHeight: 1.02, letterSpacing: '-2.5px', display: 'flex' }}>
-              Be honest.
+              The truth
             </div>
             <div style={{ fontSize: 74, fontWeight: 900, color: '#F2F2F6', lineHeight: 1.02, letterSpacing: '-2.5px', display: 'flex' }}>
-              I&apos;ll never
+              you&apos;ve been
             </div>
             <div style={{ fontSize: 74, fontWeight: 900, color: 'rgba(242,242,246,0.22)', lineHeight: 1.02, letterSpacing: '-2.5px', display: 'flex' }}>
-              know it&apos;s you.
+              holding back.
             </div>
           </div>
 
@@ -213,7 +222,7 @@ export async function renderOgCard(handle: string): Promise<ImageResponse> {
 
           {/* URL */}
           <span style={{ fontSize: 13, color: '#3A3A4E', letterSpacing: '0.3px', marginTop: 20, display: 'flex' }}>
-            whisprspace.com/message/{handle}
+            {baseHost}/message/{handle}
           </span>
         </div>
       </div>
