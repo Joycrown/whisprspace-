@@ -265,6 +265,59 @@ export async function signUp(email: string, password: string): Promise<AuthRespo
 }
 
 /**
+ * Convert the CURRENT (anonymous) auth user into a permanent one by setting an
+ * email + password on the SAME auth UUID. Supabase keeps the same user id, so the
+ * existing public.users row, handle, conversations and messages all stay attached.
+ *
+ * Requires a valid current session (the anonymous one). Returns the refreshed
+ * session on success.
+ */
+export async function updateUserCredentials(email: string, password: string): Promise<AuthResponse> {
+  try {
+    if (!hasRequiredLegalConsent()) {
+      throw new Error(LEGAL_CONSENT_REQUIRED_ERROR)
+    }
+
+    const current = getSession()
+    if (!current?.access_token) {
+      throw new Error('No active session to upgrade')
+    }
+
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      method: 'PUT',
+      headers: {
+        ...getAuthHeaders(),
+        Authorization: `Bearer ${current.access_token}`,
+      },
+      body: JSON.stringify({ email, password }),
+    })
+
+    if (!res.ok) {
+      const errorMessage = await parseAuthErrorMessage(res, 'Account upgrade failed')
+      throw new Error(errorMessage)
+    }
+
+    const updatedUser = await res.json()
+
+    // The access token still identifies the same UUID; mark it non-anonymous
+    // locally and re-persist. Also clear the dedicated anon slot so future
+    // anonymous restores don't resurrect the old anonymous identity.
+    const upgradedSession: Session = {
+      ...current,
+      user: { ...current.user, ...updatedUser, is_anonymous: false },
+    }
+    saveSession(upgradedSession)
+    if (typeof window !== 'undefined') localStorage.removeItem(ANON_SESSION_KEY)
+    emitAuthEvent('SIGNED_IN', upgradedSession)
+
+    return { session: upgradedSession, user: upgradedSession.user, error: null }
+  } catch (error: any) {
+    console.error('[RawAuth] Account upgrade error:', error)
+    return { session: null, user: null, error }
+  }
+}
+
+/**
  * Sign in anonymously.
  *
  * Returns the same anonymous account across visits on the same device by

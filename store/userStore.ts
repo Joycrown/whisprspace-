@@ -134,12 +134,29 @@ export const useUserStore = create<UserStore>()(
         }
 
         set({ isLoading: true, error: null });
-        
+
         try {
-          // User will get system-generated anonymous ID as initial username
-          // They can change it later in profile with cooldown period
-          const user = await authService.signUpWithEmail(email, password);
-          
+          // If the visitor is currently a guest (anonymous), UPGRADE that account
+          // in place so their handle + any messages they've already received are
+          // preserved. Otherwise create a fresh account.
+          const isGuest = get().session.user?.isAnonymous === true;
+
+          let user: User;
+          if (isGuest) {
+            try {
+              user = await authService.upgradeAnonymousAccount(email, password);
+            } catch (upgradeErr) {
+              // No restorable anonymous session (e.g. expired) — fall back to a
+              // fresh signup so the user isn't blocked.
+              console.warn('[UserStore] Anon upgrade failed, falling back to fresh signup:', upgradeErr);
+              user = await authService.signUpWithEmail(email, password);
+            }
+          } else {
+            // User will get system-generated anonymous ID as initial username
+            // They can change it later in profile with cooldown period
+            user = await authService.signUpWithEmail(email, password);
+          }
+
           set({
             session: {
               user,

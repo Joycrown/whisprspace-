@@ -1,14 +1,17 @@
 'use client'
 
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { MessageCircle, Mail, MailOpen, Lock, Zap } from 'lucide-react';
-import { FaShareAlt, FaTwitter, FaFacebook, FaWhatsapp, FaLinkedinIn, FaInstagram, FaEnvelope, FaLink, FaCheck } from 'react-icons/fa';
+import { FaShareAlt, FaCheck } from 'react-icons/fa';
 import { useConversationsQuery, Conversation, DirectMessage, markConversationReadWithReceipts } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
 import AppLoadingState from '@/components/ui/AppLoadingState';
 import MessageModal from '@/components/features/inbox/MessageModal';
+import { ShareDropdown } from '@/components/features/inbox/ShareDropdown';
+import UserShareCard from '@/components/features/inbox/UserShareCard';
+import { useInboxShare } from '@/lib/hooks/useInboxShare';
 
 type TabType = 'all' | 'unread';
 
@@ -31,7 +34,10 @@ function InboxPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { session, sessionValidated } = useUserStore();
-  const isSessionReady = Boolean(sessionValidated && session.user);
+  // Guests can hold an inbox link but not read messages — don't fetch conversations
+  // for them (nothing to show, and it avoids needless queries).
+  const isGuest = session.user?.isAnonymous ?? false;
+  const isSessionReady = Boolean(sessionValidated && session.user && !isGuest);
 
   // Use React Query hooks for data fetching
   const {
@@ -47,12 +53,34 @@ function InboxPageContent() {
 
   const [activeTab, setActiveTab] = useState<TabType>('all');
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [showShareDropdown, setShowShareDropdown] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, right: 0 });
-  const shareButtonRef = useRef<HTMLButtonElement>(null);
   const [directPage, setDirectPage] = useState(1);
   const [oneOffPage, setOneOffPage] = useState(1);
+
+  // Shared share logic — same hook/components as the threads-page nudge, so the
+  // download card and production card link come for free and stay in sync.
+  const {
+    link: myProfileLink,
+    cardLink,
+    handle: messageHandle,
+    copied: copiedLink,
+    showDropdown: showShareDropdown,
+    dropdownPos: dropdownPosition,
+    shareCardRef,
+    isGeneratingCard,
+    copyLink,
+    openDropdown,
+    closeDropdown,
+    shareOnTwitter,
+    shareOnFacebook,
+    shareOnWhatsApp,
+    shareOnLinkedIn,
+    shareOnInstagram,
+    shareViaEmail,
+    downloadShareCard,
+  } = useInboxShare();
+
+  const shareButtonRef = useRef<HTMLButtonElement>(null);
+  const displayName = session?.user?.username || session?.user?.anonymousId || messageHandle;
 
   const PAGE_SIZE = 6;
 
@@ -66,62 +94,10 @@ function InboxPageContent() {
     searchParams.get('conversation_id') ||
     null;
 
-  const [origin, setOrigin] = useState('');
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setOrigin(window.location.origin);
-    }
-  }, []);
-  const messageHandle = session?.user?.username || session?.user?.anonymousId || 'your-id';
-  const myProfileLink = `${origin}/message/${messageHandle}`;
-
-  const shareText = "Drop me an anonymous message — a secret, a question, or just say hi. No identity, pure honesty 👀🔥";
-
   const handleShareButtonClick = () => {
     if (shareButtonRef.current) {
-      const rect = shareButtonRef.current.getBoundingClientRect();
-      setDropdownPosition({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+      openDropdown(shareButtonRef.current.getBoundingClientRect());
     }
-    setShowShareDropdown((prev) => !prev);
-  };
-
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(myProfileLink);
-    setCopiedLink(true);
-    setShowShareDropdown(false);
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
-
-  const handleTwitterShare = () => {
-    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(myProfileLink)}`, '_blank');
-    setShowShareDropdown(false);
-  };
-
-  const handleFacebookShare = () => {
-    window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(myProfileLink)}`, '_blank');
-    setShowShareDropdown(false);
-  };
-
-  const handleWhatsappShare = () => {
-    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(myProfileLink + '\n\n' + shareText)}`, '_blank');
-    setShowShareDropdown(false);
-  };
-
-  const handleLinkedInShare = () => {
-    window.open(`https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(myProfileLink)}&summary=${encodeURIComponent(shareText)}`, '_blank');
-    setShowShareDropdown(false);
-  };
-
-  const handleInstagramShare = () => {
-    navigator.clipboard.writeText(myProfileLink);
-    setCopiedLink(true);
-    setShowShareDropdown(false);
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
-
-  const handleEmailShare = () => {
-    window.open(`mailto:?subject=${encodeURIComponent('Send me an anonymous message')}&body=${encodeURIComponent(shareText + '\n\n' + myProfileLink)}`, '_blank');
-    setShowShareDropdown(false);
   };
 
   const filteredConversations = useMemo(() => {
@@ -263,7 +239,7 @@ function InboxPageContent() {
     return <AppLoadingState title="Taking you to sign in..." />;
   }
 
-  if (isLoading && conversations.length === 0) {
+  if (!isGuest && isLoading && conversations.length === 0) {
     return <AppLoadingState title="Syncing your conversations..." />;
   }
 
@@ -314,47 +290,53 @@ function InboxPageContent() {
           </div>
         </div>
 
-        {/* Share Dropdown Portal */}
-        {showShareDropdown && typeof window !== 'undefined' && createPortal(
-          <>
-            <div className="fixed inset-0 z-[999]" onClick={() => setShowShareDropdown(false)} />
-            <div
-              className="fixed z-[1000] w-56 bg-gray-700 rounded-md shadow-xl py-1"
-              style={{ top: `${dropdownPosition.top}px`, right: `${dropdownPosition.right}px` }}
-            >
-              <button onClick={handleCopyLink} className="flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-gray-600 w-full text-left">
-                <FaLink className="w-4 h-4 text-gray-300" />
-                Copy Link
-              </button>
-              <button onClick={handleTwitterShare} className="flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-gray-600 w-full text-left">
-                <FaTwitter className="w-4 h-4 text-blue-400" />
-                Share on Twitter
-              </button>
-              <button onClick={handleFacebookShare} className="flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-gray-600 w-full text-left">
-                <FaFacebook className="w-4 h-4 text-blue-600" />
-                Share on Facebook
-              </button>
-              <button onClick={handleWhatsappShare} className="flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-gray-600 w-full text-left">
-                <FaWhatsapp className="w-4 h-4 text-green-500" />
-                Share on WhatsApp
-              </button>
-              <button onClick={handleLinkedInShare} className="flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-gray-600 w-full text-left">
-                <FaLinkedinIn className="w-4 h-4 text-blue-700" />
-                Share on LinkedIn
-              </button>
-              <button onClick={handleInstagramShare} className="flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-gray-600 w-full text-left">
-                <FaInstagram className="w-4 h-4 text-pink-500" />
-                Share on Instagram
-              </button>
-              <button onClick={handleEmailShare} className="flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-gray-600 w-full text-left">
-                <FaEnvelope className="w-4 h-4 text-gray-400" />
-                Share via Email
-              </button>
-            </div>
-          </>,
-          document.body
+        {/* Shared share dropdown — includes Download card + correct production link */}
+        {showShareDropdown && (
+          <ShareDropdown
+            position={dropdownPosition}
+            onClose={closeDropdown}
+            onCopyLink={copyLink}
+            onTwitter={shareOnTwitter}
+            onFacebook={shareOnFacebook}
+            onWhatsApp={shareOnWhatsApp}
+            onLinkedIn={shareOnLinkedIn}
+            onInstagram={shareOnInstagram}
+            onEmail={shareViaEmail}
+            onDownloadCard={downloadShareCard}
+            isGeneratingCard={isGeneratingCard}
+          />
         )}
 
+        {/* Hidden off-screen card for html-to-image capture */}
+        {messageHandle && (
+          <div style={{ position: 'fixed', top: -9999, left: -9999, pointerEvents: 'none', zIndex: -1 }}>
+            <UserShareCard ref={shareCardRef} displayName={displayName} handle={messageHandle} inboxUrl={cardLink} />
+          </div>
+        )}
+
+        {/* Guest wall — link is shareable above, but reading messages requires sign-up.
+            This is the conversion moment: they've already shared and messages may await. */}
+        {isGuest ? (
+          <div className="bg-gray-800/60 border border-purple-500/30 rounded-2xl p-8 md:p-12 text-center">
+            <div className="text-4xl md:text-5xl mb-4">👀</div>
+            <h3 className="text-lg md:text-2xl font-semibold text-white mb-2">
+              Someone might already be talking about you.
+            </h3>
+            <p className="text-sm md:text-base text-gray-400 max-w-md mx-auto mb-2">
+              Your link is already live. Claim your account to unlock your inbox and see what people really think — no names, all honesty.
+            </p>
+            <p className="text-xs md:text-sm text-purple-300/80 max-w-md mx-auto mb-6">
+              It&apos;s still you — your same link and every message waiting for you carry right over. ✨
+            </p>
+            <Link
+              href={`/auth?view=signup&reason=inbox&redirect=${encodeURIComponent('/inbox')}`}
+              className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-orange-500 hover:opacity-90 rounded-lg text-white font-semibold transition-opacity shadow-lg"
+            >
+              Claim my inbox →
+            </Link>
+          </div>
+        ) : (
+        <>
         {/* Stats */}
         <div className="grid grid-cols-3 md:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
           <div className="bg-gray-800 border border-gray-700 rounded-xl p-3 md:p-6">
@@ -585,13 +567,15 @@ function InboxPageContent() {
             </div>
           )}
         </div>
+        </>
+        )}
 
       </div>
 
       <MessageModal
         isOpen={isModalOpen}
         onClose={handleCloseModal}
-        message={modalMessage}
+        message={modalMessage || undefined}
         conversation={selectedConversation || undefined}
       />
     </div >
