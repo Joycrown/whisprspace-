@@ -41,14 +41,20 @@ function hashToken(raw: string): string {
   return createHash('sha256').update(raw).digest('hex')
 }
 
+function getBaseUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    'https://whisprspace.com'
+  )
+}
+
 function buildClaimUrl(token: string): string {
-  const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://whisprspace.com'
-  return `${base}/claim/${token}`
+  return `${getBaseUrl()}/claim/${token}`
 }
 
 function buildInboxUrl(handle: string): string {
-  const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://whisprspace.com'
-  return `${base}/message/${handle}`
+  return `${getBaseUrl()}/message/${handle}`
 }
 
 // ─── GET — list unclaimed seed accounts ──────────────────────────────────────
