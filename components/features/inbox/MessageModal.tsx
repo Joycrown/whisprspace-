@@ -1,10 +1,16 @@
 'use client';
 
-import React, { Fragment } from 'react';
+import React, { Fragment, useState } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
-import { X, MessageSquare, Clock } from 'lucide-react';
-import { DirectMessage, Conversation } from '@/lib/messaging/messaging-service';
+import { useRouter } from 'next/navigation';
+import { X, MessageSquare, Clock, Sparkles, Loader2 } from 'lucide-react';
+import { DirectMessage, Conversation, fetchMessages } from '@/lib/messaging/messaging-service';
 import { format } from 'date-fns';
+import { useUserStore } from '@/store/userStore';
+
+// localStorage key the create-thread page reads to prefill the form + link the
+// conversation so its messages import after the thread is created.
+export const INBOX_THREAD_DRAFT_KEY = 'inbox_thread_draft';
 
 interface MessageModalProps {
   isOpen: boolean;
@@ -19,7 +25,53 @@ const MessageModal: React.FC<MessageModalProps> = ({
   message,
   conversation
 }) => {
+  const router = useRouter();
+  const { session } = useUserStore();
+  const isGuest = session.user?.isAnonymous ?? false;
+
+  const [preparing, setPreparing] = useState(false);
+
+  const alreadyConverted = Boolean(conversation?.convertedThreadId);
+  const canTurnIntoThread = Boolean(
+    session.isAuthenticated && !isGuest && conversation?.id && !alreadyConverted
+  );
+
   if (!message) return null;
+
+  const conversationId = conversation?.id;
+
+  // Go straight to the thread form (/threads/create) with the data prefilled.
+  // Content = first 3 messages; title stays empty for the user to write. The
+  // conversationId is carried so the create page imports the messages on publish.
+  const handleTurnIntoThread = async () => {
+    if (!conversationId || preparing) return;
+    setPreparing(true);
+    try {
+      const { data } = await fetchMessages(conversationId, { limit: 3 });
+      const firstThree = (data && data.length > 0 ? data : [message])
+        .map((m) => (m.content || '').trim())
+        .filter(Boolean)
+        .slice(0, 3);
+      const content = firstThree.join('\n\n');
+
+      const draft = {
+        conversationId,
+        form: {
+          title: '',
+          content,
+          type: 'text',
+          category: 'general',
+          privacy: 'public',
+        },
+      };
+      localStorage.setItem(INBOX_THREAD_DRAFT_KEY, JSON.stringify(draft));
+
+      onClose();
+      router.push('/threads/create?from=inbox');
+    } finally {
+      setPreparing(false);
+    }
+  };
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -82,6 +134,21 @@ const MessageModal: React.FC<MessageModalProps> = ({
                 </div>
 
                 <div className="mt-6 flex justify-end gap-3">
+                  {canTurnIntoThread && (
+                    <button
+                      type="button"
+                      onClick={handleTurnIntoThread}
+                      disabled={preparing}
+                      className="inline-flex items-center gap-2 justify-center rounded-md bg-gradient-to-r from-purple-600 to-orange-500 px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 focus:outline-none"
+                    >
+                      {preparing ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-4 h-4" />
+                      )}
+                      Turn into thread
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="inline-flex justify-center rounded-md border border-gray-700 bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-500 focus-visible:ring-offset-2"
@@ -89,7 +156,6 @@ const MessageModal: React.FC<MessageModalProps> = ({
                   >
                     Close
                   </button>
-                  {/* Future: Add reply button that starts a real conversation if they want */}
                 </div>
               </Dialog.Panel>
             </Transition.Child>

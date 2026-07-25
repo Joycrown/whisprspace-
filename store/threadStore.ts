@@ -723,8 +723,12 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
       }
     });
 
-    channel.subscribe();
-    
+    // Best-effort realtime — a join timeout must not surface as an unhandled
+    // rejection. The socket auto-rejoins in the background.
+    channel.subscribe().catch((err) => {
+      console.warn('[ThreadStore] messages channel subscribe failed (non-fatal):', err);
+    });
+
     set({ messagesSubscription: channel });
   },
 
