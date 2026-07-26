@@ -23,32 +23,41 @@ const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
 
 // Draggable FAB config
 const POSITION_KEY = 'support_fab_pos'
-const FAB_SIZE = 56 // approx button footprint for viewport clamping
-const EDGE_MARGIN = 12
+// The FAB is a "🛟 Support" pill, wider than it is tall. These are conservative
+// fallbacks used only before we can measure the real element (below).
+const FAB_WIDTH = 130
+const FAB_HEIGHT = 48
+const EDGE_MARGIN = 16
 // Movement (px) above which a pointer gesture counts as a drag, not a tap.
 const DRAG_THRESHOLD = 6
 
 interface Pos { x: number; y: number }
+interface Size { w: number; h: number }
 
-/** Clamp a position so the button stays fully within the viewport. */
-function clampToViewport(pos: Pos): Pos {
+/** Clamp a position so the button (of the given size) stays fully in the viewport. */
+function clampToViewport(pos: Pos, size: Size): Pos {
   if (typeof window === 'undefined') return pos
-  const maxX = window.innerWidth - FAB_SIZE - EDGE_MARGIN
-  const maxY = window.innerHeight - FAB_SIZE - EDGE_MARGIN
+  const maxX = window.innerWidth - size.w - EDGE_MARGIN
+  const maxY = window.innerHeight - size.h - EDGE_MARGIN
   return {
     x: Math.min(Math.max(pos.x, EDGE_MARGIN), Math.max(EDGE_MARGIN, maxX)),
     y: Math.min(Math.max(pos.y, EDGE_MARGIN), Math.max(EDGE_MARGIN, maxY)),
   }
 }
 
-/** Default bottom-right position (matches the old fixed placement). */
-function defaultPos(): Pos {
+/**
+ * Default bottom-right position, inset far enough from the edges that the pill
+ * never looks clipped. Uses the measured size so the full width is accounted for.
+ */
+function defaultPos(size: Size): Pos {
   if (typeof window === 'undefined') return { x: 0, y: 0 }
-  // Desktop ~24px inset; mobile lifts above bottom nav/input.
   const isDesktop = window.innerWidth >= 768
-  const x = window.innerWidth - FAB_SIZE - (isDesktop ? 24 : 16)
-  const y = window.innerHeight - FAB_SIZE - (isDesktop ? 24 : 144)
-  return clampToViewport({ x, y })
+  const rightInset = isDesktop ? 24 : 16
+  // Lift above the mobile bottom nav / message input so it never covers a send button.
+  const bottomInset = isDesktop ? 24 : 96
+  const x = window.innerWidth - size.w - rightInset
+  const y = window.innerHeight - size.h - bottomInset
+  return clampToViewport({ x, y }, size)
 }
 
 export default function SupportButton() {
@@ -65,12 +74,22 @@ export default function SupportButton() {
   // left/top hold the committed position; x/y are the live drag transform, reset
   // to 0 after each drag so there's no double-offset jump.
   const [pos, setPos] = useState<Pos | null>(null) // null until mounted (SSR-safe)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const sizeRef = useRef<Size>({ w: FAB_WIDTH, h: FAB_HEIGHT })
   const dragX = useMotionValue(0)
   const dragY = useMotionValue(0)
   const draggedRef = useRef(false)
 
   // Init from localStorage (or default), then keep on-screen across resizes.
   useEffect(() => {
+    // Measure the real pill so positioning accounts for its full width.
+    const measured = containerRef.current?.getBoundingClientRect()
+    const size: Size = {
+      w: measured?.width || FAB_WIDTH,
+      h: measured?.height || FAB_HEIGHT,
+    }
+    sizeRef.current = size
+
     let initial: Pos | null = null
     try {
       const raw = localStorage.getItem(POSITION_KEY)
@@ -78,9 +97,9 @@ export default function SupportButton() {
     } catch {
       // ignore malformed
     }
-    setPos(clampToViewport(initial ?? defaultPos()))
+    setPos(clampToViewport(initial ?? defaultPos(size), size))
 
-    const onResize = () => setPos((p) => (p ? clampToViewport(p) : p))
+    const onResize = () => setPos((p) => (p ? clampToViewport(p, sizeRef.current) : p))
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -174,6 +193,7 @@ export default function SupportButton() {
           can be moved off a send button. Hidden until mounted to avoid an SSR flash
           at the wrong spot. Dragging is disabled while the panel is open. */}
       <motion.div
+        ref={containerRef}
         drag={!open}
         dragMomentum={false}
         dragElastic={0}
@@ -194,7 +214,10 @@ export default function SupportButton() {
         }}
         onDragEnd={(_e, info) => {
           if (!pos) return
-          const next = clampToViewport({ x: pos.x + info.offset.x, y: pos.y + info.offset.y })
+          const next = clampToViewport(
+            { x: pos.x + info.offset.x, y: pos.y + info.offset.y },
+            sizeRef.current
+          )
           setPos(next)
           persistPos(next)
           // Reset the live transform so the committed left/top isn't double-applied.
