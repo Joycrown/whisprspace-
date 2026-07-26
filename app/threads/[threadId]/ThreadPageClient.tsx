@@ -113,6 +113,9 @@ const ThreadPage = () => {
   const [showRemovedModal, setShowRemovedModal] = useState(false);
   const [banPresentation, setBanPresentation] = useState<'modal' | 'toast' | null>(null);
   const hasEverJoinedRef = useRef(false);
+  // Guards the payment-confirm effect so it fires at most once per transaction,
+  // even if the effect re-runs (unstable deps / Strict Mode double-invoke).
+  const confirmedTxRef = useRef<string | null>(null);
   const [showMessageOptions, setShowMessageOptions] = useState(false);
   const [messageTarget, setMessageTarget] = useState<Participant | null>(null);
   const [isPollCollapsed, setIsPollCollapsed] = useState(false);
@@ -258,6 +261,13 @@ const ThreadPage = () => {
     }
 
     if (!transactionId && !txRef) return;
+
+    // Fire the confirmation only once per transaction. Without this the effect
+    // re-runs on unstable deps (refetch/showToast/router) and double-calls
+    // /confirm — the second call races the first and used to 500.
+    const confirmKey = String(transactionId || txRef);
+    if (confirmedTxRef.current === confirmKey) return;
+    confirmedTxRef.current = confirmKey;
 
     let isActive = true;
 
