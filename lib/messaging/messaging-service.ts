@@ -39,6 +39,7 @@ export interface ConversationParticipant {
   user?: {
     id: string
     anonymousId: string
+    username?: string
     avatarUrl?: string
     isPremium?: boolean
   }
@@ -81,6 +82,7 @@ const mapUser = (user: any) => {
   return {
     id: user.id,
     anonymousId: user.anonymous_id ?? user.anonymousId,
+    username: user.username ?? undefined,
     avatarUrl: user.avatar_url ?? user.avatarUrl,
     isPremium: user.is_premium ?? user.isPremium,
   }
@@ -465,7 +467,7 @@ export const fetchConversationById = async (
       rawDb.select<any[]>('conversation_participants', {
         select: `
           *,
-          user:users(id, anonymous_id, avatar_url, is_premium)
+          user:users(id, anonymous_id, username, avatar_url, is_premium)
         `.replace(/\s+/g, ''),
         filters: { 'conversation_id': rawDb.filter.eq(safeConversationId) }
       }),
