@@ -145,9 +145,9 @@ export default function SeedDailyViewModal({ date, onClose, onApproved }: SeedDa
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col flex-shrink-0 animate-in fade-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Review Schedule: {date}</h2>
+        <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white truncate">Review Schedule: {date}</h2>
             <p className="text-sm text-gray-500">Review and edit the threads and replies before approving.</p>
           </div>
           <button 
@@ -159,7 +159,7 @@ export default function SeedDailyViewModal({ date, onClose, onApproved }: SeedDa
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-50 dark:bg-gray-900">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-12">
               <RefreshCw className="w-8 h-8 text-purple-500 animate-spin mb-4" />
@@ -177,12 +177,12 @@ export default function SeedDailyViewModal({ date, onClose, onApproved }: SeedDa
           ) : (
             <div className="space-y-4 relative">
               {items.map((item, idx) => (
-                <div 
-                  key={item.id} 
-                  className={`bg-white dark:bg-gray-800 border ${item.action === 'create_thread' ? 'border-purple-200 dark:border-purple-800 shadow-md' : 'border-gray-200 dark:border-gray-700 opacity-90 ml-8'} rounded-lg p-5`}
+                <div
+                  key={item.id}
+                  className={`bg-white dark:bg-gray-800 border ${item.action === 'create_thread' ? 'border-purple-200 dark:border-purple-800 shadow-md' : 'border-gray-200 dark:border-gray-700 opacity-90 ml-4 sm:ml-8'} rounded-lg p-4 sm:p-5`}
                 >
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap justify-between items-start gap-2 mb-3">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
                        {item.action === 'create_thread' ? (
                          <div className="bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 px-2 py-1 rounded text-xs font-bold uppercase tracking-wide">
                             Thread

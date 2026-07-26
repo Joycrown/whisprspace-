@@ -236,8 +236,8 @@ export default function SeedDashboard() {
       </div>
 
       {/* Welcome Messages Backfill */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-6">
-        <div className="flex items-start justify-between gap-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
               <Mail className="w-5 h-5 text-purple-600 dark:text-purple-400" />
@@ -273,7 +273,7 @@ export default function SeedDashboard() {
           <button
             onClick={runBackfillWelcome}
             disabled={isBackfillLoading}
-            className="flex-shrink-0 flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-medium text-sm transition"
+            className="flex-shrink-0 flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg font-medium text-sm transition w-full sm:w-auto"
           >
             {isBackfillLoading
               ? <><RefreshCw className="w-4 h-4 animate-spin" /> Running...</>
@@ -285,7 +285,7 @@ export default function SeedDashboard() {
 
       {/* Schedule Table */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800/50">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex flex-wrap justify-between items-center gap-2 bg-gray-50 dark:bg-gray-800/50">
           <div className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-gray-500" />
             <h3 className="font-semibold text-gray-900 dark:text-white">Schedule Overview</h3>
@@ -378,7 +378,7 @@ export default function SeedDashboard() {
       
       {/* Config Settings */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex justify-between items-center">
+        <div className="px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex flex-wrap justify-between items-center gap-2">
           <h3 className="font-semibold text-gray-900 dark:text-white">Seed Config</h3>
           {Object.keys(configEdits).length > 0 && (
             <button
