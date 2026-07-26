@@ -39,7 +39,7 @@ export default function UserDetailsModal({ userId, onClose }: UserDetailsModalPr
             <div className="space-y-8">
               {/* Profile Header */}
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white text-xl font-bold shadow-md">
+                <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white text-xl font-bold shadow-md flex-shrink-0">
                   {user.avatarUrl ? (
                     <img
                       src={user.avatarUrl}
@@ -50,8 +50,8 @@ export default function UserDetailsModal({ userId, onClose }: UserDetailsModalPr
                     user.anonymousId?.charAt(0).toUpperCase() || '?'
                   )}
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2 flex-wrap">
                     {user.anonymousId}
                     {user.isAdmin && (
                       <span className="px-2 py-0.5 bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 text-xs rounded-full font-semibold flex items-center gap-1">
@@ -67,7 +67,7 @@ export default function UserDetailsModal({ userId, onClose }: UserDetailsModalPr
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {user.email || 'No email provided'}
                   </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 break-all">
                     ID: {user.id}
                   </p>
                 </div>

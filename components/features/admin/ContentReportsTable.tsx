@@ -68,16 +68,16 @@ export default function ContentReportsTable() {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
       {/* Header with Filters */}
-      <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between mb-4">
+      <div className="p-4 sm:p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between gap-2 flex-wrap mb-4">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">Content Reports</h2>
-          <span className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-sm font-semibold">
+          <span className="px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-sm font-semibold whitespace-nowrap">
             {reports.filter(r => r.status === 'pending').length} Pending
           </span>
         </div>
 
-        {/* Status Filter */}
-        <div className="flex gap-2">
+        {/* Status Filter — wraps on mobile so buttons never overflow the card */}
+        <div className="flex flex-wrap gap-2">
           {['pending', 'reviewing', 'resolved', 'dismissed'].map((status) => (
             <button
               key={status}
