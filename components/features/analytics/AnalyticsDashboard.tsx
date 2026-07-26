@@ -37,7 +37,7 @@ export default function AnalyticsDashboard() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-2">
           Analytics Dashboard
         </h1>
         <p className="text-gray-600 dark:text-gray-400">
@@ -103,23 +103,25 @@ export default function AnalyticsDashboard() {
             User Growth (30 Days)
           </h3>
           <div className="space-y-2">
-            {metrics.slice(0, 7).map((metric, index) => (
-              <div key={metric.metricDate} className="flex items-center justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">
+            {metrics.slice(0, 7).map((metric) => (
+              <div key={metric.metricDate} className="flex items-center gap-3">
+                <span className="text-sm text-gray-600 dark:text-gray-400 w-14 flex-shrink-0">
                   {new Date(metric.metricDate).toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric',
                   })}
                 </span>
-                <div className="flex items-center gap-2">
+                {/* Bar track fills remaining width; bar clamps to 100% so it can
+                    never overflow the card on mobile. */}
+                <div className="flex-1 min-w-0 h-2 bg-gray-100 dark:bg-gray-700 rounded overflow-hidden">
                   <div
-                    className="h-2 bg-purple-600 rounded"
-                    style={{ width: `${(metric.newUsers / 10) * 100}px` }}
+                    className="h-full bg-purple-600 rounded"
+                    style={{ width: `${Math.min((metric.newUsers / 10) * 100, 100)}%` }}
                   />
-                  <span className="text-sm font-medium text-gray-900 dark:text-white w-12 text-right">
-                    +{metric.newUsers}
-                  </span>
                 </div>
+                <span className="text-sm font-medium text-gray-900 dark:text-white w-12 text-right flex-shrink-0">
+                  +{metric.newUsers}
+                </span>
               </div>
             ))}
           </div>
