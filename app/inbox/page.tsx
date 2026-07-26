@@ -446,12 +446,12 @@ function InboxPageContent() {
                             <div className="flex items-center gap-2 min-w-0">
                               <div className="w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-orange-500/20">
                                 <span className="text-xs md:text-sm font-semibold text-orange-400">
-                                  {otherUser?.user?.anonymousId?.charAt(0) || 'A'}
+                                  {(otherUser?.user?.username || otherUser?.user?.anonymousId || 'A').charAt(0).toUpperCase()}
                                 </span>
                               </div>
                               <div className="min-w-0">
                                 <span className="text-sm md:text-base font-semibold text-white truncate block">
-                                  {otherUser?.user?.anonymousId || 'Anonymous User'}
+                                  {otherUser?.user?.username || otherUser?.user?.anonymousId || 'Anonymous User'}
                                 </span>
                                 <span className="inline-flex items-center gap-1 text-[10px] md:text-xs text-purple-300 mt-1">
                                   <span className="px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30">

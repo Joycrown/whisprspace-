@@ -76,6 +76,7 @@ export async function GET(req: NextRequest) {
 
   // Count messages waiting for each unclaimed account
   const enriched = await Promise.all(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (data ?? []).map(async (row: any) => {
       const { count } = await supabaseAdmin
         .from('direct_messages')
@@ -86,7 +87,7 @@ export async function GET(req: NextRequest) {
             .from('conversation_participants')
             .select('conversation_id')
             .eq('user_id', row.id)
-          ).data?.map((r: any) => r.conversation_id) ?? []
+          ).data?.map((r: { conversation_id: string }) => r.conversation_id) ?? []
         )
 
       const token = Array.isArray(row.seed_claim_tokens)
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest) {
   try { body = await req.json() } catch { body = {} }
 
   // Resolve handle
-  let handle = body.handle
+  const handle = body.handle
     ? sanitizeSingleLineInput(body.handle, { maxLength: 30 }).toLowerCase().replace(/[^a-z0-9-]/g, '')
     : generatePseudonym()
 
@@ -142,12 +143,16 @@ export async function POST(req: NextRequest) {
   // and will become auth.users id when the person claims (Shape B: same UUID)
   const userId = crypto.randomUUID()
 
+  // Anonymous id in the normal ANON_XXXXXXXX format (derived from the UUID) —
+  // NOT prefixed with ANON_SEED so nothing ever surfaces the seed origin to users.
+  const anonymousId = `ANON_${userId.replace(/-/g, '').slice(0, 8).toUpperCase()}`
+
   // Create the public.users row with no auth linkage yet
   const { data: newUser, error: userError } = await supabaseAdmin
     .from('users')
     .insert({
       id: userId,
-      anonymous_id: `ANON_SEED_${handle.toUpperCase().replace(/-/g, '_')}`,
+      anonymous_id: anonymousId,
       username: handle,
       is_anonymous: false,
       account_state: 'unclaimed',
