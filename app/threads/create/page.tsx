@@ -113,6 +113,8 @@ function CreateThreadContent() {
         draft={draft}
         initialForm={initialForm}
         onCreated={inboxConversationId ? importInboxMessages : undefined}
+        // A converted inbox conversation can be a Text or Premium thread — never a poll.
+        allowedTypes={inboxConversationId ? ['text', 'premium'] : undefined}
       />
     </div>
   );

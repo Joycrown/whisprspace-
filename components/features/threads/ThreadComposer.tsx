@@ -55,9 +55,14 @@ interface ThreadComposerProps {
    * informed via toast.
    */
   onCreated?: (threadId: string) => Promise<void> | void;
+  /**
+   * Restrict which thread types are offered. Defaults to all. The inbox→thread
+   * flow passes ['text','premium'] since a converted conversation can never be a poll.
+   */
+  allowedTypes?: ThreadType[];
 }
 
-const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft, initialForm, onCreated }) => {
+const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft, initialForm, onCreated, allowedTypes }) => {
   const { createThread, isLoading, error: storeError } = useThreadStore();
   const { session, canCreateThread } = useUserStore();
   const { showToast } = useToast();
@@ -440,7 +445,9 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
                 <div>
                   <label className="block text-sm font-medium text-gray-900 mb-2 sm:mb-3">Thread Type</label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
-                    {THREAD_TYPES.map((type) => (
+                    {THREAD_TYPES
+                      .filter((type) => !allowedTypes || allowedTypes.includes(type.value as ThreadType))
+                      .map((type) => (
                       <button
                         key={type.value}
                         type="button"
