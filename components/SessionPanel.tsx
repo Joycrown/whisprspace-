@@ -70,6 +70,7 @@ const SessionPanel: React.FC<SessionPanelProps> = ({ isOpen, onClose }) => {
               </button>
             </div>
           )}
+
         </div>
       </div>
     </div>

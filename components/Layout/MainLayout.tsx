@@ -10,6 +10,7 @@ import NotificationEducationPrompt from "@/components/features/notifications/Not
 import FirstTimeEducationModal from "@/components/features/onboarding/FirstTimeEducationModal"
 import { UnseenSummaryModal } from "@/components/features/threads/UnseenSummaryModal"
 import { PostThreadNudge } from "@/components/features/inbox/PostThreadNudge"
+import SupportButton from "@/components/SupportButton"
 
 // components/layout/MainLayout.tsx
 export default function MainLayout({
@@ -51,6 +52,7 @@ export default function MainLayout({
         <FirstTimeEducationModal />
         <NotificationEducationPrompt />
         <PWAInstallPrompt />
+        <SupportButton />
       </main>
     )
   }
@@ -74,6 +76,7 @@ export default function MainLayout({
       <PWAInstallPrompt />
       <UnseenSummaryModal />
       <PostThreadNudge />
+      <SupportButton />
     </div>
   )
 }

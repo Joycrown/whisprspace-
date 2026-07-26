@@ -46,9 +46,18 @@ interface ThreadComposerProps {
   isOpen: boolean;
   onClose: () => void;
   draft?: ThreadDraft;
+  /** Prefill form fields (e.g. when creating a thread from an inbox conversation). */
+  initialForm?: Partial<CreateThreadForm>;
+  /**
+   * Runs after the thread is created, before navigation. Used by the
+   * "turn inbox into thread" flow to import the conversation's messages into the
+   * new thread. If it throws, thread creation still succeeded but the caller is
+   * informed via toast.
+   */
+  onCreated?: (threadId: string) => Promise<void> | void;
 }
 
-const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft }) => {
+const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft, initialForm, onCreated }) => {
   const { createThread, isLoading, error: storeError } = useThreadStore();
   const { session, canCreateThread } = useUserStore();
   const { showToast } = useToast();
@@ -102,6 +111,14 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft 
       });
     }
   }, [draft]);
+
+  // Prefill from an external source (e.g. inbox → thread). Merges over defaults
+  // so any field not provided keeps its default; validation still applies.
+  useEffect(() => {
+    if (initialForm) {
+      setFormData((prev) => ({ ...prev, ...initialForm }));
+    }
+  }, [initialForm]);
 
   // Auto-save functionality
   const autoSave = useCallback(() => {
@@ -219,6 +236,21 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft 
       if (threadId) {
         // Clear draft
         localStorage.removeItem('thread_draft');
+
+        // Post-create hook (e.g. import inbox messages into the new thread).
+        // A failure here doesn't undo the thread — surface it but still proceed.
+        if (onCreated) {
+          try {
+            await onCreated(threadId);
+          } catch (hookErr) {
+            console.error('ThreadComposer onCreated hook failed:', hookErr);
+            showToast({
+              type: 'warning',
+              title: 'Thread created',
+              message: 'The thread was created, but importing the messages failed.',
+            });
+          }
+        }
 
         // Show success message
         showToast({

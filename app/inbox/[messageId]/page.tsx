@@ -200,7 +200,11 @@ export default function ConversationPage() {
     });
 
     typingChannelRef.current = channel;
-    channel.subscribe();
+    // Typing indicator is best-effort — a join timeout must not crash the page.
+    // The socket auto-rejoins in the background; swallow the rejection here.
+    channel.subscribe().catch((err) => {
+      console.warn('[DM] typing channel subscribe failed (non-fatal):', err);
+    });
 
     return () => {
       if (channel && session.user?.id) {
@@ -244,9 +248,15 @@ export default function ConversationPage() {
     });
 
     presenceChannelRef.current = channel;
-    channel.subscribe().then(() => {
-      channel.track({ onlineAt: new Date().toISOString() });
-    });
+    // Online presence is best-effort — a join timeout must not crash the page.
+    // The socket auto-rejoins in the background; swallow the rejection here.
+    channel.subscribe()
+      .then(() => {
+        channel.track({ onlineAt: new Date().toISOString() });
+      })
+      .catch((err) => {
+        console.warn('[DM] presence channel subscribe failed (non-fatal):', err);
+      });
 
     return () => {
       channel.unsubscribe();
