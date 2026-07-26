@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { LifeBuoy, X, Send, CheckCircle, AlertCircle, Loader2, Paperclip, FileImage, Trash2 } from 'lucide-react'
+import { LifeBuoy, X, Send, CheckCircle, AlertCircle, Loader2, Paperclip, FileImage, Trash2, MessageCircle } from 'lucide-react'
 import { motion, AnimatePresence, useMotionValue } from 'framer-motion'
 import Image from 'next/image'
 
@@ -23,10 +23,10 @@ const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
 
 // Draggable FAB config
 const POSITION_KEY = 'support_fab_pos'
-// The FAB is a "🛟 Support" pill, wider than it is tall. These are conservative
-// fallbacks used only before we can measure the real element (below).
-const FAB_WIDTH = 130
-const FAB_HEIGHT = 48
+// The FAB is a circular icon-only chat button (w-14 h-14 = 56px). Fallbacks used
+// only before the real element is measured (below).
+const FAB_WIDTH = 56
+const FAB_HEIGHT = 56
 const EDGE_MARGIN = 16
 // Movement (px) above which a pointer gesture counts as a drag, not a tap.
 const DRAG_THRESHOLD = 6
@@ -46,16 +46,17 @@ function clampToViewport(pos: Pos, size: Size): Pos {
 }
 
 /**
- * Default bottom-right position, inset far enough from the edges that the pill
- * never looks clipped. Uses the measured size so the full width is accounted for.
+ * Default BOTTOM-LEFT position, inset from the edges. Uses the measured size so
+ * the button never sits flush against or off an edge.
  */
 function defaultPos(size: Size): Pos {
   if (typeof window === 'undefined') return { x: 0, y: 0 }
   const isDesktop = window.innerWidth >= 768
-  const rightInset = isDesktop ? 24 : 16
-  // Lift above the mobile bottom nav / message input so it never covers a send button.
+  // Desktop clears the ~80px left icon rail; mobile insets from the left edge.
+  const leftInset = isDesktop ? 96 : 16
+  // Lift above the mobile bottom nav / message input so it never covers anything.
   const bottomInset = isDesktop ? 24 : 96
-  const x = window.innerWidth - size.w - rightInset
+  const x = leftInset
   const y = window.innerHeight - size.h - bottomInset
   return clampToViewport({ x, y }, size)
 }
@@ -205,7 +206,7 @@ export default function SupportButton() {
           y: dragY,
           visibility: pos ? 'visible' : 'hidden',
         }}
-        className="z-[800] flex flex-col items-end gap-3"
+        className="z-[800] flex flex-col items-start gap-3"
         onDragStart={() => { draggedRef.current = false }}
         onDrag={(_e, info) => {
           if (Math.hypot(info.offset.x, info.offset.y) > DRAG_THRESHOLD) {
@@ -232,7 +233,7 @@ export default function SupportButton() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-              className="w-80 bg-[#1A1A24] border border-[#2A2A38] rounded-2xl shadow-2xl overflow-hidden"
+              className="w-[calc(100vw-2rem)] max-w-80 bg-[#1A1A24] border border-[#2A2A38] rounded-2xl shadow-2xl overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -428,8 +429,9 @@ export default function SupportButton() {
           )}
         </AnimatePresence>
 
-        {/* FAB — a tap toggles the panel; dragging the container repositions it.
-            The drag-vs-tap guard ignores the click that fires after a drag. */}
+        {/* FAB — icon-only chat bubble. A tap toggles the panel; dragging the
+            container repositions it. The drag-vs-tap guard ignores the click that
+            fires after a drag. */}
         <motion.button
           onClick={() => {
             if (draggedRef.current) {
@@ -439,14 +441,15 @@ export default function SupportButton() {
             setOpen(v => !v)
           }}
           whileTap={{ scale: 0.92 }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg transition-colors duration-200 cursor-grab active:cursor-grabbing touch-none select-none ${
+          aria-label="Contact support"
+          title="Contact support"
+          className={`flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-colors duration-200 cursor-grab active:cursor-grabbing touch-none select-none ${
             open
               ? 'bg-[#2A2A38] text-white border border-[#3A3A4E]'
               : 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-500 hover:to-purple-600 shadow-purple-900/40'
           }`}
         >
-          <LifeBuoy className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm font-semibold">Support</span>
+          {open ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
         </motion.button>
       </motion.div>
     </>
