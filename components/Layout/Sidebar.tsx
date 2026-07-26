@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react';
-import { Home, Settings, User, MessageCircle, FolderOpen, DollarSign } from 'lucide-react';
+import { Home, User, MessageCircle, FolderOpen, DollarSign } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useUserStore } from '@/store/userStore';
@@ -14,7 +14,6 @@ const navItems = [
   { icon: MessageCircle, label: 'Messages', href: '/inbox', showMessageBadge: true },
   { icon: DollarSign, label: 'My Earnings', href: '/profile/earnings' },
   { icon: User, label: 'Profile', href: '/profile' },
-  { icon: Settings, label: 'Settings', href: '/settings' },
 ];
 
 const Sidebar = () => {
