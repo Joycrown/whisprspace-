@@ -1,8 +1,8 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import { LifeBuoy, X, Send, CheckCircle, AlertCircle, Loader2, Paperclip, FileImage, Trash2 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useMotionValue } from 'framer-motion'
 import Image from 'next/image'
 
 type State = 'idle' | 'sending' | 'sent' | 'error'
@@ -21,6 +21,36 @@ const ALLOWED_TYPES = [
 ]
 const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
 
+// Draggable FAB config
+const POSITION_KEY = 'support_fab_pos'
+const FAB_SIZE = 56 // approx button footprint for viewport clamping
+const EDGE_MARGIN = 12
+// Movement (px) above which a pointer gesture counts as a drag, not a tap.
+const DRAG_THRESHOLD = 6
+
+interface Pos { x: number; y: number }
+
+/** Clamp a position so the button stays fully within the viewport. */
+function clampToViewport(pos: Pos): Pos {
+  if (typeof window === 'undefined') return pos
+  const maxX = window.innerWidth - FAB_SIZE - EDGE_MARGIN
+  const maxY = window.innerHeight - FAB_SIZE - EDGE_MARGIN
+  return {
+    x: Math.min(Math.max(pos.x, EDGE_MARGIN), Math.max(EDGE_MARGIN, maxX)),
+    y: Math.min(Math.max(pos.y, EDGE_MARGIN), Math.max(EDGE_MARGIN, maxY)),
+  }
+}
+
+/** Default bottom-right position (matches the old fixed placement). */
+function defaultPos(): Pos {
+  if (typeof window === 'undefined') return { x: 0, y: 0 }
+  // Desktop ~24px inset; mobile lifts above bottom nav/input.
+  const isDesktop = window.innerWidth >= 768
+  const x = window.innerWidth - FAB_SIZE - (isDesktop ? 24 : 16)
+  const y = window.innerHeight - FAB_SIZE - (isDesktop ? 24 : 144)
+  return clampToViewport({ x, y })
+}
+
 export default function SupportButton() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
@@ -30,6 +60,38 @@ export default function SupportButton() {
   const [state, setState] = useState<State>('idle')
   const [errorMsg, setErrorMsg] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // ── Draggable FAB position ────────────────────────────────────────────────
+  // left/top hold the committed position; x/y are the live drag transform, reset
+  // to 0 after each drag so there's no double-offset jump.
+  const [pos, setPos] = useState<Pos | null>(null) // null until mounted (SSR-safe)
+  const dragX = useMotionValue(0)
+  const dragY = useMotionValue(0)
+  const draggedRef = useRef(false)
+
+  // Init from localStorage (or default), then keep on-screen across resizes.
+  useEffect(() => {
+    let initial: Pos | null = null
+    try {
+      const raw = localStorage.getItem(POSITION_KEY)
+      if (raw) initial = JSON.parse(raw) as Pos
+    } catch {
+      // ignore malformed
+    }
+    setPos(clampToViewport(initial ?? defaultPos()))
+
+    const onResize = () => setPos((p) => (p ? clampToViewport(p) : p))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  const persistPos = useCallback((p: Pos) => {
+    try {
+      localStorage.setItem(POSITION_KEY, JSON.stringify(p))
+    } catch {
+      // ignore quota/private-mode errors
+    }
+  }, [])
 
   const reset = () => {
     setName(''); setEmail(''); setMessage('')
@@ -108,7 +170,38 @@ export default function SupportButton() {
         <div className="fixed inset-0 z-[799]" onClick={handleClose} />
       )}
 
-      <div className="fixed bottom-20 right-4 md:bottom-6 md:right-6 z-[800] flex flex-col items-end gap-3">
+      {/* Draggable FAB container — position is user-controlled + persisted, so it
+          can be moved off a send button. Hidden until mounted to avoid an SSR flash
+          at the wrong spot. Dragging is disabled while the panel is open. */}
+      <motion.div
+        drag={!open}
+        dragMomentum={false}
+        dragElastic={0}
+        style={{
+          position: 'fixed',
+          left: pos?.x ?? 0,
+          top: pos?.y ?? 0,
+          x: dragX,
+          y: dragY,
+          visibility: pos ? 'visible' : 'hidden',
+        }}
+        className="z-[800] flex flex-col items-end gap-3"
+        onDragStart={() => { draggedRef.current = false }}
+        onDrag={(_e, info) => {
+          if (Math.hypot(info.offset.x, info.offset.y) > DRAG_THRESHOLD) {
+            draggedRef.current = true
+          }
+        }}
+        onDragEnd={(_e, info) => {
+          if (!pos) return
+          const next = clampToViewport({ x: pos.x + info.offset.x, y: pos.y + info.offset.y })
+          setPos(next)
+          persistPos(next)
+          // Reset the live transform so the committed left/top isn't double-applied.
+          dragX.set(0)
+          dragY.set(0)
+        }}
+      >
         <AnimatePresence>
           {open && (
             <motion.div
@@ -312,11 +405,18 @@ export default function SupportButton() {
           )}
         </AnimatePresence>
 
-        {/* FAB */}
+        {/* FAB — a tap toggles the panel; dragging the container repositions it.
+            The drag-vs-tap guard ignores the click that fires after a drag. */}
         <motion.button
-          onClick={() => setOpen(v => !v)}
+          onClick={() => {
+            if (draggedRef.current) {
+              draggedRef.current = false
+              return
+            }
+            setOpen(v => !v)
+          }}
           whileTap={{ scale: 0.92 }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg transition-all duration-200 ${
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg transition-colors duration-200 cursor-grab active:cursor-grabbing touch-none select-none ${
             open
               ? 'bg-[#2A2A38] text-white border border-[#3A3A4E]'
               : 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-500 hover:to-purple-600 shadow-purple-900/40'
@@ -325,7 +425,7 @@ export default function SupportButton() {
           <LifeBuoy className="w-4 h-4 flex-shrink-0" />
           <span className="text-sm font-semibold">Support</span>
         </motion.button>
-      </div>
+      </motion.div>
     </>
   )
 }
