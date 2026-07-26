@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ThreadComposer from '@/components/features/threads/ThreadComposer';
 import { ThreadDraft, CreateThreadForm } from '@/types';
@@ -12,7 +12,13 @@ interface InboxThreadDraft {
   form: Partial<CreateThreadForm>;
 }
 
-export default function CreateThreadPage() {
+const LoadingFallback = () => (
+  <div className="min-h-screen bg-[#121212] flex items-center justify-center">
+    <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
+  </div>
+);
+
+function CreateThreadContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromInbox = searchParams?.get('from') === 'inbox';
@@ -96,11 +102,7 @@ export default function CreateThreadPage() {
 
   // Prevent hydration mismatch
   if (!mounted) {
-    return (
-      <div className="min-h-screen bg-[#121212] flex items-center justify-center">
-        <div className="w-12 h-12 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
-      </div>
-    );
+    return <LoadingFallback />;
   }
 
   return (
@@ -113,5 +115,15 @@ export default function CreateThreadPage() {
         onCreated={inboxConversationId ? importInboxMessages : undefined}
       />
     </div>
+  );
+}
+
+// useSearchParams() requires a Suspense boundary or the static build bails out
+// (missing-suspense-with-csr-bailout). Same pattern as app/inbox/page.tsx.
+export default function CreateThreadPage() {
+  return (
+    <Suspense fallback={<LoadingFallback />}>
+      <CreateThreadContent />
+    </Suspense>
   );
 }
