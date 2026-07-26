@@ -102,7 +102,7 @@ function CreatePanel({ onCreated }: { onCreated: (result: CreateResult) => void 
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-6">
       <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Create seed account</h3>
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
         Leave handle blank to auto-generate a readable pseudonym.
@@ -330,7 +330,7 @@ function AccountRow({
             <span className="text-sm font-semibold text-gray-900 dark:text-white">@{account.handle}</span>
             {statusBadge}
           </div>
-          <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex items-center gap-x-3 gap-y-1 flex-wrap mt-0.5 text-xs text-gray-500 dark:text-gray-400">
             {!isClaimed && daysLeft !== null && daysLeft > 0 && (
               <span className="flex items-center gap-1">
                 <Clock className="w-3 h-3" /> {daysLeft}d left
@@ -476,18 +476,20 @@ export default function SeedAccountsDashboard() {
     <div className="space-y-6">
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { label: 'Total seeds', value: accounts.length, icon: UserCheck, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20' },
           { label: 'Pending claim', value: pendingCount, icon: Clock, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20' },
           { label: 'Claimed', value: claimedCount, icon: CheckCircle, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' },
         ].map(({ label, value, icon: Icon, color, bg }) => (
-          <div key={label} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5">
-            <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center mb-3`}>
+          <div key={label} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 flex sm:block items-center gap-3">
+            <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center sm:mb-3 flex-shrink-0`}>
               <Icon className={`w-5 h-5 ${color}`} />
             </div>
-            <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
+            <div>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
+            </div>
           </div>
         ))}
       </div>
@@ -505,9 +507,9 @@ export default function SeedAccountsDashboard() {
       {/* Account list */}
       <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
         {/* List header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">Seed accounts</h3>
-          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-1">
+          <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-1 self-start sm:self-auto">
             {(['all', 'pending', 'claimed'] as const).map(f => (
               <button
                 key={f}
