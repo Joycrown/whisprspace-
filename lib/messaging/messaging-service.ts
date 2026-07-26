@@ -26,6 +26,8 @@ export interface Conversation {
   lastMessage?: DirectMessage
   unreadCount?: number
   type: 'direct' | 'one_time'
+  /** Set once the conversation has been turned into a thread (one-time). Null/undefined = still convertible. */
+  convertedThreadId?: string | null
 }
 
 export interface ConversationParticipant {
@@ -37,6 +39,7 @@ export interface ConversationParticipant {
   user?: {
     id: string
     anonymousId: string
+    username?: string
     avatarUrl?: string
     isPremium?: boolean
   }
@@ -79,6 +82,7 @@ const mapUser = (user: any) => {
   return {
     id: user.id,
     anonymousId: user.anonymous_id ?? user.anonymousId,
+    username: user.username ?? undefined,
     avatarUrl: user.avatar_url ?? user.avatarUrl,
     isPremium: user.is_premium ?? user.isPremium,
   }
@@ -150,6 +154,7 @@ const mapConversationSnapshot = (row: any): Conversation => {
     lastMessage,
     unreadCount,
     type: row.type || 'direct',
+    convertedThreadId: row.converted_thread_id ?? null,
   }
 }
 
@@ -462,7 +467,7 @@ export const fetchConversationById = async (
       rawDb.select<any[]>('conversation_participants', {
         select: `
           *,
-          user:users(id, anonymous_id, avatar_url, is_premium)
+          user:users(id, anonymous_id, username, avatar_url, is_premium)
         `.replace(/\s+/g, ''),
         filters: { 'conversation_id': rawDb.filter.eq(safeConversationId) }
       }),
@@ -503,6 +508,7 @@ export const fetchConversationById = async (
         lastMessage: lastMessage ? mapDirectMessage(lastMessage) : undefined,
         unreadCount,
         type: (conversationData as any).type || 'direct',
+        convertedThreadId: (conversationData as any).converted_thread_id ?? null,
       }
 
     return { data: conversation, error: null }
@@ -1049,7 +1055,11 @@ export const subscribeToMessages = (
         }
     });
 
-  channel.subscribe();
+  // Best-effort realtime — a join timeout must not surface as an unhandled
+  // rejection. The socket auto-rejoins in the background.
+  channel.subscribe().catch((err) => {
+    console.warn('[Messaging] channel subscribe failed (non-fatal):', err);
+  });
 
   return {
     unsubscribe: () => {
@@ -1109,7 +1119,11 @@ export const subscribeToConversations = (
       }
   });
 
-  channel.subscribe();
+  // Best-effort realtime — a join timeout must not surface as an unhandled
+  // rejection. The socket auto-rejoins in the background.
+  channel.subscribe().catch((err) => {
+    console.warn('[Messaging] channel subscribe failed (non-fatal):', err);
+  });
 
   return {
     unsubscribe: () => {

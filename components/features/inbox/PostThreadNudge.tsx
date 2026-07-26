@@ -100,7 +100,7 @@ export function PostThreadNudge() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             transition={{ type: 'spring', stiffness: 340, damping: 30 }}
-            className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-[900] w-[calc(100%-2rem)] max-w-sm
+            className="fixed bottom-36 md:bottom-6 left-4 right-4 md:left-1/2 md:right-auto md:-translate-x-1/2 z-[900] mx-auto w-auto md:w-[calc(100%-2rem)] max-w-sm
               bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl overflow-hidden"
           >
             {/* Auto-dismiss progress bar */}

@@ -410,7 +410,11 @@ export const subscribeToNotifications = (
       }
   });
 
-  channel.subscribe();
+  // Best-effort realtime — a join timeout must not surface as an unhandled
+  // rejection. The socket auto-rejoins in the background.
+  channel.subscribe().catch((err) => {
+    console.warn('[Notifications] channel subscribe failed (non-fatal):', err);
+  });
 
   return {
     unsubscribe: () => {

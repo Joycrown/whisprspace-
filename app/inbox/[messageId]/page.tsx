@@ -6,13 +6,14 @@ import { createPortal } from 'react-dom';
 import { useRouter, useParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/react-query/queryKeys';
-import { ArrowLeft, Send, Loader2, Check, CheckCheck, Clock, Image as ImageIcon, X } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Check, CheckCheck, Clock, Image as ImageIcon, X, Sparkles } from 'lucide-react';
 import { markConversationDelivered, markConversationReadWithReceipts, useConversationQuery, useMessagesQuery, useSendMessageMutation } from '@/lib/messaging';
 import type { DirectMessage, MessageDeliveryReceipt, MessageReadReceipt } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
 import { uploadService } from '@/lib/utils/upload-service';
 import * as rawRealtime from '@/lib/core/supabase/raw-realtime';
 import AppLoadingState from '@/components/ui/AppLoadingState';
+import { INBOX_THREAD_DRAFT_KEY } from '@/components/features/inbox/MessageModal';
 
 export default function ConversationPage() {
   const router = useRouter();
@@ -33,6 +34,7 @@ export default function ConversationPage() {
   const orderedMessages = [...messages].reverse();
 
   const [messageText, setMessageText] = useState('');
+  const [preparingThread, setPreparingThread] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -85,6 +87,43 @@ export default function ConversationPage() {
   const otherUser = session.user && conversation?.participants
     ? conversation.participants.find((p) => p.userId !== session.user?.id) || null
     : null;
+  // Prefer the real username (e.g. claimed seed handle 'jctech'), fall back to the
+  // neutral anonymous id, then a generic label.
+  const otherDisplayName =
+    otherUser?.user?.username || otherUser?.user?.anonymousId || 'Anonymous User';
+
+  // "Turn into thread" — same handoff as the one-off MessageModal: prefill the
+  // create form with the first 3 messages and carry the conversationId so its
+  // messages import on publish. Gated to signed-in, non-guest, not-yet-converted.
+  const isGuest = session.user?.isAnonymous ?? false;
+  const canTurnIntoThread = Boolean(
+    session.isAuthenticated && !isGuest && conversationId && !conversation?.convertedThreadId
+  );
+
+  const handleTurnIntoThread = () => {
+    if (!conversationId || preparingThread) return;
+    setPreparingThread(true);
+    try {
+      const firstThree = orderedMessages
+        .map((m) => (m.content || '').trim())
+        .filter(Boolean)
+        .slice(0, 3);
+      const draft = {
+        conversationId,
+        form: {
+          title: '',
+          content: firstThree.join('\n\n'),
+          type: 'text',
+          category: 'general',
+          privacy: 'public',
+        },
+      };
+      localStorage.setItem(INBOX_THREAD_DRAFT_KEY, JSON.stringify(draft));
+      router.push('/threads/create?from=inbox');
+    } finally {
+      setPreparingThread(false);
+    }
+  };
 
   useEffect(() => {
     if (!sessionValidated || session.user) return;
@@ -200,7 +239,11 @@ export default function ConversationPage() {
     });
 
     typingChannelRef.current = channel;
-    channel.subscribe();
+    // Typing indicator is best-effort — a join timeout must not crash the page.
+    // The socket auto-rejoins in the background; swallow the rejection here.
+    channel.subscribe().catch((err) => {
+      console.warn('[DM] typing channel subscribe failed (non-fatal):', err);
+    });
 
     return () => {
       if (channel && session.user?.id) {
@@ -244,9 +287,15 @@ export default function ConversationPage() {
     });
 
     presenceChannelRef.current = channel;
-    channel.subscribe().then(() => {
-      channel.track({ onlineAt: new Date().toISOString() });
-    });
+    // Online presence is best-effort — a join timeout must not crash the page.
+    // The socket auto-rejoins in the background; swallow the rejection here.
+    channel.subscribe()
+      .then(() => {
+        channel.track({ onlineAt: new Date().toISOString() });
+      })
+      .catch((err) => {
+        console.warn('[DM] presence channel subscribe failed (non-fatal):', err);
+      });
 
     return () => {
       channel.unsubscribe();
@@ -435,7 +484,7 @@ export default function ConversationPage() {
         <div className="flex items-center gap-3">
           <div className="relative w-10 h-10 bg-purple-500/20 rounded-full flex items-center justify-center">
             <span className="text-sm font-semibold text-purple-400">
-              {otherUser?.user?.anonymousId?.charAt(0) || 'A'}
+              {otherDisplayName.charAt(0).toUpperCase()}
             </span>
             <span
               className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#121212] ${isOtherOnline ? 'bg-green-400' : 'bg-gray-500'
@@ -444,7 +493,7 @@ export default function ConversationPage() {
           </div>
           <div>
             <p className="font-semibold text-white">
-              {otherUser?.user?.anonymousId || 'Anonymous User'}
+              {otherDisplayName}
             </p>
             <p className="text-xs text-gray-500">
               {isOtherTyping ? (
@@ -459,6 +508,18 @@ export default function ConversationPage() {
             </p>
           </div>
         </div>
+
+        {canTurnIntoThread && (
+          <button
+            onClick={handleTurnIntoThread}
+            disabled={preparingThread}
+            className="ml-auto inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-orange-500 px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+            title="Turn this conversation into a thread"
+          >
+            {preparingThread ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+            <span className="hidden sm:inline">Turn into thread</span>
+          </button>
+        )}
       </div>
 
       {/* Messages */}
