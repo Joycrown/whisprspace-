@@ -124,8 +124,8 @@ export async function renderOgCard(handle: string): Promise<ImageResponse> {
           {/* Headline */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div style={{
-              fontSize: 13,
-              fontWeight: 700,
+              fontSize: 17,
+              fontWeight: 800,
               color: '#5C5C6E',
               letterSpacing: '4px',
               textTransform: 'uppercase',
@@ -147,8 +147,8 @@ export async function renderOgCard(handle: string): Promise<ImageResponse> {
 
           {/* Footer trust line */}
           <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#5DCAA5', marginRight: 11, display: 'flex' }} />
-            <span style={{ fontSize: 15, color: '#5C5C6E', letterSpacing: '0.2px', display: 'flex' }}>
+            <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#5DCAA5', marginRight: 11, display: 'flex' }} />
+            <span style={{ fontSize: 20, fontWeight: 700, color: '#5C5C6E', letterSpacing: '0.2px', display: 'flex' }}>
               No name. No trace. Always anonymous.
             </span>
           </div>
@@ -188,7 +188,7 @@ export async function renderOgCard(handle: string): Promise<ImageResponse> {
 
           {/* Recipient */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 22 }}>
-            <span style={{ fontSize: 15, color: '#5C5C6E', fontWeight: 500, letterSpacing: '0.5px', display: 'flex' }}>Tell</span>
+            <span style={{ fontSize: 20, color: '#5C5C6E', fontWeight: 700, letterSpacing: '0.5px', display: 'flex' }}>Tell</span>
             <span style={{
               fontSize: nameFontSize,
               fontWeight: 800,
@@ -202,7 +202,7 @@ export async function renderOgCard(handle: string): Promise<ImageResponse> {
             }}>
               {displayName}
             </span>
-            <span style={{ fontSize: 15, color: '#5C5C6E', fontWeight: 500, letterSpacing: '0.5px', display: 'flex' }}>the truth.</span>
+            <span style={{ fontSize: 20, color: '#5C5C6E', fontWeight: 700, letterSpacing: '0.5px', display: 'flex' }}>the truth.</span>
           </div>
 
           {/* CTA */}
@@ -215,13 +215,13 @@ export async function renderOgCard(handle: string): Promise<ImageResponse> {
             padding: '16px 34px',
             marginTop: 30,
           }}>
-            <span style={{ fontSize: 17, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px', display: 'flex' }}>
+            <span style={{ fontSize: 22, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px', display: 'flex' }}>
               Send anonymous message →
             </span>
           </div>
 
           {/* URL */}
-          <span style={{ fontSize: 13, color: '#3A3A4E', letterSpacing: '0.3px', marginTop: 20, display: 'flex' }}>
+          <span style={{ fontSize: 18, fontWeight: 600, color: '#3A3A4E', letterSpacing: '0.3px', marginTop: 20, display: 'flex' }}>
             {baseHost}/message/{handle}
           </span>
         </div>

@@ -78,8 +78,8 @@ export async function GET(_req: NextRequest) {
           {/* Headline */}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div style={{
-              fontSize: 13,
-              fontWeight: 700,
+              fontSize: 17,
+              fontWeight: 800,
               color: '#5C5C6E',
               letterSpacing: '4px',
               textTransform: 'uppercase',
@@ -101,8 +101,8 @@ export async function GET(_req: NextRequest) {
 
           {/* Trust line */}
           <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center' }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#5DCAA5', marginRight: 11, display: 'flex' }} />
-            <span style={{ fontSize: 15, color: '#5C5C6E', letterSpacing: '0.2px', display: 'flex' }}>
+            <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#5DCAA5', marginRight: 11, display: 'flex' }} />
+            <span style={{ fontSize: 20, fontWeight: 700, color: '#5C5C6E', letterSpacing: '0.2px', display: 'flex' }}>
               No name. No trace. Always anonymous.
             </span>
           </div>
@@ -143,8 +143,8 @@ export async function GET(_req: NextRequest) {
               padding: '14px 22px',
               width: '100%',
             }}>
-              <span style={{ fontSize: 26, display: 'flex' }}>{f.icon}</span>
-              <span style={{ fontSize: 18, fontWeight: 600, color: '#C4B5FD', display: 'flex' }}>{f.label}</span>
+              <span style={{ fontSize: 30, display: 'flex' }}>{f.icon}</span>
+              <span style={{ fontSize: 22, fontWeight: 800, color: '#C4B5FD', display: 'flex' }}>{f.label}</span>
             </div>
           ))}
 
@@ -158,13 +158,13 @@ export async function GET(_req: NextRequest) {
             padding: '16px 36px',
             marginTop: '8px',
           }}>
-            <span style={{ fontSize: 18, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px', display: 'flex' }}>
+            <span style={{ fontSize: 23, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px', display: 'flex' }}>
               Join for free →
             </span>
           </div>
 
           {/* URL */}
-          <span style={{ fontSize: 13, color: '#3A3A4E', letterSpacing: '0.3px', display: 'flex' }}>
+          <span style={{ fontSize: 18, fontWeight: 600, color: '#3A3A4E', letterSpacing: '0.3px', display: 'flex' }}>
             {baseHost}
           </span>
         </div>
