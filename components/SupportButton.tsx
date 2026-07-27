@@ -185,9 +185,9 @@ export default function SupportButton() {
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — dimmed on mobile (modal feel), transparent click-catcher on desktop */}
       {open && (
-        <div className="fixed inset-0 z-[799]" onClick={handleClose} />
+        <div className="fixed inset-0 z-[799] bg-black/60 sm:bg-transparent" onClick={handleClose} />
       )}
 
       {/* Draggable FAB container — position is user-controlled + persisted, so it
@@ -226,14 +226,41 @@ export default function SupportButton() {
           dragY.set(0)
         }}
       >
-        <AnimatePresence>
-          {open && (
+        {/* FAB — icon-only chat bubble. A tap toggles the panel; dragging the
+            container repositions it. The drag-vs-tap guard ignores the click that
+            fires after a drag. The panel is rendered separately below so it can be
+            a centered modal on mobile (not anchored to the corner FAB). */}
+        <motion.button
+          onClick={() => {
+            if (draggedRef.current) {
+              draggedRef.current = false
+              return
+            }
+            setOpen(v => !v)
+          }}
+          whileTap={{ scale: 0.92 }}
+          aria-label="Contact support"
+          title="Contact support"
+          className={`flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-colors duration-200 cursor-grab active:cursor-grabbing touch-none select-none ${
+            open
+              ? 'bg-[#2A2A38] text-white border border-[#3A3A4E]'
+              : 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-500 hover:to-purple-600 shadow-purple-900/40'
+          }`}
+        >
+          {open ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
+        </motion.button>
+      </motion.div>
+
+      {/* Support panel — centered modal on mobile, anchored near the FAB on desktop */}
+      <AnimatePresence>
+        {open && (
+          <div className="fixed inset-0 z-[801] flex items-center justify-center p-4 sm:items-end sm:justify-start sm:p-6 pointer-events-none">
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-              className="w-[calc(100vw-2rem)] max-w-80 bg-[#1A1A24] border border-[#2A2A38] rounded-2xl shadow-2xl overflow-hidden"
+              className="pointer-events-auto w-full max-w-sm sm:w-80 max-h-[85vh] overflow-y-auto bg-[#1A1A24] border border-[#2A2A38] rounded-2xl shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -426,32 +453,9 @@ export default function SupportButton() {
                 </form>
               )}
             </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* FAB — icon-only chat bubble. A tap toggles the panel; dragging the
-            container repositions it. The drag-vs-tap guard ignores the click that
-            fires after a drag. */}
-        <motion.button
-          onClick={() => {
-            if (draggedRef.current) {
-              draggedRef.current = false
-              return
-            }
-            setOpen(v => !v)
-          }}
-          whileTap={{ scale: 0.92 }}
-          aria-label="Contact support"
-          title="Contact support"
-          className={`flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-colors duration-200 cursor-grab active:cursor-grabbing touch-none select-none ${
-            open
-              ? 'bg-[#2A2A38] text-white border border-[#3A3A4E]'
-              : 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-500 hover:to-purple-600 shadow-purple-900/40'
-          }`}
-        >
-          {open ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
-        </motion.button>
-      </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   )
 }
