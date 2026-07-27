@@ -96,7 +96,7 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
   const threadPath = thread ? buildThreadPath({ id: thread.id, title: thread.title }) : '';
   const buildThreadShareUrl = useCallback(() =>
     typeof window !== 'undefined'
-      ? `${window.location.origin}/auth?redirect=${encodeURIComponent(`${threadPath}?from=share`)}`
+      ? `${window.location.origin}${threadPath}?from=share`
       : '', [threadPath]);
 
   const requiresInviteLink = thread?.privacy !== 'public';

@@ -142,7 +142,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
   );
 
   const buildThreadLink = () =>
-    `${window.location.origin}/auth?redirect=${encodeURIComponent(`${buildThreadPath({ id: thread.id, title: thread.title })}?from=share`)}`;
+    `${window.location.origin}${buildThreadPath({ id: thread.id, title: thread.title })}?from=share`;
 
   const copyToClipboard = async (value: string) => {
     try {
