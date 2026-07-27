@@ -154,7 +154,8 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
       modifiedTime: thread.updated_at,
       images: [
         {
-          url: `${siteConfig.appUrl}/threads/${thread.id}/opengraph-image`,
+          url: `${siteConfig.appUrl}/threads/${thread.id}/og`,
+          secureUrl: `${siteConfig.appUrl}/threads/${thread.id}/og`,
           width: 1200,
           height: 630,
           alt: title,
@@ -167,7 +168,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
       description,
       site: siteConfig.twitterHandle,
       creator: siteConfig.twitterHandle,
-      images: [`${siteConfig.appUrl}/threads/${thread.id}/opengraph-image`],
+      images: [`${siteConfig.appUrl}/threads/${thread.id}/og`],
     },
     keywords: [
       'anonymous thread',
