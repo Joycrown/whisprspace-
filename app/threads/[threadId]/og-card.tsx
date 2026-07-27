@@ -147,9 +147,9 @@ export async function renderThreadOgCard(threadRef: string): Promise<ImageRespon
 
               {displayContent && displayContent !== displayTitle && (
                 <div style={{
-                  fontSize: 20,
-                  fontWeight: 400,
-                  lineHeight: 1.6,
+                  fontSize: 26,
+                  fontWeight: 600,
+                  lineHeight: 1.5,
                   color: '#64748b',
                   display: 'flex',
                   flexWrap: 'wrap',
@@ -168,9 +168,9 @@ export async function renderThreadOgCard(threadRef: string): Promise<ImageRespon
                   background: '#4ade80',
                   display: 'flex',
                 }} />
-                <span style={{ fontSize: 15, color: '#4ade80', fontWeight: 600 }}>Open now</span>
+                <span style={{ fontSize: 20, color: '#4ade80', fontWeight: 600 }}>Open now</span>
               </div>
-              <span style={{ fontSize: 14, color: '#3A3A4E', letterSpacing: '0.02em' }}>
+              <span style={{ fontSize: 18, fontWeight: 600, color: '#3A3A4E', letterSpacing: '0.02em' }}>
                 {baseHost}
               </span>
             </div>
@@ -211,7 +211,7 @@ export async function renderThreadOgCard(threadRef: string): Promise<ImageRespon
                 display: 'flex',
               }} />
               <span style={{
-                fontSize: 14,
+                fontSize: 18,
                 fontWeight: 700,
                 letterSpacing: '0.1em',
                 textTransform: 'uppercase',
@@ -239,7 +239,7 @@ export async function renderThreadOgCard(threadRef: string): Promise<ImageRespon
 
             {/* CTA label */}
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: 15, color: '#8F8FA3', fontWeight: 500, display: 'flex' }}>
+              <span style={{ fontSize: 20, color: '#8F8FA3', fontWeight: 700, display: 'flex' }}>
                 Anonymous discussion
               </span>
               <div style={{
@@ -248,10 +248,10 @@ export async function renderThreadOgCard(threadRef: string): Promise<ImageRespon
                 justifyContent: 'center',
                 background: 'linear-gradient(90deg, #8B5CF6 0%, #F97316 100%)',
                 borderRadius: '50px',
-                padding: '14px 28px',
+                padding: '16px 32px',
                 marginTop: '4px',
               }}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px', display: 'flex' }}>
+                <span style={{ fontSize: 22, fontWeight: 700, color: '#ffffff', letterSpacing: '-0.2px', display: 'flex' }}>
                   Join the conversation →
                 </span>
               </div>
@@ -260,7 +260,7 @@ export async function renderThreadOgCard(threadRef: string): Promise<ImageRespon
             {/* No name. No trace. */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#5DCAA5', display: 'flex' }} />
-              <span style={{ fontSize: 13, color: '#5C5C6E', letterSpacing: '0.2px', display: 'flex' }}>
+              <span style={{ fontSize: 18, fontWeight: 700, color: '#5C5C6E', letterSpacing: '0.2px', display: 'flex' }}>
                 No name. No trace. Always anonymous.
               </span>
             </div>
