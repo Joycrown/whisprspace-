@@ -10,7 +10,7 @@ import { getAnonymousSessionExpiry, getRegisteredSessionExpiry } from '@/lib/uti
 import { setAccessToken } from '@/lib/utils/auth-token-cache'
 
 // Stable outside component — never recreated
-const PUBLIC_PREFIXES = ['/auth', '/privacy-policy', '/community-guidelines', '/getting-started', '/profile', '/invite', '/message']
+const PUBLIC_PREFIXES = ['/auth', '/privacy-policy', '/community-guidelines', '/getting-started', '/profile', '/invite', '/message', '/claim']
 
 function isPublicRoute(path: string): boolean {
   return path === '/' || PUBLIC_PREFIXES.some(p => path.startsWith(p))

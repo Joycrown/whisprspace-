@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
-import { convertPrice, formatCurrency, SupportedCurrency, SUPPORTED_CURRENCIES } from '@/lib/payments/currency'
+import { formatCurrency, SupportedCurrency, SUPPORTED_CURRENCIES } from '@/lib/payments/currency'
+import { convertWithLiveRate } from '@/lib/payments/flutterwave-rates'
 import { getTrustedAppBaseUrl } from '@/lib/security/app-url'
 import { enforceRateLimit, withRateLimitHeaders } from '@/lib/security/rate-limit'
 import { resolveUserFromRequest } from '@/lib/security/request-auth'
@@ -82,16 +83,15 @@ export async function POST(request: NextRequest) {
     const metadataFullName =
       typeof user.userMetadata?.full_name === 'string' ? user.userMetadata.full_name : undefined
 
-    // Determine final currency and amount
-    // We let Flutterwave handle the dynamic live exchange rate natively by passing USD
-    // The underlying currency chosen by the user in UI is captured in metadata
-    const uiCurrency = (requestedCurrency && Object.values(SUPPORTED_CURRENCIES).includes(requestedCurrency)) 
-      ? requestedCurrency as SupportedCurrency 
+    // Charge in the user's local currency (same as thread purchases) so Flutterwave
+    // presents all payment methods — mobile money, USSD, bank transfer, etc. — rather
+    // than defaulting to card-only which happens when USD is passed directly.
+    const uiCurrency = (requestedCurrency && Object.values(SUPPORTED_CURRENCIES).includes(requestedCurrency))
+      ? requestedCurrency as SupportedCurrency
       : 'USD';
 
-    // ALWAYS charge exactly in USD. Flutterwave will use their rate.
-    const finalAmount = planConfig.amount;
-    const paymentCurrency = 'USD';
+    const { amount: finalAmount } = await convertWithLiveRate(flutterwaveSecretKey, planConfig.amount, uiCurrency);
+    const paymentCurrency = uiCurrency;
 
     const response = await fetch('https://api.flutterwave.com/v3/payments', {
       method: 'POST',
@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
         },
         customizations: {
           title: 'WhisprSpace Premium',
-          description: `${planConfig.label} subscription (${formatCurrency(finalAmount, paymentCurrency)})`,
+          description: `${planConfig.label} subscription (~$${planConfig.amount} USD · ${formatCurrency(finalAmount, paymentCurrency)})`,
         },
       }),
     })
@@ -164,8 +164,9 @@ export async function POST(request: NextRequest) {
             paymentType: 'premium_upgrade',
             plan,
             userId: user.id,
+            amountUsd: planConfig.amount,
+            amount: finalAmount,
             currency: paymentCurrency,
-            uiCurrency,
           },
         },
         { onConflict: 'payment_provider,tx_ref' }

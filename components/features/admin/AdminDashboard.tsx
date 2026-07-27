@@ -39,7 +39,7 @@ export default function AdminDashboard() {
             Access Denied
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            You don't have permission to access the admin panel
+            You don&apos;t have permission to access the admin panel
           </p>
         </div>
       </div>
@@ -60,18 +60,18 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+          <div className="flex items-start sm:items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-3xl font-bold text-gray-900 dark:text-white">
                 Admin Dashboard
               </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Role: <span className="font-semibold capitalize">{role}</span>
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-sm font-semibold">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="px-2.5 sm:px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap">
                 Admin Access
               </span>
             </div>
@@ -79,24 +79,24 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs — horizontally scrollable on mobile so all tabs stay reachable */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-8">
+          <div className="flex gap-4 sm:gap-8 overflow-x-auto scrollbar-hide -mb-px">
             {tabs.map((tab) => {
               const Icon = tab.icon
               return (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 py-4 border-b-2 transition-colors ${
+                  className={`flex items-center gap-2 py-3 sm:py-4 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
                     activeTab === tab.id
                       ? 'border-purple-600 text-purple-600 dark:text-purple-400'
                       : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                   }`}
                 >
-                  <Icon className="w-5 h-5" />
-                  <span className="font-medium">{tab.label}</span>
+                  <Icon className="w-5 h-5 flex-shrink-0" />
+                  <span className="font-medium text-sm sm:text-base">{tab.label}</span>
                 </button>
               )
             })}
@@ -105,7 +105,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {activeTab === 'analytics' && <AnalyticsDashboard />}
         
         {activeTab === 'users' && (

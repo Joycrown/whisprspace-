@@ -310,14 +310,36 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (paymentError) {
-        return NextResponse.json(
-          { error: 'Failed to record payment' },
-          { status: 500 }
-        )
-      }
+        // 23505 = unique violation. Two confirm calls can race (the client fires
+        // this endpoint twice): both pass the existence checks, then both insert
+        // the same transactionRef. The loser must NOT 500 — the payment IS
+        // recorded, so re-fetch it and continue idempotently.
+        if (paymentError.code === '23505') {
+          const { data: racedPayment } = await supabaseAdmin
+            .from('payments')
+            .select('id')
+            .eq('stripe_payment_intent_id', transactionRef)
+            .maybeSingle()
 
-      paymentId = payment.id
-      paymentCreated = true
+          if (racedPayment?.id) {
+            paymentId = racedPayment.id
+            paymentCreated = false
+          } else {
+            return NextResponse.json(
+              { error: 'Failed to record payment' },
+              { status: 500 }
+            )
+          }
+        } else {
+          return NextResponse.json(
+            { error: 'Failed to record payment' },
+            { status: 500 }
+          )
+        }
+      } else {
+        paymentId = payment.id
+        paymentCreated = true
+      }
     }
 
     const { error: purchaseError } = await supabaseAdmin

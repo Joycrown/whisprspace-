@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { LifeBuoy, X, Send, CheckCircle, AlertCircle, Loader2, Paperclip, FileImage, Trash2 } from 'lucide-react'
+import { LifeBuoy, X, Send, CheckCircle, AlertCircle, Loader2, Paperclip, FileImage, Trash2, MessageCircle } from 'lucide-react'
 import { motion, AnimatePresence, useMotionValue } from 'framer-motion'
 import Image from 'next/image'
 
@@ -23,32 +23,42 @@ const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
 
 // Draggable FAB config
 const POSITION_KEY = 'support_fab_pos'
-const FAB_SIZE = 56 // approx button footprint for viewport clamping
-const EDGE_MARGIN = 12
+// The FAB is a circular icon-only chat button (w-14 h-14 = 56px). Fallbacks used
+// only before the real element is measured (below).
+const FAB_WIDTH = 56
+const FAB_HEIGHT = 56
+const EDGE_MARGIN = 16
 // Movement (px) above which a pointer gesture counts as a drag, not a tap.
 const DRAG_THRESHOLD = 6
 
 interface Pos { x: number; y: number }
+interface Size { w: number; h: number }
 
-/** Clamp a position so the button stays fully within the viewport. */
-function clampToViewport(pos: Pos): Pos {
+/** Clamp a position so the button (of the given size) stays fully in the viewport. */
+function clampToViewport(pos: Pos, size: Size): Pos {
   if (typeof window === 'undefined') return pos
-  const maxX = window.innerWidth - FAB_SIZE - EDGE_MARGIN
-  const maxY = window.innerHeight - FAB_SIZE - EDGE_MARGIN
+  const maxX = window.innerWidth - size.w - EDGE_MARGIN
+  const maxY = window.innerHeight - size.h - EDGE_MARGIN
   return {
     x: Math.min(Math.max(pos.x, EDGE_MARGIN), Math.max(EDGE_MARGIN, maxX)),
     y: Math.min(Math.max(pos.y, EDGE_MARGIN), Math.max(EDGE_MARGIN, maxY)),
   }
 }
 
-/** Default bottom-right position (matches the old fixed placement). */
-function defaultPos(): Pos {
+/**
+ * Default BOTTOM-LEFT position, inset from the edges. Uses the measured size so
+ * the button never sits flush against or off an edge.
+ */
+function defaultPos(size: Size): Pos {
   if (typeof window === 'undefined') return { x: 0, y: 0 }
-  // Desktop ~24px inset; mobile lifts above bottom nav/input.
   const isDesktop = window.innerWidth >= 768
-  const x = window.innerWidth - FAB_SIZE - (isDesktop ? 24 : 16)
-  const y = window.innerHeight - FAB_SIZE - (isDesktop ? 24 : 144)
-  return clampToViewport({ x, y })
+  // Desktop clears the ~80px left icon rail; mobile insets from the left edge.
+  const leftInset = isDesktop ? 96 : 16
+  // Lift above the mobile bottom nav / message input so it never covers anything.
+  const bottomInset = isDesktop ? 24 : 96
+  const x = leftInset
+  const y = window.innerHeight - size.h - bottomInset
+  return clampToViewport({ x, y }, size)
 }
 
 export default function SupportButton() {
@@ -65,12 +75,22 @@ export default function SupportButton() {
   // left/top hold the committed position; x/y are the live drag transform, reset
   // to 0 after each drag so there's no double-offset jump.
   const [pos, setPos] = useState<Pos | null>(null) // null until mounted (SSR-safe)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const sizeRef = useRef<Size>({ w: FAB_WIDTH, h: FAB_HEIGHT })
   const dragX = useMotionValue(0)
   const dragY = useMotionValue(0)
   const draggedRef = useRef(false)
 
   // Init from localStorage (or default), then keep on-screen across resizes.
   useEffect(() => {
+    // Measure the real pill so positioning accounts for its full width.
+    const measured = containerRef.current?.getBoundingClientRect()
+    const size: Size = {
+      w: measured?.width || FAB_WIDTH,
+      h: measured?.height || FAB_HEIGHT,
+    }
+    sizeRef.current = size
+
     let initial: Pos | null = null
     try {
       const raw = localStorage.getItem(POSITION_KEY)
@@ -78,9 +98,9 @@ export default function SupportButton() {
     } catch {
       // ignore malformed
     }
-    setPos(clampToViewport(initial ?? defaultPos()))
+    setPos(clampToViewport(initial ?? defaultPos(size), size))
 
-    const onResize = () => setPos((p) => (p ? clampToViewport(p) : p))
+    const onResize = () => setPos((p) => (p ? clampToViewport(p, sizeRef.current) : p))
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -165,15 +185,16 @@ export default function SupportButton() {
 
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop — dimmed on mobile (modal feel), transparent click-catcher on desktop */}
       {open && (
-        <div className="fixed inset-0 z-[799]" onClick={handleClose} />
+        <div className="fixed inset-0 z-[799] bg-black/60 sm:bg-transparent" onClick={handleClose} />
       )}
 
       {/* Draggable FAB container — position is user-controlled + persisted, so it
           can be moved off a send button. Hidden until mounted to avoid an SSR flash
           at the wrong spot. Dragging is disabled while the panel is open. */}
       <motion.div
+        ref={containerRef}
         drag={!open}
         dragMomentum={false}
         dragElastic={0}
@@ -185,7 +206,7 @@ export default function SupportButton() {
           y: dragY,
           visibility: pos ? 'visible' : 'hidden',
         }}
-        className="z-[800] flex flex-col items-end gap-3"
+        className="z-[800] flex flex-col items-start gap-3"
         onDragStart={() => { draggedRef.current = false }}
         onDrag={(_e, info) => {
           if (Math.hypot(info.offset.x, info.offset.y) > DRAG_THRESHOLD) {
@@ -194,7 +215,10 @@ export default function SupportButton() {
         }}
         onDragEnd={(_e, info) => {
           if (!pos) return
-          const next = clampToViewport({ x: pos.x + info.offset.x, y: pos.y + info.offset.y })
+          const next = clampToViewport(
+            { x: pos.x + info.offset.x, y: pos.y + info.offset.y },
+            sizeRef.current
+          )
           setPos(next)
           persistPos(next)
           // Reset the live transform so the committed left/top isn't double-applied.
@@ -202,14 +226,41 @@ export default function SupportButton() {
           dragY.set(0)
         }}
       >
-        <AnimatePresence>
-          {open && (
+        {/* FAB — icon-only chat bubble. A tap toggles the panel; dragging the
+            container repositions it. The drag-vs-tap guard ignores the click that
+            fires after a drag. The panel is rendered separately below so it can be
+            a centered modal on mobile (not anchored to the corner FAB). */}
+        <motion.button
+          onClick={() => {
+            if (draggedRef.current) {
+              draggedRef.current = false
+              return
+            }
+            setOpen(v => !v)
+          }}
+          whileTap={{ scale: 0.92 }}
+          aria-label="Contact support"
+          title="Contact support"
+          className={`flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-colors duration-200 cursor-grab active:cursor-grabbing touch-none select-none ${
+            open
+              ? 'bg-[#2A2A38] text-white border border-[#3A3A4E]'
+              : 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-500 hover:to-purple-600 shadow-purple-900/40'
+          }`}
+        >
+          {open ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
+        </motion.button>
+      </motion.div>
+
+      {/* Support panel — centered modal on mobile, anchored near the FAB on desktop */}
+      <AnimatePresence>
+        {open && (
+          <div className="fixed inset-0 z-[801] flex items-center justify-center p-4 sm:items-end sm:justify-start sm:p-6 pointer-events-none">
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.95 }}
               transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-              className="w-80 bg-[#1A1A24] border border-[#2A2A38] rounded-2xl shadow-2xl overflow-hidden"
+              className="pointer-events-auto w-full max-w-sm sm:w-80 max-h-[85vh] overflow-y-auto bg-[#1A1A24] border border-[#2A2A38] rounded-2xl shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -402,30 +453,9 @@ export default function SupportButton() {
                 </form>
               )}
             </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* FAB — a tap toggles the panel; dragging the container repositions it.
-            The drag-vs-tap guard ignores the click that fires after a drag. */}
-        <motion.button
-          onClick={() => {
-            if (draggedRef.current) {
-              draggedRef.current = false
-              return
-            }
-            setOpen(v => !v)
-          }}
-          whileTap={{ scale: 0.92 }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-full shadow-lg transition-colors duration-200 cursor-grab active:cursor-grabbing touch-none select-none ${
-            open
-              ? 'bg-[#2A2A38] text-white border border-[#3A3A4E]'
-              : 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-500 hover:to-purple-600 shadow-purple-900/40'
-          }`}
-        >
-          <LifeBuoy className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm font-semibold">Support</span>
-        </motion.button>
-      </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </>
   )
 }
