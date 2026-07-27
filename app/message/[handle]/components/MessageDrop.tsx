@@ -74,20 +74,13 @@ const MessageDrop = ({ recipientId, recipientName }: MessageDropProps) => {
         return;
       }
 
-      if (!user) {
-        const { error: authError } = await rawAuth.signInAnonymously({ requireLegalConsent: false });
-        if (authError) throw new Error('Unable to send message right now. Please try again.');
-      }
-
-      const freshSession = rawAuth.getSession();
-
       const res = await fetch('/api/inbox/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           recipientId,
           content: trimmed,
-          senderUserId: freshSession?.user?.id ?? null,
+          senderUserId: user?.id ?? null,
         }),
       });
 
@@ -135,10 +128,7 @@ const MessageDrop = ({ recipientId, recipientName }: MessageDropProps) => {
               <p className="text-[#8F8FA3] text-sm">Want people telling <em>you</em> the truth?</p>
             </div>
             <button
-              onClick={async () => {
-                await rawAuth.signOut();
-                router.push('/auth?force=1&view=signup&reason=inbox');
-              }}
+              onClick={() => router.push('/auth?force=1&view=signup&reason=inbox')}
               className="w-full h-[50px] rounded-[11px] text-sm font-medium text-white flex items-center justify-center gap-2 active:scale-[0.97] transition-all"
               style={{ background: 'linear-gradient(100deg, #8B5CF6 0%, #F97316 100%)' }}
             >
