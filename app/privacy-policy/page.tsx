@@ -1,9 +1,10 @@
 import type { Metadata } from 'next'
-import { generateMetadata as generateSEO, seoKeywords } from '@/lib/seo'
+import { generateMetadata as generateSEO, seoKeywords, siteConfig } from '@/lib/seo'
 
 export const metadata: Metadata = generateSEO({
   title: 'Privacy Policy',
   description: 'Learn how WhisprSpace collects, stores, and protects your data on our anonymous social platform.',
+  image: `${siteConfig.appUrl}/og`,
   url: '/privacy-policy',
   tags: [...seoKeywords.privacyPolicy],
 })
