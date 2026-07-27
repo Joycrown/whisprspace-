@@ -63,7 +63,7 @@ export const siteConfig = {
   appUrl,
   authUrl: `${appUrl}/auth`,
   indexingEnabled,
-  ogImage: '/assets/ws-icon.png',
+  ogImage: `${appUrl}/og`,
   twitterHandle: '@whisprspace',
   keywords: [...seoKeywords.home],
 };
@@ -173,6 +173,7 @@ export function generateMetadata({
       images: [
         {
           url: pageImage,
+          secureUrl: pageImage,
           width: 1200,
           height: 630,
           alt: pageTitle,

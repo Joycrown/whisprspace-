@@ -1,11 +1,13 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { generateMetadata as generateSEO, siteConfig } from '@/lib/seo'
 
-export const metadata: Metadata = {
-  title: 'Getting Started — WhisprSpace',
-  description:
-    'Learn how to use WhisprSpace: share your anonymous inbox, start threads, and earn with premium content.',
-}
+export const metadata: Metadata = generateSEO({
+  title: 'Getting Started',
+  description: 'Learn how to use WhisprSpace: share your anonymous inbox, start threads, and earn with premium content.',
+  image: `${siteConfig.appUrl}/og`,
+  url: '/getting-started',
+})
 
 const steps = [
   {
