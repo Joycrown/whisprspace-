@@ -40,14 +40,31 @@ export const viewport: Viewport = {
 };
 
 // Add apple-mobile-web-app-capable and other PWA specific meta tags
+const OG_IMAGE_URL = `${siteConfig.appUrl}/og`
+
+const baseSEO = generateSEO({
+  title: "WhisprSpace | Anonymous Social Platform",
+  description:
+    "Join WhisprSpace to share honest thoughts anonymously, join private communities, and connect without identity pressure.",
+  image: OG_IMAGE_URL,
+  tags: [...seoKeywords.home],
+  noindex: !siteConfig.indexingEnabled,
+})
+
 export const metadata: Metadata = {
-  ...generateSEO({
-    title: "WhisprSpace | Anonymous Social Platform",
-    description:
-      "Join WhisprSpace to share honest thoughts anonymously, join private communities, and connect without identity pressure.",
-    tags: [...seoKeywords.home],
-    noindex: !siteConfig.indexingEnabled,
-  }),
+  ...baseSEO,
+  openGraph: {
+    ...baseSEO.openGraph,
+    images: [
+      {
+        url: OG_IMAGE_URL,
+        secureUrl: OG_IMAGE_URL,
+        width: 1200,
+        height: 630,
+        alt: 'WhisprSpace — Speak freely. Stay anonymous.',
+      },
+    ],
+  },
   applicationName: 'WhisprSpace',
   manifest: "/manifest.json",
   icons: {
