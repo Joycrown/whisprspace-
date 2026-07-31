@@ -151,28 +151,12 @@ export async function POST(req: NextRequest) {
     const senderToken = existingToken ?? generateSenderToken()
 
     // ── Write the conversation + message via service role ────────────────────
-    // Determine actual sender UUID — anonymous sessions have a real UUID
-    // from signInAnonymously(); unauthenticated visitors have none.
-    // We create a deterministic anonymous sender if senderUserId is absent
-    // so every message has a sender_id (required by the DM schema).
-    let senderId: string
+    // sender_id is null for fully anonymous (no-account) sends.
+    // The RPC handles null sender_id by only adding the recipient as participant.
+    const senderId: string | null =
+      senderUserId && typeof senderUserId === 'string' ? senderUserId : null
 
-    if (senderUserId && typeof senderUserId === 'string') {
-      senderId = senderUserId
-    } else {
-      // Look up or create a stable bot-like anonymous sender tied to this token
-      // For v1: use a platform system user UUID as the sender_id for token-less sends.
-      // The sender is fully anonymous — this ID is never surfaced to the recipient.
-      const { data: systemUser } = await supabaseAdmin
-        .from('users')
-        .select('id')
-        .eq('anonymous_id', 'ANON_SYSTEM_INBOX')
-        .single()
-
-      senderId = systemUser?.id ?? recipientId // last-resort fallback (still works for DM schema)
-    }
-
-    // Create or reuse a one_time conversation between sender and recipient
+    // Create a one_time conversation — sender_id may be null for anonymous sends
     const { data: convData, error: convError } = await supabaseAdmin
       .rpc('create_one_time_conversation', {
         sender_id: senderId,
