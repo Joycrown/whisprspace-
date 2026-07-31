@@ -930,6 +930,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
       <SignupPromptModal
         isOpen={showSignupPrompt}
         onClose={() => setShowSignupPrompt(false)}
+        reason="thread"
       />
     </AnimatePresence>
   );
