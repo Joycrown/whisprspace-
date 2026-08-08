@@ -127,6 +127,9 @@ export interface Thread {
   isLiked?: boolean;
   isSaved?: boolean;
   isDeleted?: boolean;
+  hasJoined?: boolean;
+  hasUnread?: boolean;
+  lastMessageAt?: string | null;
 }
 
 export interface Message {
