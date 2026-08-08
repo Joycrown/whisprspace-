@@ -100,7 +100,7 @@ export default function MessageBubble({
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white'
                 }`}
             >
-              <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+              <p className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere]">{message.content}</p>
 
               {/* Edited Badge */}
               {message.isEdited && (
