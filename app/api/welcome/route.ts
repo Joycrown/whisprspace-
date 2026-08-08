@@ -1,12 +1,22 @@
+/**
+ * POST /api/welcome
+ *
+ * Sends the welcome EMAIL only.
+ *
+ * The welcome INBOX MESSAGE is no longer sent here — it's created by the
+ * `trg_send_welcome_inbox_message` trigger on public.users
+ * (migration 20260807000000_welcome_message_trigger.sql), so every new user
+ * gets it instantly regardless of signup path, even if this route is never
+ * called or the client navigates away mid-request.
+ *
+ * This route remains a client fetch because Brevo needs an HTTP call and an
+ * API key that doesn't belong in the database.
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { getTrustedAppBaseUrl } from '@/lib/security/app-url'
 import { sanitizeUuid, sanitizeEmailAddress } from '@/lib/security/input-sanitization'
-import { buildInboxMessageContent, buildWelcomeEmailHtml } from '@/lib/welcome/templates'
-
-// Fixed UUID seeded by migration 20260523000000_seed_whisprspace_bot.sql.
-// Must match the id in that migration — never change this without updating the migration too.
-const SYSTEM_USER_ID = 'ffffffff-ffff-ffff-ffff-ffffffffffff'
+import { buildWelcomeEmailHtml } from '@/lib/welcome/templates'
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,82 +29,54 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
 
-    const safeSystemUserId = sanitizeUuid(SYSTEM_USER_ID)!
-
-
     const baseUrl = getTrustedAppBaseUrl(request)
     const inboxUrl = inboxHandle
       ? `${baseUrl}/message/${encodeURIComponent(inboxHandle)}`
       : `${baseUrl}/inbox`
     const gettingStartedUrl = `${baseUrl}/getting-started`
 
-    // Get or create a direct conversation between WhisprSpace Team and the new user.
-    // get_or_create_conversation has SECURITY DEFINER so it works without an auth context.
-    const { data: conversationId, error: convError } = await supabaseAdmin.rpc(
-      'get_or_create_conversation',
-      { user1_id: safeSystemUserId, user2_id: userId }
-    )
-
-    if (convError || !conversationId) {
-      console.error('[Welcome] Failed to get/create conversation:', convError)
-      return NextResponse.json({ error: 'Failed to create conversation' }, { status: 500 })
+    // Anonymous users have no address — the inbox message (sent by the DB
+    // trigger) is all they get.
+    if (!email) {
+      return NextResponse.json({ success: true, emailSent: false })
     }
 
-    // Idempotency: skip if we've already sent a welcome message in this conversation.
-    const { data: existingMessage } = await supabaseAdmin
-      .from('direct_messages')
-      .select('id')
-      .eq('conversation_id', conversationId)
-      .eq('sender_id', safeSystemUserId)
-      .limit(1)
-      .maybeSingle()
+    const brevoApiKey =
+      process.env.BREVO_TRANSACTIONAL_API_KEY || process.env.NEXT_PUBLIC_BREVO_API_KEY
 
-    if (existingMessage) {
-      return NextResponse.json({ skipped: true, reason: 'already_sent' })
+    if (!brevoApiKey) {
+      console.warn('[Welcome] Brevo API key not configured, skipping welcome email')
+      return NextResponse.json({ success: true, emailSent: false })
     }
 
-    // Send the welcome inbox message.
-    const { error: msgError } = await supabaseAdmin.from('direct_messages').insert({
-      conversation_id: conversationId,
-      sender_id: safeSystemUserId,
-      content: buildInboxMessageContent(inboxUrl, gettingStartedUrl),
-      message_type: 'text',
-    })
-
-    if (msgError) {
-      console.error('[Welcome] Failed to insert welcome message:', msgError)
-      return NextResponse.json({ error: 'Failed to send welcome message' }, { status: 500 })
-    }
-
-    // Send welcome email if the user signed up with email (fire-and-forget).
-    if (email) {
-      const brevoApiKey =
-        process.env.BREVO_TRANSACTIONAL_API_KEY || process.env.NEXT_PUBLIC_BREVO_API_KEY
-
-      if (brevoApiKey) {
-        fetch('https://api.brevo.com/v3/smtp/email', {
-          method: 'POST',
-          headers: {
-            accept: 'application/json',
-            'api-key': brevoApiKey,
-            'content-type': 'application/json',
+    // Awaited, not fire-and-forget: a serverless function can be frozen the
+    // moment it returns, which would drop an in-flight request.
+    try {
+      await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'api-key': brevoApiKey,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          sender: {
+            name: process.env.EMAIL_SENDER_NAME || 'WhisprSpace',
+            email: process.env.EMAIL_SENDER || 'admin@whisprspace.com',
           },
-          body: JSON.stringify({
-            sender: {
-              name: process.env.EMAIL_SENDER_NAME || 'WhisprSpace',
-              email: process.env.EMAIL_SENDER || 'admin@whisprspace.com',
-            },
-            to: [{ email }],
-            subject: "You're in. Here's what to do first on WhisprSpace.",
-            htmlContent: buildWelcomeEmailHtml(inboxUrl, gettingStartedUrl),
-          }),
-        }).catch((err) => console.error('[Welcome] Brevo email failed:', err))
-      } else {
-        console.warn('[Welcome] Brevo API key not configured, skipping welcome email')
-      }
+          to: [{ email }],
+          subject: "You're in. Here's what to do first on WhisprSpace.",
+          htmlContent: buildWelcomeEmailHtml(inboxUrl, gettingStartedUrl),
+        }),
+      })
+    } catch (err) {
+      // The inbox message already landed via the trigger — a failed email
+      // isn't worth failing the request over.
+      console.error('[Welcome] Brevo email failed:', err)
+      return NextResponse.json({ success: true, emailSent: false })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, emailSent: true })
   } catch (error) {
     console.error('[Welcome] Unexpected error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

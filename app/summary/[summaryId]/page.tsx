@@ -36,22 +36,34 @@ export default function SummaryPage() {
     }
 
     const fetchSummary = async () => {
-      const storedSession = rawAuth.getStoredSession()
-      const token = storedSession?.access_token
+      try {
+        // Must be a VALID token — getStoredSession() returns expired sessions,
+        // which 401'd here and showed "This summary doesn't exist" while also
+        // leaving viewed_by_creator = false (so the modal kept reappearing).
+        const token = await rawAuth.getValidAccessToken()
 
-      const res = await fetch(`/api/summaries/${summaryId}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
+        if (!token) {
+          router.replace('/auth')
+          return
+        }
 
-      if (res.status === 404 || res.status === 401) {
+        const res = await fetch(`/api/summaries/${summaryId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+
+        if (!res.ok) {
+          setNotFound(true)
+          setLoading(false)
+          return
+        }
+
+        const { summary: data } = await res.json()
+        setSummary(data)
+      } catch {
         setNotFound(true)
+      } finally {
         setLoading(false)
-        return
       }
-
-      const { summary: data } = await res.json()
-      setSummary(data)
-      setLoading(false)
     }
 
     fetchSummary()
@@ -81,7 +93,7 @@ export default function SummaryPage() {
   return (
     <div
       className="min-h-screen flex items-center justify-center p-4 md:p-8 relative overflow-hidden"
-      style={{ backgroundColor: '#080808' }}
+      style={{ backgroundColor: 'var(--color-bg-primary)' }}
     >
       {/* Atmospheric glow — same language as the modal */}
       <div
