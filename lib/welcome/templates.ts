@@ -1,13 +1,3 @@
-/**
- * Canonical welcome inbox message text.
- *
- * NOTE: this copy is duplicated inside the `send_welcome_inbox_message()`
- * Postgres function (migration 20260807000000_welcome_message_trigger.sql),
- * which is what actually sends the message now. If you edit this copy, update
- * that migration too — otherwise the two will drift.
- *
- * Kept here for reference and for any backfill/admin tooling.
- */
 export function buildInboxMessageContent(inboxUrl: string, gettingStartedUrl: string): string {
   return `Welcome to WhisprSpace! 👋
 

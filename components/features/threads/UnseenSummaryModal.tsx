@@ -6,9 +6,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useUserStore } from '@/store/userStore'
 import * as rawAuth from '@/lib/core/supabase/raw-auth'
 
-// Dismissed summary IDs live in localStorage, NOT sessionStorage: sessionStorage
-// is wiped every time the app is relaunched, which made "View later in My Threads"
-// re-show the same modal on every single login.
 const DISMISSED_KEY = 'whispr_dismissed_summaries'
 
 function readDismissed(): string[] {
@@ -25,7 +22,6 @@ function readDismissed(): string[] {
 function addDismissed(summaryId: string) {
   if (typeof window === 'undefined') return
   try {
-    // Keep the list bounded — only the most recent dismissals matter.
     const next = [summaryId, ...readDismissed().filter((id) => id !== summaryId)].slice(0, 50)
     localStorage.setItem(DISMISSED_KEY, JSON.stringify(next))
   } catch { /* noop */ }
@@ -43,8 +39,6 @@ export function UnseenSummaryModal() {
     if (!sessionValidated || !userId) return
 
     const checkForUnseen = async () => {
-      // getValidAccessToken refreshes if needed. Using the raw stored token here
-      // sent expired tokens, which 401'd and left viewed_by_creator = false.
       const token = await rawAuth.getValidAccessToken()
       if (!token) return
 
@@ -57,7 +51,6 @@ export function UnseenSummaryModal() {
       const { summary } = await res.json()
       if (!summary?.id) return
 
-      // Already dismissed on this device — don't nag on every login.
       if (readDismissed().includes(summary.id)) return
 
       setUnseenSummary(summary)
@@ -71,18 +64,11 @@ export function UnseenSummaryModal() {
     if (!unseenSummary) return
     const summaryId = unseenSummary.id
 
-    // Dismiss immediately in local state
     setIsVisible(false)
     setUnseenSummary(null)
 
-    // Record the dismissal locally first, so the modal can't come back even if
-    // the network call below fails outright.
     addDismissed(summaryId)
 
-    // Mark as viewed in the DB and WAIT for it before navigating. This was
-    // previously fire-and-forget, so client-side navigation could abort the
-    // request and viewed_by_creator would stay false — making the modal
-    // reappear on the next login.
     try {
       const token = await rawAuth.getValidAccessToken()
       if (token) {
@@ -90,7 +76,7 @@ export function UnseenSummaryModal() {
           headers: { Authorization: `Bearer ${token}` },
         })
       }
-    } catch { /* the summary page will retry the same call */ }
+    } catch { /* noop */ }
 
     router.push(`/summary/${summaryId}`)
   }
@@ -102,9 +88,6 @@ export function UnseenSummaryModal() {
     setIsVisible(false)
     setTimeout(() => setUnseenSummary(null), 350)
 
-    // Don't mark as viewed on dismiss — the user asked to see it later in
-    // My Threads, so it stays unseen server-side. We only suppress the modal
-    // on this device.
     addDismissed(summaryId)
   }
 
