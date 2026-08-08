@@ -3,7 +3,7 @@
  * Replaces @supabase/supabase-js database methods with direct PostgREST calls
  */
 
-import { getSession } from './raw-auth';
+import { getValidAccessToken } from './raw-auth';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -24,14 +24,20 @@ interface DbResponse<T> {
 }
 
 /**
- * Get authorization headers
+ * Get authorization headers, refreshing the access token first if it's expired.
+ *
+ * This is async on purpose. It used to read `getSession()` synchronously, which
+ * returns null for an expired session — so the Authorization header silently
+ * fell back to the anon key. Requests then ran as ANONYMOUS instead of failing,
+ * and RLS returned empty result sets that looked like missing data rather than
+ * an expired login. getValidAccessToken() refreshes instead.
  */
-function getHeaders(): Record<string, string> {
-  const session = getSession();
-  
+async function getHeaders(): Promise<Record<string, string>> {
+  const token = await getValidAccessToken();
+
   return {
     'apikey': SUPABASE_ANON_KEY,
-    'Authorization': `Bearer ${session?.access_token || SUPABASE_ANON_KEY}`,
+    'Authorization': `Bearer ${token || SUPABASE_ANON_KEY}`,
     'Content-Type': 'application/json',
   };
 }
@@ -87,7 +93,7 @@ export async function select<T = any>(
     const queryString = buildQueryString(options);
     const url = `${SUPABASE_URL}/rest/v1/${table}${queryString ? `?${queryString}` : ''}`;
     
-    const headers = getHeaders();
+    const headers = await getHeaders();
     if (!options.single) {
       headers['Prefer'] = 'return=representation';
     }
@@ -134,8 +140,8 @@ export async function insert<T = any>(
 ): Promise<DbResponse<T>> {
   try {
     const url = `${SUPABASE_URL}/rest/v1/${table}`;
-    const headers = getHeaders();
-    
+    const headers = await getHeaders();
+
     if (options.returning !== false) {
       headers['Prefer'] = 'return=representation';
     }
@@ -172,8 +178,8 @@ export async function update<T = any>(
   try {
     const queryString = buildQueryString({ filters });
     const url = `${SUPABASE_URL}/rest/v1/${table}?${queryString}`;
-    const headers = getHeaders();
-    
+    const headers = await getHeaders();
+
     if (options.returning !== false) {
       headers['Prefer'] = 'return=representation';
     }
@@ -211,7 +217,7 @@ export async function remove(
 
     const res = await fetch(url, {
       method: 'DELETE',
-      headers: getHeaders(),
+      headers: await getHeaders(),
     });
 
     if (!res.ok) {
@@ -239,7 +245,7 @@ export async function rpc<T = any>(
 
     const res = await fetch(url, {
       method: 'POST',
-      headers: getHeaders(),
+      headers: await getHeaders(),
       body: JSON.stringify(params),
     });
 
