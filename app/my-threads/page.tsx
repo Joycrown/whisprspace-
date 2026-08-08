@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Crown, Settings, Users, MessageCircle, Calendar, TrendingUp, Globe, Lock, X, Loader2 } from 'lucide-react';
+import { Crown, Settings, Users, MessageCircle, Calendar, TrendingUp, Globe, Lock, X, Loader2, Mail } from 'lucide-react';
 import { useThreadStore } from '@/store/threadStore';
 import { useUserStore } from '@/store/userStore';
 import { Thread } from '@/types';
@@ -496,6 +496,15 @@ export default function MyThreadsPage() {
                           >
                             {thread.title}
                           </button>
+                          {thread.hasUnread && (
+                            <div
+                              className="flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 rounded-full flex-shrink-0"
+                              title="New messages since you last opened this thread"
+                            >
+                              <Mail className="w-3 h-3 text-purple-400" />
+                              <span className="text-xs text-purple-400 font-semibold">New</span>
+                            </div>
+                          )}
                           {thread.isPremium && (
                             <div className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-purple-600 to-orange-500 rounded-full flex-shrink-0">
                               <Crown className="w-3 h-3 text-white" />
