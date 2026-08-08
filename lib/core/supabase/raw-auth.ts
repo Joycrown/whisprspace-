@@ -142,21 +142,10 @@ export function getStoredSession(): Session | null {
   return readStoredSession();
 }
 
-/**
- * Get an access token that is guaranteed not to be expired, refreshing first
- * if necessary.
- *
- * Use this instead of `getStoredSession()?.access_token` for any authenticated
- * fetch — getStoredSession deliberately returns EXPIRED sessions (it exists for
- * refresh flows), so calling it directly sends dead tokens and gets back a 401.
- *
- * Returns null only if there's no session at all or the refresh genuinely failed.
- */
 export async function getValidAccessToken(): Promise<string | null> {
   const session = readStoredSession();
   if (!session?.access_token) return null;
 
-  // Refresh slightly ahead of true expiry so a token can't die in flight.
   const EXPIRY_MARGIN_SECONDS = 60;
   const expiresSoon =
     !!session.expires_at &&
@@ -472,7 +461,6 @@ export function refreshToken(): Promise<AuthResponse> {
   return _refreshInProgress;
 }
 
-/** Retry schedule (ms) for refreshes that failed for transient reasons. */
 const REFRESH_RETRY_DELAYS = [1000, 3000, 8000];
 let retryTimer: NodeJS.Timeout | null = null;
 
@@ -483,14 +471,6 @@ function cancelRefreshRetry() {
   }
 }
 
-/**
- * Did the auth server explicitly reject the refresh token itself?
- *
- * Only these cases justify destroying the local session. Anything else
- * (offline, DNS failure, 5xx, timeout) is transient and MUST NOT sign the
- * user out — doing so wipes the refresh token from localStorage and makes a
- * recoverable blip permanent.
- */
 function isTerminalRefreshFailure(status: number | null, message: string): boolean {
   if (status === 400 || status === 401 || status === 403) return true;
 
@@ -508,7 +488,6 @@ async function _doRefresh(): Promise<AuthResponse> {
   const session = readStoredSession();
 
   if (!session?.refresh_token) {
-    // Nothing to refresh with — this is genuinely terminal.
     saveSession(null);
     emitAuthEvent('SIGNED_OUT', null);
     return { session: null, user: null, error: new Error('No refresh token available') };
@@ -558,9 +537,6 @@ async function _doRefresh(): Promise<AuthResponse> {
       return { session: null, user: null, error };
     }
 
-    // Transient (offline / 5xx / timeout): KEEP the session and retry in the
-    // background. The stored refresh token stays valid for up to 60 days, so
-    // there is no reason to log the user out over a network blip.
     console.warn('[RawAuth] Transient refresh failure, keeping session:', message);
     scheduleRefreshRetry(0);
 
@@ -568,12 +544,11 @@ async function _doRefresh(): Promise<AuthResponse> {
   }
 }
 
-/** Retry a transiently-failed refresh with backoff, then fall back to the timer. */
 function scheduleRefreshRetry(attempt: number) {
   cancelRefreshRetry();
 
   const delay = REFRESH_RETRY_DELAYS[attempt];
-  if (delay === undefined) return; // Exhausted — visibility/focus handlers will retry.
+  if (delay === undefined) return;
 
   retryTimer = setTimeout(async () => {
     const result = await refreshToken();
@@ -631,28 +606,17 @@ function cancelTokenRefresh() {
   }
 }
 
-/**
- * Re-arm the refresh cycle after the app returns to the foreground.
- *
- * A single in-memory setTimeout is not reliable on mobile: when the app is
- * backgrounded the timer is throttled or killed outright, so the scheduled
- * refresh simply never fires and the user comes back to a dead token. On every
- * resume we re-evaluate the stored session and either refresh immediately or
- * reschedule.
- */
 async function reconcileSessionOnResume() {
   const session = readStoredSession();
   if (!session?.refresh_token) return;
 
   const secondsUntilExpiry = (session.expires_at || 0) - Math.floor(Date.now() / 1000);
 
-  // Expired, or close enough that it would die mid-request.
   if (secondsUntilExpiry <= 60) {
     await refreshToken();
     return;
   }
 
-  // Still valid — make sure a timer actually exists for it.
   scheduleTokenRefresh(secondsUntilExpiry);
 }
 
@@ -682,8 +646,6 @@ if (typeof window !== 'undefined') {
     void reconcileSessionOnResume();
   });
 
-  // Coming back online is the natural moment to retry a refresh that failed
-  // while the device had no connection.
   window.addEventListener('online', () => {
     void reconcileSessionOnResume();
   });

@@ -23,15 +23,6 @@ interface DbResponse<T> {
   count?: number;
 }
 
-/**
- * Get authorization headers, refreshing the access token first if it's expired.
- *
- * This is async on purpose. It used to read `getSession()` synchronously, which
- * returns null for an expired session — so the Authorization header silently
- * fell back to the anon key. Requests then ran as ANONYMOUS instead of failing,
- * and RLS returned empty result sets that looked like missing data rather than
- * an expired login. getValidAccessToken() refreshes instead.
- */
 async function getHeaders(): Promise<Record<string, string>> {
   const token = await getValidAccessToken();
 

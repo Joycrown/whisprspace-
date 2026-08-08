@@ -37,9 +37,6 @@ export default function SummaryPage() {
 
     const fetchSummary = async () => {
       try {
-        // Must be a VALID token — getStoredSession() returns expired sessions,
-        // which 401'd here and showed "This summary doesn't exist" while also
-        // leaving viewed_by_creator = false (so the modal kept reappearing).
         const token = await rawAuth.getValidAccessToken()
 
         if (!token) {

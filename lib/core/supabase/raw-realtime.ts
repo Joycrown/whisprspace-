@@ -3,7 +3,7 @@
  * Multiplexed version: Shares a single WebSocket across multiple channels
  */
 
-import { getSession } from './raw-auth';
+import { getValidAccessToken } from './raw-auth';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -60,17 +60,32 @@ class RealtimeSocket {
 
   private setupAuthListener() {
     if (typeof window === 'undefined') return;
-    
+
     import('./raw-auth').then(({ onAuthStateChange }) => {
-      onAuthStateChange(() => {
+      onAuthStateChange((event, session) => {
+        if (event === 'TOKEN_REFRESHED' && session?.access_token) {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.updateAccessToken(session.access_token);
+            return;
+          }
+        }
 
         this.disconnect();
-        // The next join will trigger a reconnect with the new token
-        // OR we can trigger it immediately if we have active channels
         if (this.channels.size > 0) {
           this.shouldRejoinOnConnect = true;
           this.connect().catch(() => {});
         }
+      });
+    });
+  }
+
+  private updateAccessToken(accessToken: string) {
+    this.channels.forEach((channel) => {
+      this.send({
+        topic: channel.topic,
+        event: 'access_token',
+        payload: { access_token: accessToken },
+        ref: this.nextRef(),
       });
     });
   }
@@ -96,18 +111,17 @@ class RealtimeSocket {
     }
   }
 
-  private getUrl(): string {
+  private async getUrl(): Promise<string> {
     const wsUrl = SUPABASE_URL
       .replace('https://', 'wss://')
       .replace('http://', 'ws://')
       .replace(/\/$/, '');
-    
-    const session = getSession();
+
+    const accessToken = await getValidAccessToken();
     const socketUrl = `${wsUrl}/realtime/v1/websocket?apikey=${encodeURIComponent(SUPABASE_ANON_KEY)}&vsn=2.0.0`;
-    
-    // Supabase Realtime v2 expects 'access_token' for the initial connection params
-    return session?.access_token 
-      ? `${socketUrl}&access_token=${encodeURIComponent(session.access_token)}`
+
+    return accessToken
+      ? `${socketUrl}&access_token=${encodeURIComponent(accessToken)}`
       : socketUrl;
   }
 
@@ -116,9 +130,11 @@ class RealtimeSocket {
     if (this.connectPromise) return this.connectPromise;
 
     this.isConnecting = true;
-    this.connectPromise = new Promise((resolve, reject) => {
+    this.connectPromise = (async () => {
+      const finalUrl = await this.getUrl();
+
+      return new Promise<void>((resolve, reject) => {
       try {
-        const finalUrl = this.getUrl();
         let settled = false;
 
         const settle = (fn: (value?: any) => void, value?: any) => {
@@ -169,6 +185,11 @@ class RealtimeSocket {
         this.connectPromise = null;
         reject(error);
       }
+      });
+    })().catch((error) => {
+      this.isConnecting = false;
+      this.connectPromise = null;
+      throw error;
     });
 
     return this.connectPromise as Promise<void>;
@@ -296,10 +317,11 @@ class RealtimeSocket {
 
   async joinChannel(channel: RealtimeChannel): Promise<void> {
     await this.connect();
-    
+
+    const accessToken = await getValidAccessToken();
+
     return new Promise((resolve, reject) => {
       const ref = this.nextRef();
-      const session = getSession();
 
       const timeout = setTimeout(() => {
         this.pendingJoins.delete(ref);
@@ -323,7 +345,7 @@ class RealtimeSocket {
         event: 'phx_join',
         payload: {
           ...channel.getConfig(),
-          access_token: session?.access_token
+          access_token: accessToken
         },
         ref
       });
