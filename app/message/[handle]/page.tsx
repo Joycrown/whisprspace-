@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import { createClient } from '@/lib/core/supabase/server';
 import { siteConfig } from '@/lib/seo';
+import { escapeLikePattern } from '@/lib/utils/username-validation';
 import MessageDrop from './components/MessageDrop';
 
 interface MessageLinkPageProps {
@@ -19,7 +20,7 @@ async function resolveUser(handle: string) {
   const { data: byUsername } = await supabase
     .from('users')
     .select('id, username, anonymous_id')
-    .ilike('username', normalizedHandle)
+    .ilike('username', escapeLikePattern(normalizedHandle))
     .single();
 
   if (byUsername) return byUsername;

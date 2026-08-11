@@ -114,7 +114,7 @@ function CreatePanel({ onCreated }: { onCreated: (result: CreateResult) => void 
           <input
             type="text"
             value={handle}
-            onChange={e => setHandle(e.target.value.replace(/[^a-zA-Z0-9-]/g, ''))}
+            onChange={e => setHandle(e.target.value.replace(/[/\\?#&%:@<>"{}|^`[\]]/g, ''))}
             placeholder="auto-generate"
             maxLength={30}
             autoCapitalize="none"

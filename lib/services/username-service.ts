@@ -4,7 +4,7 @@
  */
 
 import * as rawDb from '@/lib/core/supabase/raw-db';
-import { validateUsername } from '../utils/username-validation';
+import { validateUsername, escapeLikePattern } from '../utils/username-validation';
 import {
   sanitizeSingleLineInput,
   sanitizeUuid,
@@ -74,7 +74,7 @@ async function checkUsernameAvailabilityFallback(
     let query = rawDb
       .from<{ id: string }>('users')
       .select('id')
-      .ilike('username', safeUsername)
+      .ilike('username', escapeLikePattern(safeUsername))
       .limit(1);
 
     if (safeExcludeUserId) {
@@ -210,7 +210,7 @@ export async function searchUsernames(
     const { data, error } = await rawDb
       .from<{ id: string; username: string; is_anonymous: boolean }>('users')
       .select('id, username, is_anonymous')
-      .ilike('username', `%${safeQuery}%`)
+      .ilike('username', `%${escapeLikePattern(safeQuery)}%`)
       .limit(safeLimit)
       .execute();
 
