@@ -141,10 +141,46 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Flip account_state → active ─────────────────────────────────────────────
-  await supabaseAdmin
+  const claimUpdate: {
+    account_state: string
+    is_anonymous: boolean
+    last_active_at: string
+    updated_at: string
+    email?: string
+  } = {
+    account_state: 'active',
+    is_anonymous: false,
+    last_active_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+  if (email && email.trim()) {
+    claimUpdate.email = email.trim().toLowerCase()
+  }
+
+  const { error: profileError } = await supabaseAdmin
     .from('users')
-    .update({ account_state: 'active' })
+    .update(claimUpdate)
     .eq('id', userId)
+
+  if (profileError) {
+    console.error('[Claim] Profile update failed:', profileError)
+
+    // users.email is UNIQUE — a collision must not leave the account stuck as
+    // 'unclaimed', since the auth user already exists and the token is spent.
+    const { error: fallbackError } = await supabaseAdmin
+      .from('users')
+      .update({
+        account_state: 'active',
+        is_anonymous: false,
+        last_active_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId)
+
+    if (fallbackError) {
+      console.error('[Claim] Fallback profile update failed:', fallbackError)
+    }
+  }
 
   // ── Mint a session by signing in with the just-set password ────────────────
   // We know the password because we just received it in this request.

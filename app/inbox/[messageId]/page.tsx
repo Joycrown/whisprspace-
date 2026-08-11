@@ -6,8 +6,9 @@ import { createPortal } from 'react-dom';
 import { useRouter, useParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/react-query/queryKeys';
-import { ArrowLeft, Send, Loader2, Check, CheckCheck, Clock, Image as ImageIcon, X, Sparkles } from 'lucide-react';
-import { markConversationDelivered, markConversationReadWithReceipts, useConversationQuery, useMessagesQuery, useSendMessageMutation } from '@/lib/messaging';
+import { ArrowLeft, Send, Loader2, Check, CheckCheck, Clock, Image as ImageIcon, X, Sparkles, Trash2 } from 'lucide-react';
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal';
+import { markConversationDelivered, markConversationReadWithReceipts, useConversationQuery, useMessagesQuery, useSendMessageMutation, useDeleteMessageMutation } from '@/lib/messaging';
 import type { DirectMessage, MessageDeliveryReceipt, MessageReadReceipt } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
 import { uploadService } from '@/lib/utils/upload-service';
@@ -28,10 +29,14 @@ export default function ConversationPage() {
   const { messages, isLoading: isMessagesLoading, error: messagesError } =
     useMessagesQuery(conversationId, { enabled: isAuthed && !!conversationId });
   const sendMessageMutation = useSendMessageMutation(conversationId);
+  const deleteMessageMutation = useDeleteMessageMutation();
 
   const isLoading = !sessionValidated || isConversationLoading || isMessagesLoading;
   const error = conversationError || messagesError;
   const orderedMessages = [...messages].reverse();
+
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [deleteModalMessageId, setDeleteModalMessageId] = useState<string | null>(null);
 
   const [messageText, setMessageText] = useState('');
   const [preparingThread, setPreparingThread] = useState(false);
@@ -529,75 +534,97 @@ export default function ConversationPage() {
             <p>No messages yet. Start the conversation!</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4" onClick={() => setSelectedMessageId(null)}>
             {orderedMessages.map((msg) => {
               const isMyMessage = msg.senderId === session.user?.id;
               const status = getMessageStatus(msg);
+              const isSelected = selectedMessageId === msg.id;
 
               return (
                 <div
                   key={msg.id}
                   className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div
-                    className={`max-w-[75%] min-w-0 rounded-lg p-3 ${isMyMessage
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-800 text-gray-200'
-                      }`}
-                  >
-                    {msg.isDeleted ? (
-                      <p className="text-sm italic opacity-60">Message deleted</p>
-                    ) : msg.messageType === 'image' && msg.attachmentUrl ? (
-                      <div className="space-y-2">
-                        <button
-                          type="button"
-                          className="block max-w-[240px] cursor-zoom-in rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-purple-400/60"
-                          onClick={() => setActiveImage({ url: msg.attachmentUrl, name: 'Image' })}
-                          aria-label="Open image preview"
-                        >
-                          <img
-                            src={msg.attachmentUrl}
-                            alt="Message attachment"
-                            className="w-full h-auto max-h-64 object-cover"
-                            draggable={false}
-                            onContextMenu={(event) => event.preventDefault()}
-                          />
-                        </button>
-                        {msg.content?.trim() && (
+                  <div className={`relative flex flex-col ${isMyMessage ? 'items-end' : 'items-start'}`}>
+                    <div
+                      className={`max-w-[75%] min-w-0 rounded-lg p-3 ${isMyMessage
+                        ? 'bg-purple-600 text-white cursor-pointer'
+                        : 'bg-gray-800 text-gray-200'
+                        } ${isSelected ? 'ring-2 ring-red-400/60' : ''}`}
+                      onClick={e => {
+                        e.stopPropagation();
+                        if (!isMyMessage || msg.isDeleted) return;
+                        setSelectedMessageId(isSelected ? null : msg.id);
+                      }}
+                    >
+                      {msg.isDeleted ? (
+                        <p className="text-sm italic opacity-60">Message deleted</p>
+                      ) : msg.messageType === 'image' && msg.attachmentUrl ? (
+                        <div className="space-y-2">
+                          <button
+                            type="button"
+                            className="block max-w-[240px] cursor-zoom-in rounded-lg overflow-hidden focus:outline-none focus:ring-2 focus:ring-purple-400/60"
+                            onClick={() => setActiveImage({ url: msg.attachmentUrl, name: 'Image' })}
+                            aria-label="Open image preview"
+                          >
+                            <img
+                              src={msg.attachmentUrl}
+                              alt="Message attachment"
+                              className="w-full h-auto max-h-64 object-cover"
+                              draggable={false}
+                              onContextMenu={(event) => event.preventDefault()}
+                            />
+                          </button>
+                          {msg.content?.trim() && (
+                            <p className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere] leading-relaxed">
+                              {msg.content}
+                            </p>
+                          )}
+                          {msg.isEdited && (
+                            <p className="text-xs opacity-60">Edited</p>
+                          )}
+                        </div>
+                      ) : (
+                        <>
                           <p className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere] leading-relaxed">
                             {msg.content}
                           </p>
-                        )}
-                        {msg.isEdited && (
-                          <p className="text-xs opacity-60">Edited</p>
+                          {msg.isEdited && (
+                            <p className="text-xs opacity-60 mt-1">Edited</p>
+                          )}
+                        </>
+                      )}
+                      <div className="mt-1 flex items-center justify-between gap-2 text-xs opacity-70">
+                        <span>
+                          {new Date(msg.createdAt).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                        {status && (
+                          <span className="flex items-center gap-1">
+                            {status === 'Sending...' && <Clock className="w-3 h-3" />}
+                            {status === 'Sent' && <Check className="w-3 h-3" />}
+                            {status === 'Delivered' && <CheckCheck className="w-3 h-3" />}
+                            {status === 'Read' && <CheckCheck className="w-3 h-3 text-green-300" />}
+                          </span>
                         )}
                       </div>
-                    ) : (
-                      <>
-                        <p className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere] leading-relaxed">
-                          {msg.content}
-                        </p>
-                        {msg.isEdited && (
-                          <p className="text-xs opacity-60 mt-1">Edited</p>
-                        )}
-                      </>
-                    )}
-                    <div className="mt-1 flex items-center justify-between gap-2 text-xs opacity-70">
-                      <span>
-                        {new Date(msg.createdAt).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                      {status && (
-                        <span className="flex items-center gap-1">
-                          {status === 'Sending...' && <Clock className="w-3 h-3" />}
-                          {status === 'Sent' && <Check className="w-3 h-3" />}
-                          {status === 'Delivered' && <CheckCheck className="w-3 h-3" />}
-                          {status === 'Read' && <CheckCheck className="w-3 h-3 text-green-300" />}
-                        </span>
-                      )}
                     </div>
+
+                    {/* Delete action — appears below the message bubble when selected */}
+                    {isSelected && isMyMessage && !msg.isDeleted && (
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          setSelectedMessageId(null);
+                          setDeleteModalMessageId(msg.id);
+                        }}
+                        className="mt-1 flex items-center gap-1 text-xs text-red-400 hover:text-red-300 bg-gray-900/80 border border-red-500/30 rounded-lg px-2.5 py-1 transition-colors"
+                      >
+                        <Trash2 className="w-3 h-3" /> Delete message
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -712,6 +739,18 @@ export default function ConversationPage() {
         </div>,
         document.body
       )}
+
+      <DeleteConfirmModal
+        open={!!deleteModalMessageId}
+        title="Delete message?"
+        description="This will permanently delete your message. The other person will see 'Message deleted' in its place."
+        isDeleting={deleteMessageMutation.isPending}
+        onConfirm={() => {
+          if (deleteModalMessageId) deleteMessageMutation.mutate(deleteModalMessageId);
+          setDeleteModalMessageId(null);
+        }}
+        onCancel={() => setDeleteModalMessageId(null)}
+      />
     </div>
   );
 }
