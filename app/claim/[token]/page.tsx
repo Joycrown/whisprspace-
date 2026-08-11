@@ -4,7 +4,7 @@ import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  ShieldCheck, Eye, EyeOff, Copy, CheckCircle,
+  ShieldCheck, Eye, EyeOff, Copy, CheckCircle, Check,
   AlertCircle, Inbox, Share2, Lock, Loader2
 } from 'lucide-react'
 import * as rawAuth from '@/lib/core/supabase/raw-auth'
@@ -32,6 +32,8 @@ interface CompleteResult {
   email?: string | null
 }
 
+type EmailStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid'
+
 export default function ClaimPage({ params }: ClaimPageProps) {
   const { token } = use(params)
   const router = useRouter()
@@ -47,6 +49,7 @@ export default function ClaimPage({ params }: ClaimPageProps) {
   const [showConfirm, setShowConfirm] = useState(false)
   const [formError, setFormError] = useState('')
   const [copiedLink, setCopiedLink] = useState(false)
+  const [emailStatus, setEmailStatus] = useState<EmailStatus>('idle')
 
   // Validate token on mount
   useEffect(() => {
@@ -65,9 +68,53 @@ export default function ClaimPage({ params }: ClaimPageProps) {
       .catch(() => setStage('invalid'))
   }, [token])
 
+  useEffect(() => {
+    const trimmed = email.trim()
+
+    if (!trimmed) {
+      setEmailStatus('idle')
+      return
+    }
+
+    setEmailStatus('checking')
+    let cancelled = false
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/claim/check-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, email: trimmed }),
+        })
+        const data = await res.json()
+        if (cancelled) return
+
+        if (data.available) setEmailStatus('available')
+        else if (data.reason === 'invalid') setEmailStatus('invalid')
+        else setEmailStatus('taken')
+      } catch {
+        if (!cancelled) setEmailStatus('idle')
+      }
+    }, 500)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [email, token])
+
   const handleClaim = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError('')
+
+    if (email.trim() && emailStatus === 'taken') {
+      setFormError('That email is already in use. Try a different email, or leave it blank.')
+      return
+    }
+    if (email.trim() && emailStatus === 'invalid') {
+      setFormError('Please enter a valid email address.')
+      return
+    }
 
     if (password.length < 8) {
       setFormError('Password must be at least 8 characters.')
@@ -262,16 +309,43 @@ export default function ClaimPage({ params }: ClaimPageProps) {
                   <label className="text-xs text-gray-400 font-medium uppercase tracking-wide">
                     Email <span className="text-gray-600 normal-case font-normal">— for account recovery</span>
                   </label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="you@example.com"
-                    className="w-full bg-[#111] border border-gray-700 rounded-xl px-4 py-3 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-purple-500 transition-colors"
-                  />
-                  <p className="text-xs text-gray-600 leading-relaxed">
-                    If you lose access, we can&apos;t restore it without one.
-                  </p>
+                  <div className="relative">
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      placeholder="you@example.com"
+                      className={`w-full bg-[#111] border rounded-xl px-4 py-3 pr-10 text-white text-sm placeholder-gray-600 focus:outline-none transition-colors ${
+                        emailStatus === 'taken' || emailStatus === 'invalid'
+                          ? 'border-red-500/60 focus:border-red-500'
+                          : emailStatus === 'available'
+                            ? 'border-green-500/60 focus:border-green-500'
+                            : 'border-gray-700 focus:border-purple-500'
+                      }`}
+                    />
+                    {emailStatus === 'checking' && (
+                      <Loader2 className="w-4 h-4 text-gray-500 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
+                    )}
+                    {emailStatus === 'available' && (
+                      <Check className="w-4 h-4 text-green-500 absolute right-3 top-1/2 -translate-y-1/2" />
+                    )}
+                    {(emailStatus === 'taken' || emailStatus === 'invalid') && (
+                      <AlertCircle className="w-4 h-4 text-red-500 absolute right-3 top-1/2 -translate-y-1/2" />
+                    )}
+                  </div>
+                  {emailStatus === 'taken' ? (
+                    <p className="text-xs text-red-400 leading-relaxed">
+                      That email is already in use. Try another, or leave it blank.
+                    </p>
+                  ) : emailStatus === 'invalid' ? (
+                    <p className="text-xs text-red-400 leading-relaxed">
+                      That doesn&apos;t look like a valid email address.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-600 leading-relaxed">
+                      If you lose access, we can&apos;t restore it without one.
+                    </p>
+                  )}
                 </div>
 
                 {/* Error */}
@@ -285,7 +359,13 @@ export default function ClaimPage({ params }: ClaimPageProps) {
                 {/* Submit */}
                 <button
                   type="submit"
-                  disabled={!password || !confirmPassword}
+                  disabled={
+                    !password ||
+                    !confirmPassword ||
+                    emailStatus === 'checking' ||
+                    emailStatus === 'taken' ||
+                    emailStatus === 'invalid'
+                  }
                   className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
                 >
                   <Lock className="w-4 h-4" />

@@ -3,15 +3,17 @@
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { MessageCircle, Mail, MailOpen, Lock, Zap } from 'lucide-react';
+import { MessageCircle, Mail, MailOpen, Lock, Zap, Trash2 } from 'lucide-react';
 import { FaShareAlt, FaCheck } from 'react-icons/fa';
 import { useConversationsQuery, Conversation, DirectMessage, markConversationReadWithReceipts } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
+import * as rawAuth from '@/lib/core/supabase/raw-auth';
 import AppLoadingState from '@/components/ui/AppLoadingState';
 import MessageModal from '@/components/features/inbox/MessageModal';
 import { ShareDropdown } from '@/components/features/inbox/ShareDropdown';
 import UserShareCard from '@/components/features/inbox/UserShareCard';
 import { useInboxShare } from '@/lib/hooks/useInboxShare';
+import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal';
 
 type TabType = 'all' | 'unread';
 
@@ -93,6 +95,20 @@ function InboxPageContent() {
     searchParams.get('conversationId') ||
     searchParams.get('conversation_id') ||
     null;
+
+  const [deleteModalId, setDeleteModalId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteConversation = useCallback(async () => {
+    if (!deleteModalId) return;
+    setDeletingId(deleteModalId);
+    const token = rawAuth.getSession()?.access_token;
+    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+    await fetch(`/api/inbox/conversations/${deleteModalId}`, { method: 'DELETE', headers });
+    setDeletingId(null);
+    setDeleteModalId(null);
+    refetchConversations();
+  }, [deleteModalId, refetchConversations]);
 
   const handleShareButtonClick = () => {
     if (shareButtonRef.current) {
@@ -437,7 +453,7 @@ function InboxPageContent() {
                         <div
                           key={conversation.id}
                           onClick={() => handleConversationClick(conversation)}
-                          className={`bg-gray-800 border rounded-xl p-3 md:p-4 cursor-pointer transition-all hover:border-purple-500/50 active:scale-[0.98] min-h-[72px] ${hasUnread
+                          className={`group bg-gray-800 border rounded-xl p-3 md:p-4 cursor-pointer transition-all hover:border-purple-500/50 active:scale-[0.98] min-h-[72px] ${hasUnread
                             ? 'border-orange-500/50 bg-orange-500/5'
                             : 'border-gray-700'
                             }`}
@@ -464,6 +480,14 @@ function InboxPageContent() {
                               <span className="text-[10px] md:text-xs text-gray-500">
                                 {formatTimestamp(getConversationTimestamp(conversation))}
                               </span>
+                              <button
+                                onClick={e => { e.stopPropagation(); setDeleteModalId(conversation.id); }}
+                                disabled={deletingId === conversation.id}
+                                className="p-1 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 text-gray-500 hover:text-red-400 hover:bg-red-500/10"
+                                title="Delete conversation"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
                           {conversation.lastMessage && (
@@ -511,7 +535,7 @@ function InboxPageContent() {
                         <div
                           key={conversation.id}
                           onClick={() => handleConversationClick(conversation)}
-                          className={`bg-gray-900/60 border rounded-xl p-3 md:p-4 cursor-pointer transition-all hover:border-purple-500/50 active:scale-[0.98] min-h-[72px] ${hasUnread
+                          className={`group bg-gray-900/60 border rounded-xl p-3 md:p-4 cursor-pointer transition-all hover:border-purple-500/50 active:scale-[0.98] min-h-[72px] ${hasUnread
                             ? 'border-purple-500/50'
                             : 'border-gray-700'
                             }`}
@@ -536,6 +560,14 @@ function InboxPageContent() {
                               <span className="text-[10px] md:text-xs text-gray-500">
                                 {formatTimestamp(getConversationTimestamp(conversation))}
                               </span>
+                              <button
+                                onClick={e => { e.stopPropagation(); setDeleteModalId(conversation.id); }}
+                                disabled={deletingId === conversation.id}
+                                className="p-1 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 text-gray-500 hover:text-red-400 hover:bg-red-500/10"
+                                title="Delete message"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
                           {conversation.lastMessage && (
@@ -577,6 +609,15 @@ function InboxPageContent() {
         onClose={handleCloseModal}
         message={modalMessage || undefined}
         conversation={selectedConversation || undefined}
+      />
+
+      <DeleteConfirmModal
+        open={!!deleteModalId}
+        title="Delete conversation?"
+        description="This will permanently delete the conversation and all its messages. This cannot be undone."
+        isDeleting={!!deletingId}
+        onConfirm={handleDeleteConversation}
+        onCancel={() => setDeleteModalId(null)}
       />
     </div >
   );
