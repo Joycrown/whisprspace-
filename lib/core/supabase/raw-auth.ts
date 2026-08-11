@@ -154,7 +154,9 @@ export async function getValidAccessToken(): Promise<string | null> {
   if (!expiresSoon) return session.access_token;
 
   const refreshed = await refreshToken();
-  return refreshed.session?.access_token ?? null;
+  if (refreshed.session?.access_token) return refreshed.session.access_token;
+
+  return readStoredSession()?.access_token ?? null;
 }
 
 /**
