@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
 
   // Resolve handle
   const handle = body.handle
-    ? sanitizeSingleLineInput(body.handle, { maxLength: 30 }).toLowerCase().replace(/[^a-z0-9-]/g, '')
+    ? sanitizeSingleLineInput(body.handle, { maxLength: 30 }).replace(/[^a-zA-Z0-9-]/g, '')
     : generatePseudonym()
 
   if (!handle || handle.length < 3) {
