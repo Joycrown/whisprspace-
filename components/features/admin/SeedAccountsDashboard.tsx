@@ -117,6 +117,9 @@ function CreatePanel({ onCreated }: { onCreated: (result: CreateResult) => void 
             onChange={e => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
             placeholder="auto-generate"
             maxLength={30}
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             className="w-full h-10 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg pl-7 pr-4 text-sm text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-purple-500 transition-colors"
           />
         </div>
@@ -317,7 +320,7 @@ function AccountRow({
       {/* Row header */}
       <div
         className="flex items-center gap-3 px-4 py-3.5 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-750 cursor-pointer transition-colors"
-        onClick={() => !isClaimed && setExpanded(v => !v)}
+        onClick={() => setExpanded(v => !v)}
       >
         {/* Avatar */}
         <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
@@ -390,17 +393,15 @@ function AccountRow({
             </>
           )}
 
-          {!isClaimed && (
-            <button className="p-1.5 rounded-lg text-gray-400 transition-colors">
-              {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-            </button>
-          )}
+          <button className="p-1.5 rounded-lg text-gray-400 transition-colors" onClick={e => { e.stopPropagation(); setExpanded(v => !v) }}>
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
         </div>
       </div>
 
-      {/* Expanded — regenerated result */}
+      {/* Expanded panel */}
       <AnimatePresence>
-        {expanded && regenResult && (
+        {expanded && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -408,8 +409,41 @@ function AccountRow({
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="p-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
-              <ResultCard result={regenResult} onClose={() => setExpanded(false)} />
+            <div className="p-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 space-y-3">
+              {regenResult ? (
+                <ResultCard result={regenResult} onClose={() => { setRegenResult(null); setExpanded(false) }} />
+              ) : (
+                <>
+                  {/* Inbox link — always available */}
+                  <div className="bg-gray-900/60 rounded-lg border border-gray-700/50 p-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                        <Inbox className="w-3.5 h-3.5" /> Inbox link (public)
+                      </p>
+                      <CopyButton text={account.inboxUrl} label="Copy" />
+                    </div>
+                    <p className="text-xs text-gray-300 font-mono break-all leading-relaxed">{account.inboxUrl}</p>
+                  </div>
+
+                  {/* Claimed — show claim date */}
+                  {isClaimed && (
+                    <div className="flex items-center gap-2 text-xs text-green-400 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
+                      <UserCheck className="w-3.5 h-3.5 flex-shrink-0" />
+                      Account claimed on {formatDate(account.claimedAt)}
+                    </div>
+                  )}
+
+                  {/* Not claimed — show regen prompt */}
+                  {!isClaimed && (
+                    <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-800/60 border border-gray-700/50 rounded-lg px-3 py-2">
+                      <Link2 className="w-3.5 h-3.5 flex-shrink-0 text-amber-400" />
+                      {isExpired
+                        ? 'Claim link has expired — regenerate to issue a new one.'
+                        : 'Claim link was issued at account creation. Regenerate to get a fresh copy.'}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </motion.div>
         )}
@@ -424,7 +458,7 @@ export default function SeedAccountsDashboard() {
   const [accounts, setAccounts] = useState<SeedAccount[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [latestResult, setLatestResult] = useState<CreateResult | null>(null)
-  const [filter, setFilter] = useState<'all' | 'pending' | 'claimed'>('all')
+  const [filter, setFilter] = useState<'all' | 'pending' | 'claimed' | 'expired'>('all')
 
   const fetchAccounts = useCallback(async () => {
     const res = await fetch('/api/admin/seed-accounts', { headers: getAuthHeaders() })
@@ -464,23 +498,27 @@ export default function SeedAccountsDashboard() {
   }
 
   const filtered = accounts.filter(a => {
-    if (filter === 'pending') return !a.claimedAt
+    const isExpiredAccount = !a.claimedAt && a.expiresAt !== null && new Date(a.expiresAt).getTime() <= Date.now()
+    if (filter === 'pending') return !a.claimedAt && !isExpiredAccount
     if (filter === 'claimed') return !!a.claimedAt
+    if (filter === 'expired') return isExpiredAccount
     return true
   })
 
-  const pendingCount = accounts.filter(a => !a.claimedAt).length
   const claimedCount = accounts.filter(a => !!a.claimedAt).length
+  const expiredCount = accounts.filter(a => !a.claimedAt && a.expiresAt !== null && new Date(a.expiresAt).getTime() <= Date.now()).length
+  const pendingCount = accounts.filter(a => !a.claimedAt && (a.expiresAt === null || new Date(a.expiresAt).getTime() > Date.now())).length
 
   return (
     <div className="space-y-6">
 
       {/* Stats row */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
           { label: 'Total seeds', value: accounts.length, icon: UserCheck, color: 'text-purple-600 dark:text-purple-400', bg: 'bg-purple-50 dark:bg-purple-900/20' },
           { label: 'Pending claim', value: pendingCount, icon: Clock, color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-50 dark:bg-amber-900/20' },
           { label: 'Claimed', value: claimedCount, icon: CheckCircle, color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20' },
+          { label: 'Expired', value: expiredCount, icon: AlertCircle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20' },
         ].map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 sm:p-5 flex sm:block items-center gap-3">
             <div className={`w-10 h-10 rounded-lg ${bg} flex items-center justify-center sm:mb-3 flex-shrink-0`}>
@@ -510,7 +548,7 @@ export default function SeedAccountsDashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <h3 className="text-base font-semibold text-gray-900 dark:text-white">Seed accounts</h3>
           <div className="flex items-center gap-1 bg-gray-100 dark:bg-gray-900 rounded-lg p-1 self-start sm:self-auto">
-            {(['all', 'pending', 'claimed'] as const).map(f => (
+            {(['all', 'pending', 'claimed', 'expired'] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
