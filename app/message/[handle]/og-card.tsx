@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og'
+import { escapeLikePattern } from '@/lib/utils/username-validation'
 
 export const OG_SIZE = { width: 1200, height: 630 }
 
@@ -17,7 +18,7 @@ export async function resolveDisplayName(handle: string): Promise<string> {
 
   try {
     const byUsernameRes = await fetch(
-      `${supabaseUrl}/rest/v1/users?select=username,anonymous_id&username=ilike.${encodeURIComponent(normalized)}&limit=1`,
+      `${supabaseUrl}/rest/v1/users?select=username,anonymous_id&username=ilike.${encodeURIComponent(escapeLikePattern(normalized))}&limit=1`,
       { headers }
     )
     if (byUsernameRes.ok) {
