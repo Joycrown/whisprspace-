@@ -6,6 +6,27 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useUserStore } from '@/store/userStore'
 import * as rawAuth from '@/lib/core/supabase/raw-auth'
 
+const DISMISSED_KEY = 'whispr_dismissed_summaries'
+
+function readDismissed(): string[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(DISMISSED_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function addDismissed(summaryId: string) {
+  if (typeof window === 'undefined') return
+  try {
+    const next = [summaryId, ...readDismissed().filter((id) => id !== summaryId)].slice(0, 50)
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify(next))
+  } catch { /* noop */ }
+}
+
 export function UnseenSummaryModal() {
   const router = useRouter()
   const { session, sessionValidated } = useUserStore()
@@ -18,47 +39,46 @@ export function UnseenSummaryModal() {
     if (!sessionValidated || !userId) return
 
     const checkForUnseen = async () => {
-      const storedSession = rawAuth.getStoredSession()
-      const token = storedSession?.access_token
+      const token = await rawAuth.getValidAccessToken()
+      if (!token) return
 
       const res = await fetch('/api/summaries/unseen', {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: { Authorization: `Bearer ${token}` },
       })
 
       if (!res.ok) return
 
       const { summary } = await res.json()
-      if (summary?.id) {
-        // Don't re-show if user already dismissed it this session
-        const dismissed = sessionStorage.getItem('whispr_dismissed_summary')
-        if (dismissed === summary.id) return
+      if (!summary?.id) return
 
-        setUnseenSummary(summary)
-        setTimeout(() => setIsVisible(true), 900)
-      }
+      if (readDismissed().includes(summary.id)) return
+
+      setUnseenSummary(summary)
+      setTimeout(() => setIsVisible(true), 900)
     }
 
     checkForUnseen()
   }, [sessionValidated, userId])
 
-  const handleViewImpact = () => {
+  const handleViewImpact = async () => {
     if (!unseenSummary) return
     const summaryId = unseenSummary.id
 
-    // Dismiss immediately in local state
     setIsVisible(false)
     setUnseenSummary(null)
 
-    // Mark as viewed in DB right now — non-blocking.
-    // This ensures viewed_by_creator = true before any re-check runs,
-    // even if the summary page itself is slow or fails to update it.
-    const storedSession = rawAuth.getStoredSession()
-    const token = storedSession?.access_token
-    fetch(`/api/summaries/${summaryId}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }).catch(() => {})
+    addDismissed(summaryId)
 
-    setTimeout(() => router.push(`/summary/${summaryId}`), 350)
+    try {
+      const token = await rawAuth.getValidAccessToken()
+      if (token) {
+        await fetch(`/api/summaries/${summaryId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+      }
+    } catch { /* noop */ }
+
+    router.push(`/summary/${summaryId}`)
   }
 
   const handleDismiss = () => {
@@ -68,11 +88,7 @@ export function UnseenSummaryModal() {
     setIsVisible(false)
     setTimeout(() => setUnseenSummary(null), 350)
 
-    // Don't mark as viewed on dismiss — user said they want to see it later in My Threads.
-    // But store the ID in sessionStorage so it doesn't re-appear in the same browser session.
-    try {
-      sessionStorage.setItem('whispr_dismissed_summary', summaryId)
-    } catch { /* noop */ }
+    addDismissed(summaryId)
   }
 
   return (
@@ -86,7 +102,7 @@ export function UnseenSummaryModal() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4 }}
             className="fixed inset-0 z-[1200] flex items-center justify-center p-6"
-            style={{ backgroundColor: '#0a0a0a' }}
+            style={{ backgroundColor: 'var(--color-bg-primary)' }}
           >
             {/* Purple glow — decorative only, sits behind text */}
             <div

@@ -4,7 +4,7 @@
  * Replaces @supabase/supabase-js auth methods with direct API calls
  */
 import { hasRequiredLegalConsent, LEGAL_CONSENT_REQUIRED_ERROR } from '@/lib/legal/consent'
-import { clearCachedToken } from '@/lib/utils/auth-token-cache'
+import { clearCachedToken, setCachedAccessToken } from '@/lib/utils/auth-token-cache'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -140,6 +140,23 @@ const parseAuthErrorMessage = async (res: Response, fallback: string): Promise<s
  */
 export function getStoredSession(): Session | null {
   return readStoredSession();
+}
+
+export async function getValidAccessToken(): Promise<string | null> {
+  const session = readStoredSession();
+  if (!session?.access_token) return null;
+
+  const EXPIRY_MARGIN_SECONDS = 60;
+  const expiresSoon =
+    !!session.expires_at &&
+    Date.now() / 1000 > session.expires_at - EXPIRY_MARGIN_SECONDS;
+
+  if (!expiresSoon) return session.access_token;
+
+  const refreshed = await refreshToken();
+  if (refreshed.session?.access_token) return refreshed.session.access_token;
+
+  return readStoredSession()?.access_token ?? null;
 }
 
 /**
@@ -446,19 +463,48 @@ export function refreshToken(): Promise<AuthResponse> {
   return _refreshInProgress;
 }
 
+const REFRESH_RETRY_DELAYS = [1000, 3000, 8000];
+let retryTimer: NodeJS.Timeout | null = null;
+
+function cancelRefreshRetry() {
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
+}
+
+function isTerminalRefreshFailure(status: number | null, message: string): boolean {
+  if (status === 400 || status === 401 || status === 403) return true;
+
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes('invalid_grant') ||
+    normalized.includes('invalid refresh token') ||
+    normalized.includes('refresh token not found') ||
+    normalized.includes('already used') ||
+    normalized.includes('revoked')
+  );
+}
+
 async function _doRefresh(): Promise<AuthResponse> {
+  const session = readStoredSession();
+
+  if (!session?.refresh_token) {
+    saveSession(null);
+    emitAuthEvent('SIGNED_OUT', null);
+    return { session: null, user: null, error: new Error('No refresh token available') };
+  }
+
+  let status: number | null = null;
+
   try {
-    const session = readStoredSession();
-
-    if (!session?.refresh_token) {
-      throw new Error('No refresh token available');
-    }
-
     const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ refresh_token: session.refresh_token }),
     });
+
+    status = res.status;
 
     if (!res.ok) {
       const errorMessage = await parseAuthErrorMessage(res, 'Token refresh failed');
@@ -474,17 +520,44 @@ async function _doRefresh(): Promise<AuthResponse> {
       user: data.user,
     };
 
+    cancelRefreshRetry();
     saveSession(newSession);
+    setCachedAccessToken(newSession.access_token);
     emitAuthEvent('TOKEN_REFRESHED', newSession);
     scheduleTokenRefresh(newSession.expires_in);
 
     return { session: newSession, user: newSession.user, error: null };
   } catch (error: any) {
-    console.error('[RawAuth] Token refresh error:', error);
-    saveSession(null);
-    emitAuthEvent('SIGNED_OUT', null);
+    const message = String(error?.message || '');
+
+    if (isTerminalRefreshFailure(status, message)) {
+      console.error('[RawAuth] Refresh token rejected, signing out:', message);
+      cancelRefreshRetry();
+      saveSession(null);
+      clearCachedToken();
+      emitAuthEvent('SIGNED_OUT', null);
+      return { session: null, user: null, error };
+    }
+
+    console.warn('[RawAuth] Transient refresh failure, keeping session:', message);
+    scheduleRefreshRetry(0);
+
     return { session: null, user: null, error };
   }
+}
+
+function scheduleRefreshRetry(attempt: number) {
+  cancelRefreshRetry();
+
+  const delay = REFRESH_RETRY_DELAYS[attempt];
+  if (delay === undefined) return;
+
+  retryTimer = setTimeout(async () => {
+    const result = await refreshToken();
+    if (!result.session && readStoredSession()) {
+      scheduleRefreshRetry(attempt + 1);
+    }
+  }, delay);
 }
 
 // Auth event listeners
@@ -535,6 +608,20 @@ function cancelTokenRefresh() {
   }
 }
 
+async function reconcileSessionOnResume() {
+  const session = readStoredSession();
+  if (!session?.refresh_token) return;
+
+  const secondsUntilExpiry = (session.expires_at || 0) - Math.floor(Date.now() / 1000);
+
+  if (secondsUntilExpiry <= 60) {
+    await refreshToken();
+    return;
+  }
+
+  scheduleTokenRefresh(secondsUntilExpiry);
+}
+
 // Initialize on module load — only schedule the refresh timer for non-expired
 // sessions. Expired sessions are handled exclusively by AuthProvider's
 // validateSessionFromBackend, which has proper retry and redirect logic.
@@ -546,8 +633,23 @@ if (typeof window !== 'undefined') {
     const timeUntilExpiry = session.expires_at - Math.floor(Date.now() / 1000);
     if (timeUntilExpiry > 0) {
       scheduleTokenRefresh(timeUntilExpiry);
+      setCachedAccessToken(session.access_token);
     }
     // Expired sessions: AuthProvider calls refreshToken() after mount.
   }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      void reconcileSessionOnResume();
+    }
+  });
+
+  window.addEventListener('focus', () => {
+    void reconcileSessionOnResume();
+  });
+
+  window.addEventListener('online', () => {
+    void reconcileSessionOnResume();
+  });
 }
 

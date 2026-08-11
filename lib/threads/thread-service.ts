@@ -53,7 +53,7 @@ export const fetchThreads = async (
     const queryFilters: Record<string, string> = {};
     
     // Select string
-    const selectStr = '*,thread_likes(user_id),creator:users!threads_creator_id_fkey(id,username,anonymous_id,is_premium,avatar_url),thread_participants(user_id)';
+    const selectStr = '*,thread_likes(user_id),creator:users!threads_creator_id_fkey(id,username,anonymous_id,is_premium,avatar_url),thread_participants(user_id,last_read_at)';
     
     // Deleted check
     queryFilters['deleted_at'] = 'is.null';
@@ -1187,6 +1187,17 @@ export const saveThread = async (
 /**
  * Join a thread
  */
+export const markThreadRead = async (threadId: string): Promise<void> => {
+  const safeThreadId = sanitizeUuid(threadId)
+  if (!safeThreadId) return
+
+  try {
+    await rawDb.rpc('mark_thread_read', { p_thread_id: safeThreadId })
+  } catch (error) {
+    console.warn('[ThreadService] Failed to mark thread read:', error)
+  }
+}
+
 export const joinThread = async (threadId: string, userId: string): Promise<boolean> => {
   const safeThreadId = sanitizeUuid(threadId)
   const safeUserId = sanitizeUuid(userId)
@@ -2001,10 +2012,21 @@ function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Se
   const hasLiked = userId
     ? dbThread.thread_likes?.some((like: any) => like.user_id === userId)
     : false
-  const hasJoined = userId
-    ? (dbThread.thread_participants || []).some((p: any) => (p.user_id || p.user?.id) === userId)
-    : false
+  const participantRow = userId
+    ? (dbThread.thread_participants || []).find((p: any) => (p.user_id || p.user?.id) === userId)
+    : null
+  const hasJoined = Boolean(participantRow)
   const hasAccess = userId ? (purchasedThreadIds?.has(dbThread.id) ?? false) : false
+
+  const lastMessageAt = dbThread.last_message_at || null
+  const lastReadAt = participantRow?.last_read_at || null
+  const isThreadAuthor = userId ? dbThread.creator_id === userId : false
+  const hasUnread = Boolean(
+    hasJoined &&
+    !isThreadAuthor &&
+    lastMessageAt &&
+    (!lastReadAt || new Date(lastMessageAt) > new Date(lastReadAt))
+  )
 
   // Handle creator data - might be joined or might need to be fetched separately
   const author = dbThread.creator ? {
@@ -2061,6 +2083,8 @@ function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Se
     hasLiked,
     hasJoined,
     hasAccess,
+    hasUnread,
+    lastMessageAt,
     isPremium: dbThread.is_premium || false,
     memberLimit: dbThread.member_limit ?? undefined,
     price: dbThread.price,

@@ -2,17 +2,21 @@ import { supabase } from '@/lib/core/supabase/client'
 import * as rawAuth from '@/lib/core/supabase/raw-auth'
 
 const getAuthHeaders = async () => {
+  const tokenFromRawAuth = await rawAuth.getValidAccessToken()
+
+  if (tokenFromRawAuth) {
+    return { Authorization: `Bearer ${tokenFromRawAuth}` }
+  }
+
   const { data } = await supabase.auth.getSession()
   const tokenFromSupabase = data?.session?.access_token
-  const tokenFromRawAuth = rawAuth.getSession()?.access_token
-  const token = tokenFromSupabase || tokenFromRawAuth
 
-  if (!token) {
+  if (!tokenFromSupabase) {
     return {}
   }
 
   return {
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${tokenFromSupabase}`,
   }
 }
 

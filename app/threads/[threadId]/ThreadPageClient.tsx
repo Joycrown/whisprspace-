@@ -7,7 +7,7 @@ import ThreadMessages from '@/components/features/threads/ThreadMessages';
 import ThreadInput from '@/components/features/threads/ThreadInput';
 import ThreadSidebar from '@/components/features/threads/ThreadSideBar';
 import ThreadHeader from '@/components/features/threads/ThreadHeader';
-import { useThreadQuery, useCreateThreadMessageMutation, useEditThreadMessageMutation, useLikeThreadMutation, useDeleteThreadMutation, useUpdateThreadMutation, useMessageReactionMutation, useVoteOnPollMutation, useJoinThreadMutation, useLeaveThreadMutation, useRemoveParticipantMutation, checkThreadBan, inviteUserToThread, reportThread } from '@/lib/threads';
+import { useThreadQuery, useCreateThreadMessageMutation, useEditThreadMessageMutation, useLikeThreadMutation, useDeleteThreadMutation, useUpdateThreadMutation, useMessageReactionMutation, useVoteOnPollMutation, useJoinThreadMutation, useLeaveThreadMutation, useRemoveParticipantMutation, checkThreadBan, inviteUserToThread, reportThread, markThreadRead } from '@/lib/threads';
 import { useUserStore } from '@/store/userStore';
 import { Message, Participant, ReactionType, ThreadPrivacy } from '@/types';
 import { SearchProvider } from '@/hooks/hooks/ThreadSearchHook';
@@ -203,6 +203,11 @@ const ThreadPage = () => {
     setPreviewError(null);
     setPreviewLoading(false);
   }, [threadId]);
+
+  useEffect(() => {
+    if (!threadId || !currentThread?.hasJoined) return;
+    void markThreadRead(threadId);
+  }, [threadId, currentThread?.hasJoined, messages.length]);
 
   useEffect(() => {
     if (!showPreviewModal) return;

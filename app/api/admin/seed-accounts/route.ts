@@ -57,7 +57,7 @@ function buildInboxUrl(handle: string): string {
   return `${getBaseUrl()}/message/${handle}`
 }
 
-// ─── GET — list unclaimed seed accounts ──────────────────────────────────────
+// ─── GET — list all seed accounts ────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   const adminId = await verifyAdmin(req)
@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
       id, username, anonymous_id, account_state, seeded_at, created_at,
       seed_claim_tokens ( expires_at, claimed_at, created_at )
     `)
-    .eq('account_state', 'unclaimed')
+    .not('seeded_at', 'is', null)
     .order('seeded_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
