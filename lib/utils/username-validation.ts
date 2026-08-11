@@ -1,24 +1,38 @@
 /**
  * Username Validation Utilities
- * 
+ *
  * Rules:
  * - 3-30 characters
- * - Letters (A-Z, a-z), numbers (0-9), spaces, underscores, hyphens, periods, apostrophes
- * - Optional: Unicode support for international names
+ * - Letters (any language), numbers, emoji, spaces, and symbols
+ * - Excluded: / \ ? # & % : @ < > " { } | ^ [ ] ` and control characters.
+ *   Usernames become public inbox URLs (/message/<username>) and are matched
+ *   with SQL ilike, so URL-structural characters and ilike wildcards are unsafe.
  * - No leading/trailing spaces
  * - No multiple consecutive spaces
  * - Case-insensitive uniqueness
  */
 
-// Username validation constants
+const ALLOWED_SYMBOLS = "._'\\-~!$+=*(),;";
+
 export const USERNAME_CONFIG = {
   MIN_LENGTH: 3,
   MAX_LENGTH: 30,
-  PATTERN: /^[a-zA-Z0-9\s._'-]+$/,
-  UNICODE_PATTERN: /^[\p{L}\p{N}\s._'-]+$/u, // Supports international characters
+  PATTERN: new RegExp(`^[a-zA-Z0-9\\s${ALLOWED_SYMBOLS}]+$`),
+  UNICODE_PATTERN: new RegExp(
+    `^[\\p{L}\\p{N}\\p{M}\\p{Extended_Pictographic}\\u200d\\ufe0f\\s${ALLOWED_SYMBOLS}]+$`,
+    'u'
+  ),
   COOLDOWN_DAYS_FREE: 30,
   COOLDOWN_DAYS_PREMIUM: 7,
 } as const;
+
+/**
+ * Escape SQL LIKE/ILIKE wildcards. Apply to every ilike lookup on username so a
+ * handle containing % or _ cannot match other accounts.
+ */
+export function escapeLikePattern(value: string): string {
+  return value.replace(/([\\%_])/g, '\\$1');
+}
 
 // Username validation result
 export interface UsernameValidation {
@@ -61,7 +75,7 @@ export function validateUsername(username: string, allowUnicode = true): Usernam
   if (!pattern.test(trimmed)) {
     return {
       isValid: false,
-      error: 'Username can only contain letters, numbers, spaces, underscores, hyphens, periods, and apostrophes',
+      error: 'Username cannot contain / \\ ? # & % : @ or < >',
     };
   }
 
@@ -148,10 +162,6 @@ export function getChangeCooldownMessage(
     return 'You can change your username now';
   }
 
-  const cooldownDays = isPremium
-    ? USERNAME_CONFIG.COOLDOWN_DAYS_PREMIUM
-    : USERNAME_CONFIG.COOLDOWN_DAYS_FREE;
-
   return `You can change your username again in ${daysRemaining} day${daysRemaining === 1 ? '' : 's'}.`;
 }
 
@@ -161,8 +171,14 @@ export function getChangeCooldownMessage(
 export function sanitizeUsername(username: string): string {
   return username
     .trim()
-    .replace(/\s{2,}/g, ' ') // Replace multiple spaces with single space
-    .replace(/[^\p{L}\p{N}\s._'-]/gu, ''); // Remove invalid characters
+    .replace(/\s{2,}/g, ' ')
+    .replace(
+      new RegExp(
+        `[^\\p{L}\\p{N}\\p{M}\\p{Extended_Pictographic}\\u200d\\ufe0f\\s${ALLOWED_SYMBOLS}]`,
+        'gu'
+      ),
+      ''
+    );
 }
 
 /**

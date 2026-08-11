@@ -3,7 +3,7 @@ import { createHash, randomBytes } from 'crypto'
 import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { resolveUserFromRequest } from '@/lib/security/request-auth'
 import { generatePseudonym } from '@/lib/utils/pseudonym-generator'
-import { validateUsername } from '@/lib/utils/username-validation'
+import { validateUsername, sanitizeUsername, escapeLikePattern } from '@/lib/utils/username-validation'
 import { sanitizeSingleLineInput } from '@/lib/security/input-sanitization'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
 
   // Resolve handle
   const handle = body.handle
-    ? sanitizeSingleLineInput(body.handle, { maxLength: 30 }).replace(/[^a-zA-Z0-9-]/g, '')
+    ? sanitizeUsername(sanitizeSingleLineInput(body.handle, { maxLength: 30 }))
     : generatePseudonym()
 
   if (!handle || handle.length < 3) {
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
 
   // Check handle availability (case-insensitive)
   const { data: existing } = await supabaseAdmin
-    .from('users').select('id').ilike('username', handle).single()
+    .from('users').select('id').ilike('username', escapeLikePattern(handle)).single()
   if (existing) {
     return NextResponse.json({ error: 'That handle is already taken' }, { status: 409 })
   }
