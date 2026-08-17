@@ -545,9 +545,9 @@ export default function ConversationPage() {
                   key={msg.id}
                   className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}
                 >
-                  <div className={`relative flex flex-col ${isMyMessage ? 'items-end' : 'items-start'}`}>
+                  <div className={`relative flex flex-col max-w-[75%] ${isMyMessage ? 'items-end' : 'items-start'}`}>
                     <div
-                      className={`max-w-[75%] min-w-0 rounded-lg p-3 ${isMyMessage
+                      className={`rounded-lg p-3 ${isMyMessage
                         ? 'bg-purple-600 text-white cursor-pointer'
                         : 'bg-gray-800 text-gray-200'
                         } ${isSelected ? 'ring-2 ring-red-400/60' : ''}`}
@@ -576,7 +576,7 @@ export default function ConversationPage() {
                             />
                           </button>
                           {msg.content?.trim() && (
-                            <p className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere] leading-relaxed">
+                            <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
                               {msg.content}
                             </p>
                           )}
@@ -586,7 +586,7 @@ export default function ConversationPage() {
                         </div>
                       ) : (
                         <>
-                          <p className="text-sm whitespace-pre-wrap [overflow-wrap:anywhere] leading-relaxed">
+                          <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
                             {msg.content}
                           </p>
                           {msg.isEdited && (

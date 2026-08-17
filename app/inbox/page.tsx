@@ -14,6 +14,7 @@ import { ShareDropdown } from '@/components/features/inbox/ShareDropdown';
 import UserShareCard from '@/components/features/inbox/UserShareCard';
 import { useInboxShare } from '@/lib/hooks/useInboxShare';
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal';
+import { SYSTEM_USER_ID } from '@/lib/welcome/templates';
 
 type TabType = 'all' | 'unread';
 
@@ -547,7 +548,9 @@ function InboxPageContent() {
                               </div>
                               <div className="min-w-0">
                                 <span className="text-sm md:text-base font-semibold text-white truncate block">
-                                  Anonymous Message
+                                  {conversation.lastMessage?.senderId === SYSTEM_USER_ID
+                                    ? 'WhisprSpace Team'
+                                    : 'Anonymous Message'}
                                 </span>
                                 <span className="inline-flex items-center gap-1 text-[10px] md:text-xs text-purple-300 mt-1">
                                   <span className="px-2 py-0.5 rounded-full bg-purple-500/15 border border-purple-500/30">
