@@ -263,7 +263,7 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
                     {isJoining ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
-                      <>{isCreator && thread.isPremium ? 'View' : 'Join'} <ArrowRight className="w-3 h-3" /></>
+                      <>{isCreator || thread.hasJoined ? 'Open' : 'Join'} <ArrowRight className="w-3 h-3" /></>
                     )}
                   </button>
                 )}
@@ -374,7 +374,13 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
                 style={{ background: 'linear-gradient(100deg, #8B5CF6, #F97316)' }}
               >
                 {isJoining && <Loader2 className="w-4 h-4 animate-spin" />}
-                {isThreadBlocked ? 'Thread blocked' : thread.isPremium && !canAccessPremium ? 'Unlock & join' : 'Join thread'}
+                {isThreadBlocked
+                  ? 'Thread blocked'
+                  : thread.isPremium && !canAccessPremium
+                    ? 'Unlock & join'
+                    : isCreator || thread.hasJoined
+                      ? 'Open thread'
+                      : 'Join thread'}
               </button>
             </div>
           </div>

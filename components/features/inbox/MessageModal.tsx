@@ -119,7 +119,7 @@ const MessageModal: React.FC<MessageModalProps> = ({
 
                 <div className="mt-2">
                   <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
-                    <p className="text-gray-200 whitespace-pre-wrap [overflow-wrap:anywhere] text-base leading-relaxed">
+                    <p className="text-gray-200 whitespace-pre-wrap break-words text-base leading-relaxed">
                       {message.content}
                     </p>
                   </div>
