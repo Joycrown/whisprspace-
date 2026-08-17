@@ -1,3 +1,5 @@
+export const SYSTEM_USER_ID = 'ffffffff-ffff-ffff-ffff-ffffffffffff'
+
 export function buildInboxMessageContent(inboxUrl: string, gettingStartedUrl: string): string {
   return `Welcome to WhisprSpace! 👋
 
