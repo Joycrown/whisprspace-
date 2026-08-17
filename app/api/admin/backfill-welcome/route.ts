@@ -39,28 +39,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
     }
 
-    // Find all conversations the bot is already in
-    const { data: existingConvParticipants } = await supabaseAdmin
-      .from('conversation_participants')
+    // Welcome conversations are one-time and have no bot participant, so find
+    // them by message sender rather than by participation.
+    const { data: alreadySentRows } = await supabaseAdmin
+      .from('direct_messages')
       .select('conversation_id')
-      .eq('user_id', SYSTEM_USER_ID)
+      .eq('sender_id', SYSTEM_USER_ID)
 
-    const botConversationIds = (existingConvParticipants ?? []).map((r) => r.conversation_id)
-
-    // Find which of those conversations already have a message from the bot
-    const { data: alreadySentRows } = botConversationIds.length
-      ? await supabaseAdmin
-          .from('direct_messages')
-          .select('conversation_id')
-          .eq('sender_id', SYSTEM_USER_ID)
-          .in('conversation_id', botConversationIds)
-      : { data: [] }
-
-    // Build a set of conversation IDs where welcome was already sent
     const alreadySentConvIds = new Set((alreadySentRows ?? []).map((r) => r.conversation_id))
 
-    // For each user in those conversations, record their user ID as already welcomed
-    const { data: alreadyWelcomedParticipants } = botConversationIds.length
+    const { data: alreadyWelcomedParticipants } = alreadySentConvIds.size
       ? await supabaseAdmin
           .from('conversation_participants')
           .select('conversation_id, user_id')
@@ -94,8 +82,8 @@ export async function POST(request: NextRequest) {
       if (!alreadyGotInbox) {
         // First time — create conversation and send inbox message
         const { data: conversationId, error: convError } = await supabaseAdmin.rpc(
-          'get_or_create_conversation',
-          { user1_id: SYSTEM_USER_ID, user2_id: user.id }
+          'create_one_time_conversation',
+          { sender_id: null, recipient_id: user.id }
         )
 
         if (convError || !conversationId) {
