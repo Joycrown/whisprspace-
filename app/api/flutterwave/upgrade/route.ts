@@ -14,8 +14,8 @@ const supabaseAdmin = createSupabaseAdminClient(
 )
 
 const PLAN_CONFIG = {
-  monthly: { amount: 1.5, label: 'Monthly Premium', period: 'month' },
-  annual: { amount: 13.5, label: 'Annual Premium', period: 'year' },
+  monthly: { amount: 2.5, label: 'Monthly Premium', period: 'month' },
+  annual: { amount: 22.5, label: 'Annual Premium', period: 'year' },
 } as const
 
 export async function POST(request: NextRequest) {

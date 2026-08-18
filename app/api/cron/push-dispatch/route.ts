@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
-import {
-  dispatchPushForNotification,
-  markNotificationPushAttempted,
-} from '@/lib/notifications/push-service'
+import { dispatchPushForNotification } from '@/lib/notifications/push-service'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
+
+const CONCURRENCY = 10
+const TIME_BUDGET_MS = 50_000
 
 const supabaseAdmin = createSupabaseAdminClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -54,37 +55,74 @@ export async function GET(request: NextRequest) {
   let delivered = 0
   let removedSubscriptions = 0
   let deferred = 0
+  let attempted = 0
+  let timedOut = false
 
-  for (const notification of notifications) {
-    try {
-      const result = await dispatchPushForNotification(notification)
-      const shouldDefer =
-        result.skipped && result.reason === 'VAPID keys are not configured'
+  const startedAt = Date.now()
+
+  for (let i = 0; i < notifications.length; i += CONCURRENCY) {
+    if (Date.now() - startedAt > TIME_BUDGET_MS) {
+      timedOut = true
+      break
+    }
+
+    const slice = notifications.slice(i, i + CONCURRENCY)
+    attempted += slice.length
+
+    const results = await Promise.allSettled(
+      slice.map(async (notification) => {
+        const result = await dispatchPushForNotification(notification)
+        const shouldDefer =
+          result.skipped && result.reason === 'VAPID keys are not configured'
+
+        return { notification, result, shouldDefer }
+      })
+    )
+
+    const toMark: string[] = []
+
+    for (const [index, settled] of results.entries()) {
+      if (settled.status === 'rejected') {
+        console.error(
+          `Failed to dispatch push for notification ${slice[index].id}:`,
+          settled.reason
+        )
+        continue
+      }
+
+      const { notification, result, shouldDefer } = settled.value
 
       if (shouldDefer) {
         deferred += 1
         continue
       }
 
-      await markNotificationPushAttempted(notification.id)
-
+      toMark.push(notification.id)
       processed += 1
       delivered += result.delivered
       removedSubscriptions += result.removed
-    } catch (error) {
-      console.error(
-        `Failed to dispatch push for notification ${notification.id}:`,
-        error
-      )
+    }
+
+    if (toMark.length > 0) {
+      const { error: markError } = await supabaseAdmin
+        .from('notifications')
+        .update({ push_sent_at: new Date().toISOString() })
+        .in('id', toMark)
+
+      if (markError) {
+        console.error('Failed to mark notifications as dispatched:', markError)
+      }
     }
   }
 
   return NextResponse.json({
     queued: notifications.length,
+    attempted,
     processed,
     delivered,
     removedSubscriptions,
     deferred,
+    timedOut,
   })
 }
 

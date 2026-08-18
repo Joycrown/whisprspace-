@@ -232,7 +232,7 @@ export default function PremiumThreadComposer({
                 </div>
                 <div className="flex items-start gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                   <Check className="text-green-500 flex-shrink-0 mt-0.5" size={14} />
-                  <span>Advanced analytics & creator badge</span>
+                  <span>Creator badge</span>
                 </div>
               </div>
 
