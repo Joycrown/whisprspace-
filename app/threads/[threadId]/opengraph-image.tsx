@@ -5,6 +5,7 @@ import { OG_SIZE, renderThreadOgCard } from './og-card'
 // (the Node route below) because WhatsApp needs an explicit Content-Length
 // which edge streaming doesn't provide.
 export const runtime = 'edge'
+export const revalidate = 3600
 export const alt = 'WhisprSpace Thread'
 export const size = OG_SIZE
 export const contentType = 'image/png'
