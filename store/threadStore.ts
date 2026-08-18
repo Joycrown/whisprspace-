@@ -43,7 +43,6 @@ export interface ThreadStore {
   reactToMessage: (messageId: string, reactionType: string) => Promise<void>;
   
   // Premium Features
-  saveThreadFromExpiration: (threadId: string) => Promise<boolean>;
   removeUserFromThread: (threadId: string, userId: string) => Promise<boolean>;
 }
 
@@ -434,43 +433,6 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
 
   clearError: () => {
     set({ error: null });
-  },
-
-  // Premium Features
-  saveThreadFromExpiration: async (threadId: string) => {
-    const { saveThreadFromExpiration } = await import('@/lib/utils/utils/helpers/threadHelpers');
-    const currentUser = useUserStore.getState().session.user;
-    const { currentThread, threads } = get();
-    
-    // Find the thread
-    const thread = currentThread?.id === threadId ? currentThread : threads.find(t => t.id === threadId);
-    
-    if (!thread) {
-      console.error('Thread not found');
-      return false;
-    }
-    
-    // Check if user can save the thread
-    const { canSave, reason } = saveThreadFromExpiration(thread, currentUser);
-    
-    if (!canSave) {
-      console.error(`Cannot save thread: ${reason}`);
-      return false;
-    }
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Update the thread to be saved
-    const updates: Partial<ThreadData> = {
-      isSaved: true,
-      expiresAt: undefined, // Saved threads never expire
-    };
-    
-    get().updateThread(threadId, updates);
-    console.log(`Thread ${threadId} saved from expiration`);
-    
-    return true;
   },
 
   removeUserFromThread: async (threadId: string, userId: string) => {

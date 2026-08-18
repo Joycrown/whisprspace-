@@ -280,7 +280,7 @@ const ProfilePage = () => {
                 className={`bg-white/10 backdrop-blur rounded-lg p-4 border-2 transition-all hover:bg-white/20 ${selectedPlan === 'monthly' ? 'border-yellow-500' : 'border-transparent'
                   }`}
               >
-                <div className="text-xl sm:text-2xl font-bold mb-1">$1.50/mo</div>
+                <div className="text-xl sm:text-2xl font-bold mb-1">$2.50/mo</div>
                 <div className="text-xs sm:text-sm text-purple-200">Monthly Plan</div>
               </button>
               <button
@@ -288,29 +288,28 @@ const ProfilePage = () => {
                 className={`bg-white/10 backdrop-blur rounded-lg p-4 border-2 transition-all hover:bg-white/20 ${selectedPlan === 'annual' ? 'border-yellow-500' : 'border-transparent'
                   }`}
               >
-                <div className="text-xl sm:text-2xl font-bold mb-1">$13.50/yr</div>
+                <div className="text-xl sm:text-2xl font-bold mb-1">$22.50/yr</div>
                 <div className="text-xs sm:text-sm text-purple-200">
                   Annual Plan <span className="text-green-400 font-semibold">(Save 25%)</span>
                 </div>
               </button>
             </div>
 
-            <div className="space-y-2 sm:space-y-3 mb-6 sm:mb-8">
+            <div className="space-y-2 mb-6 sm:mb-8">
               <h3 className="font-semibold text-base sm:text-lg mb-2 sm:mb-3">Premium Features:</h3>
-              <div className="flex items-start gap-2 sm:gap-3">
-                <div className="w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-xs sm:text-sm">✓</div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm sm:text-base">Premium Badge</div>
-                  <div className="text-xs sm:text-sm text-purple-200">Stand out with an exclusive badge</div>
+              {[
+                'Save threads forever',
+                'Extend threads by 7 days',
+                'Earn more from premium threads',
+                "Manage who's in your thread",
+                'Change username every 7 days',
+                'Premium badge',
+              ].map((feature) => (
+                <div key={feature} className="flex items-center gap-2 sm:gap-3">
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 text-xs sm:text-sm">✓</div>
+                  <div className="font-medium text-sm sm:text-base">{feature}</div>
                 </div>
-              </div>
-              <div className="flex items-start gap-2 sm:gap-3">
-                <div className="w-4 h-4 sm:w-5 sm:h-5 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 text-xs sm:text-sm">✓</div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm sm:text-base">Advanced Analytics</div>
-                  <div className="text-xs sm:text-sm text-purple-200">Track your content performance in detail</div>
-                </div>
-              </div>
+              ))}
             </div>
 
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
