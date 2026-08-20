@@ -14,6 +14,7 @@ import { useUserStore } from '@/store/userStore';
 import { uploadService } from '@/lib/utils/upload-service';
 import * as rawRealtime from '@/lib/core/supabase/raw-realtime';
 import AppLoadingState from '@/components/ui/AppLoadingState';
+import { useToastHelpers } from '@/components/ui/Toast';
 import { INBOX_THREAD_DRAFT_KEY } from '@/components/features/inbox/MessageModal';
 
 export default function ConversationPage() {
@@ -37,6 +38,8 @@ export default function ConversationPage() {
 
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [deleteModalMessageId, setDeleteModalMessageId] = useState<string | null>(null);
+
+  const toast = useToastHelpers();
 
   const [messageText, setMessageText] = useState('');
   const [preparingThread, setPreparingThread] = useState(false);
@@ -354,6 +357,10 @@ export default function ConversationPage() {
       }
     } catch (sendError) {
       console.error('Failed to handle image upload/send:', sendError);
+      toast.error(
+        'Could not send image',
+        sendError instanceof Error ? sendError.message : undefined
+      );
       setIsUploadingImage(false);
     }
   };
