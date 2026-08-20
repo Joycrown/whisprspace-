@@ -1,4 +1,5 @@
 import * as rawAuth from '@/lib/core/supabase/raw-auth';
+import { compressImage, MAX_UPLOAD_BYTES } from '@/lib/utils/image-compression';
 
 export interface UploadResult {
   url: string;
@@ -16,15 +17,27 @@ export const uploadService = {
    * Upload a file to Supabase Storage
    */
   async uploadFile(
-    file: File, 
-    bucket: string = 'thread-attachments', 
+    original: File,
+    bucket: string = 'thread-attachments',
     folder: string = 'uploads'
   ): Promise<UploadResult> {
+    let file = original;
+
     try {
       const session = rawAuth.getSession();
       const token = session?.access_token;
 
       if (!token) throw new Error('Not authenticated for upload');
+
+      if (original.type.startsWith('image/')) {
+        const { file: processed } = await compressImage(original);
+        file = processed;
+      }
+
+      if (file.size > MAX_UPLOAD_BYTES) {
+        const limitMb = Math.round(MAX_UPLOAD_BYTES / (1024 * 1024));
+        throw new Error(`File is too large. Maximum size is ${limitMb}MB.`);
+      }
 
       // Create a unique file path
       const fileExt = file.name.split('.').pop();
@@ -37,11 +50,8 @@ export const uploadService = {
         headers: {
           'Authorization': `Bearer ${token}`,
           'apikey': SUPABASE_ANON_KEY,
-          // 'Content-Type': file.type, // Usually fetch sets this automatically with boundary for FormData, but for binary body?
-          // Supabase Storage accepts binary body directly.
-          // If we send File, browser sets Content-Type to file type or leaves it.
-          // Supabase expects Content-Type header usually.
-          'cache-control': '3600',
+          'Content-Type': file.type,
+          'cache-control': 'public, max-age=31536000, immutable',
           'x-upsert': 'false'
         },
         body: file
@@ -65,9 +75,9 @@ export const uploadService = {
     } catch (error: any) {
       console.error('Upload Error Details:', {
         message: error?.message,
-        error: error,
         bucket,
-        filePath: `${folder}/${file.name}`
+        folder,
+        size: file.size,
       });
       throw error;
     }
@@ -109,7 +119,7 @@ export const uploadService = {
         },
         body: JSON.stringify({
           prefix: folder,
-          limit: 100
+          limit: 1000
         })
       });
 

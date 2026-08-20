@@ -993,13 +993,10 @@ export const deleteThread = async (threadId: string, userId: string): Promise<bo
 
     console.log(`🗑️ Starting hard delete for thread: ${threadId} (User: ${userId})`);
 
-    // 1. Storage Cleanup: Delete all attachments for this thread
-    // Typical folder structure: messages/{threadId}
-    const storageFolder = `messages/${safeThreadId}`;
     try {
-       await uploadService.deleteFolder('thread-attachments', storageFolder);
+       await uploadService.deleteFolder('thread-attachments', `messages/${safeThreadId}`);
     } catch (storageError) {
-       console.error('⚠️ Storage cleanup failed, continuing with DB deletion:', storageError);
+       console.error('Storage cleanup failed, continuing with DB deletion:', storageError);
     }
 
     // 2. Database Cleanup: Handle constraints by nullifying references in payments/earnings
