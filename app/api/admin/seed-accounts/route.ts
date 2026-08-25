@@ -54,7 +54,7 @@ function buildClaimUrl(token: string): string {
 }
 
 function buildInboxUrl(handle: string): string {
-  return `${getBaseUrl()}/message/${handle}`
+  return `${getBaseUrl()}/message/${encodeURIComponent(handle)}`
 }
 
 // ─── GET — list all seed accounts ────────────────────────────────────────────

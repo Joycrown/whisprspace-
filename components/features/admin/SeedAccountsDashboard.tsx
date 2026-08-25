@@ -114,7 +114,7 @@ function CreatePanel({ onCreated }: { onCreated: (result: CreateResult) => void 
           <input
             type="text"
             value={handle}
-            onChange={e => setHandle(e.target.value.replace(/[/\\?#&%:@<>"{}|^`[\]]/g, ''))}
+            onChange={e => setHandle(e.target.value.replace(/[\s/\\?#&%:@<>"{}|^`[\]]/g, ''))}
             placeholder="auto-generate"
             maxLength={30}
             autoCapitalize="none"
@@ -190,8 +190,8 @@ function ResultCard({ result, onClose }: { result: CreateResult; onClose: () => 
         <X className="w-4 h-4" />
       </button>
 
-      <div className="p-6">
-        <div className="flex items-center gap-2 mb-5">
+      <div className="p-4 sm:p-6">
+        <div className="flex items-center gap-2 mb-5 pr-8">
           <div className="w-8 h-8 rounded-full bg-green-500/15 border border-green-500/25 flex items-center justify-center">
             <CheckCircle className="w-4 h-4 text-green-400" />
           </div>
@@ -228,7 +228,7 @@ function ResultCard({ result, onClose }: { result: CreateResult; onClose: () => 
                 <p className="text-xs text-gray-500 uppercase tracking-wide">WhatsApp message</p>
                 <CopyButton text={result.whatsappText} label="Copy text" />
               </div>
-              <p className="text-xs text-gray-400 whitespace-pre-wrap leading-relaxed">{result.whatsappText}</p>
+              <p className="text-xs text-gray-400 whitespace-pre-wrap break-words leading-relaxed">{result.whatsappText}</p>
             </div>
           </div>
 
@@ -243,7 +243,7 @@ function ResultCard({ result, onClose }: { result: CreateResult; onClose: () => 
                 <img
                   src={cardBlob}
                   alt="Card A preview"
-                  className="w-full rounded-lg border border-gray-700 shadow-lg"
+                  className="w-auto max-w-full max-h-[45vh] md:max-h-none md:w-full rounded-lg border border-gray-700 shadow-lg"
                   style={{ aspectRatio: '1080/1920', objectFit: 'cover' }}
                 />
                 <button
