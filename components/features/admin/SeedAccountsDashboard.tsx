@@ -62,7 +62,7 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
   return (
     <button
       onClick={copy}
-      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white hover:bg-gray-700 transition-all"
+      className="flex flex-shrink-0 items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400 hover:text-white hover:bg-gray-700 transition-all"
     >
       {copied
         ? <><CheckCircle className="w-3.5 h-3.5 text-green-400" /> Copied</>
@@ -201,13 +201,13 @@ function ResultCard({ result, onClose }: { result: CreateResult; onClose: () => 
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid md:grid-cols-2 gap-4 min-w-0">
           {/* Left — links */}
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             {/* Claim URL */}
             <div className="bg-gray-900/60 rounded-lg border border-gray-700/50 p-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs text-gray-500 uppercase tracking-wide">Claim link (private)</p>
+              <div className="flex items-center justify-between gap-2 mb-1.5 min-w-0">
+                <p className="text-xs text-gray-500 uppercase tracking-wide truncate">Claim link (private)</p>
                 <CopyButton text={result.claimUrl} label="Copy link" />
               </div>
               <p className="text-xs text-gray-300 font-mono break-all leading-relaxed">{result.claimUrl}</p>
@@ -215,8 +215,8 @@ function ResultCard({ result, onClose }: { result: CreateResult; onClose: () => 
 
             {/* Inbox URL */}
             <div className="bg-gray-900/60 rounded-lg border border-gray-700/50 p-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs text-gray-500 uppercase tracking-wide">Inbox link (public)</p>
+              <div className="flex items-center justify-between gap-2 mb-1.5 min-w-0">
+                <p className="text-xs text-gray-500 uppercase tracking-wide truncate">Inbox link (public)</p>
                 <CopyButton text={result.inboxUrl} label="Copy link" />
               </div>
               <p className="text-xs text-gray-300 font-mono break-all leading-relaxed">{result.inboxUrl}</p>
@@ -224,8 +224,8 @@ function ResultCard({ result, onClose }: { result: CreateResult; onClose: () => 
 
             {/* WhatsApp text */}
             <div className="bg-gray-900/60 rounded-lg border border-gray-700/50 p-3">
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-xs text-gray-500 uppercase tracking-wide">WhatsApp message</p>
+              <div className="flex items-center justify-between gap-2 mb-1.5 min-w-0">
+                <p className="text-xs text-gray-500 uppercase tracking-wide truncate">WhatsApp message</p>
                 <CopyButton text={result.whatsappText} label="Copy text" />
               </div>
               <p className="text-xs text-gray-400 whitespace-pre-wrap break-words leading-relaxed">{result.whatsappText}</p>
@@ -265,8 +265,23 @@ function ResultCard({ result, onClose }: { result: CreateResult; onClose: () => 
         </div>
       </div>
 
-      {/* Hidden card for html-to-image — rendered off-screen */}
-      <div style={{ position: 'absolute', top: -9999, left: -9999, pointerEvents: 'none' }}>
+      {/* Hidden card for html-to-image. Fixed 1080x1920, so it must be fully
+          contained — an off-screen absolute element still contributes to the
+          document's scroll width and was forcing horizontal overflow on mobile. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: 1,
+          height: 1,
+          overflow: 'hidden',
+          opacity: 0,
+          pointerEvents: 'none',
+          zIndex: -1,
+        }}
+      >
         <SeedCardA ref={cardRef} handle={result.handle} inboxUrl={result.inboxUrl} />
       </div>
     </motion.div>
@@ -416,7 +431,7 @@ function AccountRow({
                 <>
                   {/* Inbox link — always available */}
                   <div className="bg-gray-900/60 rounded-lg border border-gray-700/50 p-3">
-                    <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center justify-between gap-2 mb-1.5 min-w-0">
                       <p className="text-xs text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
                         <Inbox className="w-3.5 h-3.5" /> Inbox link (public)
                       </p>
@@ -510,7 +525,7 @@ export default function SeedAccountsDashboard() {
   const pendingCount = accounts.filter(a => !a.claimedAt && (a.expiresAt === null || new Date(a.expiresAt).getTime() > Date.now())).length
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full min-w-0 overflow-x-hidden">
 
       {/* Stats row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
