@@ -23,7 +23,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // Confirm account is still unclaimed
   const { data: user } = await supabaseAdmin
     .from('users')
-    .select('id, username, account_state')
+    .select('id, username, anonymous_id, account_state')
     .eq('id', id)
     .eq('account_state', 'unclaimed')
     .single()
@@ -53,10 +53,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const base = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://whisprspace.com'
   const claimUrl = `${base}/claim/${rawToken}`
-  const inboxUrl = `${base}/message/${user.username}`
+  const inboxUrl = `${base}/message/${encodeURIComponent(user.username || user.anonymous_id)}`
 
   return NextResponse.json({
+    id,
+    handle: user.username || user.anonymous_id,
     claimUrl,
+    inboxUrl,
     expiresAt,
     whatsappText: `Hey! Here's a fresh claim link for your WhisprSpace inbox.\n\n📥 Inbox: ${inboxUrl}\n\n👉 Claim your account: ${claimUrl}\n\nLink expires in 7 days.`,
   })

@@ -3,12 +3,11 @@
  *
  * Rules:
  * - 3-30 characters
- * - Letters (any language), numbers, emoji, spaces, and symbols
+ * - Letters (any language), numbers, emoji, and symbols (no spaces)
  * - Excluded: / \ ? # & % : @ < > " { } | ^ [ ] ` and control characters.
  *   Usernames become public inbox URLs (/message/<username>) and are matched
  *   with SQL ilike, so URL-structural characters and ilike wildcards are unsafe.
- * - No leading/trailing spaces
- * - No multiple consecutive spaces
+ * - No spaces anywhere (usernames appear in public inbox URLs)
  * - Case-insensitive uniqueness
  */
 
@@ -17,9 +16,9 @@ const ALLOWED_SYMBOLS = "._'\\-~!$+=*(),;";
 export const USERNAME_CONFIG = {
   MIN_LENGTH: 3,
   MAX_LENGTH: 30,
-  PATTERN: new RegExp(`^[a-zA-Z0-9\\s${ALLOWED_SYMBOLS}]+$`),
+  PATTERN: new RegExp(`^[a-zA-Z0-9${ALLOWED_SYMBOLS}]+$`),
   UNICODE_PATTERN: new RegExp(
-    `^[\\p{L}\\p{N}\\p{M}\\p{Extended_Pictographic}\\u200d\\ufe0f\\s${ALLOWED_SYMBOLS}]+$`,
+    `^[\\p{L}\\p{N}\\p{M}\\p{Extended_Pictographic}\\u200d\\ufe0f${ALLOWED_SYMBOLS}]+$`,
     'u'
   ),
   COOLDOWN_DAYS_FREE: 30,
@@ -75,31 +74,14 @@ export function validateUsername(username: string, allowUnicode = true): Usernam
   if (!pattern.test(trimmed)) {
     return {
       isValid: false,
-      error: 'Username cannot contain / \\ ? # & % : @ or < >',
+      error: 'Username cannot contain spaces or / \\ ? # & % : @ < >',
     };
   }
 
-  // Check for leading/trailing spaces
   if (trimmed !== username) {
     return {
       isValid: false,
       error: 'Username cannot have leading or trailing spaces',
-    };
-  }
-
-  // Check for multiple consecutive spaces
-  if (/\s{2,}/.test(trimmed)) {
-    return {
-      isValid: false,
-      error: 'Username cannot have multiple consecutive spaces',
-    };
-  }
-
-  // Check for only spaces
-  if (trimmed.replace(/\s/g, '').length === 0) {
-    return {
-      isValid: false,
-      error: 'Username cannot be only spaces',
     };
   }
 
@@ -171,10 +153,9 @@ export function getChangeCooldownMessage(
 export function sanitizeUsername(username: string): string {
   return username
     .trim()
-    .replace(/\s{2,}/g, ' ')
     .replace(
       new RegExp(
-        `[^\\p{L}\\p{N}\\p{M}\\p{Extended_Pictographic}\\u200d\\ufe0f\\s${ALLOWED_SYMBOLS}]`,
+        `[^\\p{L}\\p{N}\\p{M}\\p{Extended_Pictographic}\\u200d\\ufe0f${ALLOWED_SYMBOLS}]`,
         'gu'
       ),
       ''
