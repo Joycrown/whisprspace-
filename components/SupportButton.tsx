@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect, useCallback } from 'react'
-import { LifeBuoy, X, Send, CheckCircle, AlertCircle, Loader2, Paperclip, FileImage, Trash2, MessageCircle } from 'lucide-react'
+import { LifeBuoy, X, Send, CheckCircle, AlertCircle, Loader2, Paperclip, FileImage, Trash2 } from 'lucide-react'
 import { motion, AnimatePresence, useMotionValue } from 'framer-motion'
 import Image from 'next/image'
 
@@ -247,7 +247,7 @@ export default function SupportButton() {
               : 'bg-gradient-to-r from-purple-600 to-purple-700 text-white hover:from-purple-500 hover:to-purple-600 shadow-purple-900/40'
           }`}
         >
-          {open ? <X className="w-6 h-6" /> : <MessageCircle className="w-6 h-6" />}
+          {open ? <X className="w-6 h-6" /> : <LifeBuoy className="w-6 h-6" />}
         </motion.button>
       </motion.div>
 
@@ -270,8 +270,8 @@ export default function SupportButton() {
                     <LifeBuoy className="w-3.5 h-3.5 text-purple-400" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-white leading-none">Contact Support</p>
-                    <p className="text-[10px] text-[#5C5C6E] mt-0.5">We reply within 24 hours</p>
+                    <p className="text-sm font-semibold text-white leading-none">WhisprSpace Support</p>
+                    <p className="text-[10px] text-[#5C5C6E] mt-0.5">App help only — not a user inbox</p>
                   </div>
                 </div>
                 <button
@@ -304,6 +304,14 @@ export default function SupportButton() {
               ) : (
                 /* Form */
                 <form onSubmit={handleSubmit} className="p-4 flex flex-col gap-3">
+                  <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                      This goes to the <strong className="font-semibold">WhisprSpace team</strong> — not to
+                      another user. To message someone anonymously, use their inbox link instead.
+                    </p>
+                  </div>
+
                   <div className="flex gap-2">
                     <div className="flex-1 flex flex-col gap-1">
                       <label className="text-[10px] font-medium text-[#5C5C6E] uppercase tracking-wide">
@@ -340,7 +348,7 @@ export default function SupportButton() {
                     <textarea
                       value={message}
                       onChange={e => setMessage(e.target.value)}
-                      placeholder="Describe your issue or question…"
+                      placeholder="Describe your issue with the app…"
                       required
                       maxLength={2000}
                       rows={4}
@@ -351,22 +359,10 @@ export default function SupportButton() {
 
                   {/* Attachments */}
                   <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] font-medium text-[#5C5C6E] uppercase tracking-wide">
-                        Attachments
-                        <span className="normal-case ml-1 text-[#3A3A4E]">(optional, max {MAX_FILES} files · {MAX_FILE_MB} MB each)</span>
-                      </label>
-                      {files.length < MAX_FILES && (
-                        <button
-                          type="button"
-                          onClick={() => fileInputRef.current?.click()}
-                          className="flex items-center gap-1 text-[10px] text-purple-400 hover:text-purple-300 transition-colors"
-                        >
-                          <Paperclip className="w-3 h-3" />
-                          Add file
-                        </button>
-                      )}
-                    </div>
+                    <label className="text-[10px] font-medium text-[#5C5C6E] uppercase tracking-wide">
+                      Attachments
+                      <span className="normal-case ml-1 text-[#3A3A4E]">(optional, max {MAX_FILES} files · {MAX_FILE_MB} MB each)</span>
+                    </label>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -406,15 +402,14 @@ export default function SupportButton() {
                       </div>
                     )}
 
-                    {/* Drop zone shown when no files yet */}
-                    {files.length === 0 && (
+                    {files.length < MAX_FILES && (
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         className="w-full border border-dashed border-[#2A2A38] hover:border-purple-500/40 rounded-lg py-2.5 flex items-center justify-center gap-2 text-[11px] text-[#5C5C6E] hover:text-purple-400 transition-colors"
                       >
                         <Paperclip className="w-3.5 h-3.5" />
-                        Add a screenshot or file
+                        {files.length === 0 ? 'Add a screenshot or file' : 'Add another file'}
                       </button>
                     )}
                   </div>
@@ -442,7 +437,7 @@ export default function SupportButton() {
                     {state === 'sending' ? (
                       <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
                     ) : (
-                      <><Send className="w-4 h-4" /> Send message</>
+                      <><Send className="w-4 h-4" /> Send to support</>
                     )}
                   </button>
 
