@@ -43,6 +43,13 @@ export default function MainLayout({
     // no app chrome, no other user's sidebar/session should bleed through.
     (pathname?.startsWith('/claim/') ?? false)
 
+  // Anonymous message-drop and claim pages have their own prominent send button.
+  // A floating chat FAB next to it reads as "send your message here", so support
+  // messages were landing in the support inbox instead of the recipient's.
+  const hidesSupportFab =
+    (pathname?.startsWith('/message/') ?? false) ||
+    (pathname?.startsWith('/claim/') ?? false)
+
   if (isPublicRoute) {
     return (
       <main className="min-h-screen bg-[#121212]">
@@ -52,7 +59,7 @@ export default function MainLayout({
         <FirstTimeEducationModal />
         <NotificationEducationPrompt />
         <PWAInstallPrompt />
-        <SupportButton />
+        {!hidesSupportFab && <SupportButton />}
       </main>
     )
   }
