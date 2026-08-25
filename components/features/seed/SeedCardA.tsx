@@ -14,7 +14,7 @@ interface SeedCardAProps {
  */
 const SeedCardA = forwardRef<HTMLDivElement, SeedCardAProps>(({ handle, inboxUrl }, ref) => {
   const initial = handle.charAt(0).toUpperCase()
-  const shortUrl = inboxUrl.replace(/^https?:\/\//, '')
+  const shortUrl = (inboxUrl || '').replace(/^https?:\/\//, '')
 
   return (
     <div
