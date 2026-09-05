@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { create } from 'zustand';
 import { Thread, ThreadData, ThreadFilters, CreateThreadForm, Message, Attachment, Participant, ReactionType } from '@/types';
@@ -308,7 +309,7 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
     
     // Optimistic Update
     const tempId = `temp-${Date.now()}`;
-    const authorName = user.username || user.anonymousId || 'You';
+    const authorName = user.anonymousId || 'You';
     const optimisticMessage: Message = {
       ...messageData,
       id: tempId,
@@ -546,7 +547,7 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
           if (messageExists) return;
           
           // Transform to Message type
-          const senderName = message.sender.username || message.sender.anonymous_id;
+          const senderName = message.sender.anonymous_id;
           const newMessage: Message = {
             id: message.id,
             threadId: message.thread_id,
@@ -572,7 +573,7 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
               sender: message.parent_message.sender ? {
                  id: message.parent_message.sender.id,
                  anonymousId: message.parent_message.sender.anonymous_id,
-                 name: message.parent_message.sender.username || message.parent_message.sender.anonymous_id,
+                 name: message.parent_message.sender.anonymous_id,
                  avatar: message.parent_message.sender.avatar_url || '#cccccc',
                  status: 'offline' as const, // Default status for replied message sender
               } : {
@@ -591,9 +592,12 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
           console.log('Adding message to state:', newMessage);
 
           // Update participants
-          let updatedParticipants = [...(currentThread.participants || [])];
-          const senderId = newMessage.sender.id;
-          const participantIndex = updatedParticipants.findIndex(p => p.id === senderId);
+          const updatedParticipants = [...(currentThread.participants || [])];
+          const messageSender = newMessage.sender;
+          const senderId = messageSender?.id;
+          const participantIndex = senderId
+            ? updatedParticipants.findIndex(p => p.id === senderId)
+            : -1;
 
           if (participantIndex >= 0) {
             // Update existing participant
@@ -601,13 +605,18 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
               ...updatedParticipants[participantIndex],
               messageCount: (updatedParticipants[participantIndex].messageCount || 0) + 1,
               // Update avatar/name if changed (optional, but good for consistency)
-              avatar: newMessage.sender.avatar || updatedParticipants[participantIndex].avatar,
-              name: newMessage.sender.name || updatedParticipants[participantIndex].name,
+              avatar: messageSender?.avatar || updatedParticipants[participantIndex].avatar,
+              name: messageSender?.name || updatedParticipants[participantIndex].name,
             };
-          } else {
+          } else if (messageSender && senderId) {
             // Add new participant
             updatedParticipants.push({
-              ...newMessage.sender,
+              id: senderId,
+              anonymousId: messageSender.anonymousId,
+              name: messageSender.name || messageSender.anonymousId,
+              avatar: messageSender.avatar || '#cccccc',
+              status: messageSender.status || 'online',
+              isPremium: messageSender.isPremium,
               messageCount: 1,
               reportCount: 0,
             });

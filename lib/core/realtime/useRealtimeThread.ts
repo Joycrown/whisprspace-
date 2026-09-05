@@ -29,9 +29,7 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
     const anonymousId = isSelf
       ? session.user?.anonymousId || `ANON_${userId.substring(0, 8)}`
       : `ANON_${userId.substring(0, 8)}`;
-    const displayName = isSelf
-      ? (session.user?.username || anonymousId)
-      : anonymousId;
+    const displayName = anonymousId;
 
     return {
       id: userId,

@@ -4,6 +4,7 @@
  */
 
 import { supabaseAdmin } from '@/lib/core/supabase/admin-client';
+import { generateAnonymousId } from '@/lib/utils';
 import { SEED_USERS } from './seed-personas';
 import { SEED_THREADS, PlaybookThread, PlaybookReply } from './content-playbook';
 
@@ -60,6 +61,7 @@ export async function createSeedUsers(): Promise<{ created: number; skipped: num
   // Check existing seed users
   const existing = await getSeedUsers();
   const existingUsernames = new Set(existing.map((u: any) => u.username));
+  const takenAnonymousIds = new Set(existing.map((u: any) => u.anonymous_id));
 
   let created = 0;
   let skipped = 0;
@@ -70,7 +72,11 @@ export async function createSeedUsers(): Promise<{ created: number; skipped: num
       continue;
     }
 
-    const anonymousId = `SEED_${profile.username.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8).padEnd(8, '0')}`;
+    let anonymousId = generateAnonymousId();
+    while (takenAnonymousIds.has(anonymousId)) {
+      anonymousId = generateAnonymousId();
+    }
+    takenAnonymousIds.add(anonymousId);
 
     const { error } = await supabaseAdmin
       .from('users')

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:supabase": "node scripts/test-supabase.js",
+    "test:notifications": "node scripts/test-notifications.js",
     "generate:vapid": "node scripts/generate-vapid-keys.js",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",

@@ -188,8 +188,23 @@ export const fetchThreads = async (
       }
     }
 
+    let unreadCounts: Map<string, number> | undefined
+    if (safeUserId) {
+      const { data: unreadRows, error: unreadError } = await rawDb.rpc('get_thread_unread_counts', {
+        p_user_id: safeUserId,
+      })
+
+      if (unreadError) {
+        console.warn('Failed to fetch thread unread counts:', unreadError)
+      } else if (Array.isArray(unreadRows)) {
+        unreadCounts = new Map(
+          unreadRows.map((row: any) => [row.thread_id, Number(row.unread_count) || 0])
+        )
+      }
+    }
+
     // Transform database records to Thread type
-    const threads: Thread[] = threadRows.map(thread => transformThread(thread, safeUserId || undefined, purchasedThreadIds))
+    const threads: Thread[] = threadRows.map(thread => transformThread(thread, safeUserId || undefined, purchasedThreadIds, unreadCounts))
 
     // Check if there are more threads
     const hasMore = (data || []).length === limit
@@ -2005,7 +2020,7 @@ export const removeThreadParticipant = async (
 /**
  * Helper: Transform database thread to Thread type
  */
-function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Set<string>): Thread {
+function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Set<string>, unreadCounts?: Map<string, number>): Thread {
   const hasLiked = userId
     ? dbThread.thread_likes?.some((like: any) => like.user_id === userId)
     : false
@@ -2024,12 +2039,15 @@ function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Se
     lastMessageAt &&
     (!lastReadAt || new Date(lastMessageAt) > new Date(lastReadAt))
   )
+  const unreadCount = hasJoined && !isThreadAuthor
+    ? (unreadCounts?.get(dbThread.id) ?? 0)
+    : 0
 
   // Handle creator data - might be joined or might need to be fetched separately
   const author = dbThread.creator ? {
     id: dbThread.creator.id,
     anonymousId: dbThread.creator.anonymous_id,
-    name: dbThread.creator.username || dbThread.creator.anonymous_id,
+    name: dbThread.creator.anonymous_id,
     avatar: dbThread.creator.avatar_url || getAvatarUrl(dbThread.creator.id || dbThread.creator.anonymous_id),
     isPremium: dbThread.creator.is_premium || false,
   } : {
@@ -2081,6 +2099,7 @@ function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Se
     hasJoined,
     hasAccess,
     hasUnread,
+    unreadCount,
     lastMessageAt,
     isPremium: dbThread.is_premium || false,
     memberLimit: dbThread.member_limit ?? undefined,
@@ -2123,7 +2142,7 @@ function transformThreadData(
       participantsMap.set(userIdFromTable, {
         id: userIdFromTable,
         anonymousId: userData?.anonymous_id || `User ${userIdFromTable.substring(0, 5)}`,
-        name: userData?.username || userData?.anonymous_id || `User ${userIdFromTable.substring(0, 5)}`,
+        name: userData?.anonymous_id || `User ${userIdFromTable.substring(0, 5)}`,
         avatar: userData?.avatar_url || getAvatarUrl(userIdFromTable || userData?.anonymous_id),
         status: 'online',
         messageCount: 0,
@@ -2152,7 +2171,7 @@ function transformThreadData(
     participantsMap.set(creatorId, {
       id: creatorId,
       anonymousId: creatorData?.anonymous_id || `ANON_${creatorId.substring(0, 5)}`,
-      name: creatorData?.username || creatorData?.anonymous_id || `User ${creatorId.substring(0, 5)}`,
+      name: creatorData?.anonymous_id || `User ${creatorId.substring(0, 5)}`,
       avatar: creatorData?.avatar_url || getAvatarUrl(creatorId || creatorData?.anonymous_id),
       status: 'online',
       messageCount: 0,
@@ -2210,7 +2229,7 @@ function transformThreadData(
     author: {
       id: dbThread.creator.id,
       anonymousId: dbThread.creator.anonymous_id,
-      name: dbThread.creator.username || dbThread.creator.anonymous_id,
+      name: dbThread.creator.anonymous_id,
       avatar: dbThread.creator.avatar_url || getAvatarUrl(dbThread.creator.id || dbThread.creator.anonymous_id),
       isPremium: dbThread.creator.is_premium,
     },
@@ -2218,7 +2237,7 @@ function transformThreadData(
     createdBy: {
       id: dbThread.creator.id,
       anonymousId: dbThread.creator.anonymous_id,
-      name: dbThread.creator.username || dbThread.creator.anonymous_id,
+      name: dbThread.creator.anonymous_id,
       avatar: dbThread.creator.avatar_url || getAvatarUrl(dbThread.creator.id || dbThread.creator.anonymous_id),
       status: 'online' as const,
       isPremium: dbThread.creator.is_premium,
@@ -2252,12 +2271,11 @@ function calculateTimeRemaining(expiresAt: string | null): string | undefined {
 const ANON_INBOX_SYSTEM_ID = 'ANON_SYSTEM_INBOX';
 const INBOX_USER_LABEL = 'INBOX_USER';
 
-/** Resolve a sender's display name, masking the inbox system user as INBOX_USER. */
 function resolveSenderName(
   sender: { anonymous_id?: string; username?: string } | null | undefined
 ): string {
   if (sender?.anonymous_id === ANON_INBOX_SYSTEM_ID) return INBOX_USER_LABEL;
-  return sender?.username || sender?.anonymous_id || 'Unknown';
+  return sender?.anonymous_id || 'Unknown';
 }
 
 export function transformMessage(msg: any, userId?: string): Message {
@@ -2281,7 +2299,7 @@ export function transformMessage(msg: any, userId?: string): Message {
     id: msg.id,
     threadId: msg.thread_id,
     authorId: msg.sender?.id || msg.sender_id,
-    authorName: isInboxImport ? INBOX_USER_LABEL : (msg.sender?.username || msg.sender?.anonymous_id || 'Unknown'),
+    authorName: isInboxImport ? INBOX_USER_LABEL : (msg.sender?.anonymous_id || 'Unknown'),
     sender: {
       id: msg.sender?.id || msg.sender_id,
       anonymousId: isInboxImport ? INBOX_USER_LABEL : (msg.sender?.anonymous_id || 'Unknown'),

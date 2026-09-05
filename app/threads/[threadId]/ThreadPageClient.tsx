@@ -688,7 +688,7 @@ const ThreadPage = () => {
     const currentUser = session.user;
     if (currentUser?.id) {
       overrides.set(currentUser.id, {
-        name: currentUser.username || currentUser.anonymousId,
+        name: currentUser.anonymousId,
         anonymousId: currentUser.anonymousId,
         isPremium: currentUser.isPremium,
       });
