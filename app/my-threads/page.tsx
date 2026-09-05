@@ -499,10 +499,18 @@ export default function MyThreadsPage() {
                           {thread.hasUnread && (
                             <div
                               className="flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 rounded-full flex-shrink-0"
-                              title="New messages since you last opened this thread"
+                              title={
+                                thread.unreadCount
+                                  ? `${thread.unreadCount} new message${thread.unreadCount === 1 ? '' : 's'} since you last opened this thread`
+                                  : 'New messages since you last opened this thread'
+                              }
                             >
                               <Mail className="w-3 h-3 text-purple-400" />
-                              <span className="text-xs text-purple-400 font-semibold">New</span>
+                              <span className="text-xs text-purple-400 font-semibold">
+                                {thread.unreadCount
+                                  ? thread.unreadCount > 99 ? '99+' : thread.unreadCount
+                                  : 'New'}
+                              </span>
                             </div>
                           )}
                           {thread.isPremium && (

@@ -105,6 +105,37 @@ export const ensureCurrentSubscriptionSynced = async () => {
   return subscription
 }
 
+/**
+ * Creates and registers a push subscription when the user has already opted in
+ * and the browser has already granted permission. Never prompts: if permission
+ * is still 'default' this returns null and leaves asking to the settings modal.
+ *
+ * Without this, a user whose preferences say push: true only ever gets a real
+ * subscription if they find and complete the settings modal by hand.
+ */
+export const autoSubscribeIfPermitted = async () => {
+  if (!isPushSupported()) return null
+  if (Notification.permission !== 'granted') return null
+
+  const registration = await navigator.serviceWorker.ready
+  const existingSubscription = await registration.pushManager.getSubscription()
+  if (existingSubscription) {
+    await syncSubscriptionWithBackend(existingSubscription)
+    return existingSubscription
+  }
+
+  const publicVapidKey = await fetchPublicVapidKey()
+  const applicationServerKey = urlBase64ToUint8Array(publicVapidKey)
+
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey,
+  })
+
+  await syncSubscriptionWithBackend(subscription)
+  return subscription
+}
+
 export const subscribeDeviceToPush = async () => {
   if (!isPushSupported()) {
     throw new Error('Push notifications are not supported on this device')

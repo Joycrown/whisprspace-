@@ -188,8 +188,23 @@ export const fetchThreads = async (
       }
     }
 
+    let unreadCounts: Map<string, number> | undefined
+    if (safeUserId) {
+      const { data: unreadRows, error: unreadError } = await rawDb.rpc('get_thread_unread_counts', {
+        p_user_id: safeUserId,
+      })
+
+      if (unreadError) {
+        console.warn('Failed to fetch thread unread counts:', unreadError)
+      } else if (Array.isArray(unreadRows)) {
+        unreadCounts = new Map(
+          unreadRows.map((row: any) => [row.thread_id, Number(row.unread_count) || 0])
+        )
+      }
+    }
+
     // Transform database records to Thread type
-    const threads: Thread[] = threadRows.map(thread => transformThread(thread, safeUserId || undefined, purchasedThreadIds))
+    const threads: Thread[] = threadRows.map(thread => transformThread(thread, safeUserId || undefined, purchasedThreadIds, unreadCounts))
 
     // Check if there are more threads
     const hasMore = (data || []).length === limit
@@ -2005,7 +2020,7 @@ export const removeThreadParticipant = async (
 /**
  * Helper: Transform database thread to Thread type
  */
-function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Set<string>): Thread {
+function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Set<string>, unreadCounts?: Map<string, number>): Thread {
   const hasLiked = userId
     ? dbThread.thread_likes?.some((like: any) => like.user_id === userId)
     : false
@@ -2024,6 +2039,9 @@ function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Se
     lastMessageAt &&
     (!lastReadAt || new Date(lastMessageAt) > new Date(lastReadAt))
   )
+  const unreadCount = hasJoined && !isThreadAuthor
+    ? (unreadCounts?.get(dbThread.id) ?? 0)
+    : 0
 
   // Handle creator data - might be joined or might need to be fetched separately
   const author = dbThread.creator ? {
@@ -2081,6 +2099,7 @@ function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Se
     hasJoined,
     hasAccess,
     hasUnread,
+    unreadCount,
     lastMessageAt,
     isPremium: dbThread.is_premium || false,
     memberLimit: dbThread.member_limit ?? undefined,

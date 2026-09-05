@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { BellRing, Settings, X } from 'lucide-react'
 import { useUserStore } from '@/store/userStore'
 import {
+  autoSubscribeIfPermitted,
   getCurrentPushSubscription,
   isPushSupported,
 } from '@/lib/notifications/push-client'
@@ -73,7 +74,15 @@ const NotificationEducationPrompt: React.FC = () => {
       if (prefs?.push === false) {
         nextReasons.push('push_disabled')
       } else if (isPushSupported()) {
-        const subscription = await getCurrentPushSubscription().catch(() => null)
+        let subscription = await getCurrentPushSubscription().catch(() => null)
+
+        // The user already opted in; if the browser has also already granted
+        // permission, subscribe silently rather than waiting for them to find
+        // the settings modal by hand.
+        if (!subscription) {
+          subscription = await autoSubscribeIfPermitted().catch(() => null)
+        }
+
         if (!subscription) {
           nextReasons.push('push_not_connected')
         }

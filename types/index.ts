@@ -66,6 +66,7 @@ export interface Author {
   name?: string;
   avatar?: string;
   isPremium?: boolean;
+  status?: 'online' | 'offline' | 'away';
 }
 
 // ===== ATTACHMENT TYPES =====
@@ -110,6 +111,8 @@ export interface Thread {
   id: string;
   creatorId: string;
   creator?: Author;
+  authorId?: string;
+  author?: Author;
   title: string;
   content: string;
   type: ThreadType;
@@ -118,6 +121,7 @@ export interface Thread {
   isPremium: boolean;
   price?: number;
   likesCount: number;
+  likes: number;
   messageCount: number;
   viewCount: number;
   participantCount: number;
@@ -125,29 +129,42 @@ export interface Thread {
   createdAt: string;
   updatedAt: string;
   isLiked?: boolean;
+  hasLiked?: boolean;
   isSaved?: boolean;
   isDeleted?: boolean;
   hasJoined?: boolean;
   hasUnread?: boolean;
+  unreadCount?: number;
   lastMessageAt?: string | null;
+  removedUsers?: string[];
 }
 
 export interface Message {
   id: string;
   threadId: string;
-  senderId: string;
+  senderId?: string;
+  authorId?: string;
+  authorName?: string;
   sender?: Author;
   parentMessageId?: string;
   content: string;
   type: 'text' | 'voice' | 'image' | 'file' | 'link';
   attachments?: any[];
-  likesCount: number;
-  isEdited: boolean;
-  isReported: boolean;
+  likesCount?: number;
+  likes?: number;
+  isEdited?: boolean;
+  isReported?: boolean;
   isLiked?: boolean;
-  createdAt: string;
+  hasLiked?: boolean;
+  createdAt?: string;
+  timestamp?: string;
+  status?: 'sending' | 'sent' | 'failed';
   editedAt?: string;
   replyCount?: number;
+  replyToId?: string;
+  repliedMessage?: unknown;
+  replies?: Message[];
+  reactions?: Record<string, { count: number; users: string[] }>;
 }
 
 // ===== POLL TYPES =====
@@ -425,13 +442,21 @@ export interface ThreadData extends Thread {
   messages: Message[];
   participants: Participant[];
   poll?: Poll;
+  pollOptions?: {
+    id: string;
+    text: string;
+    votes: number;
+    percentage: number;
+    hasVoted: boolean;
+  }[];
   hasAccess?: boolean;
   hasJoined?: boolean;
   isLocked?: boolean;
+  isExpired?: boolean;
+  latestMessage?: string;
   timeRemaining?: string;
   rating?: number;
   ratingCount?: number;
-  removedUsers?: string[];
 }
 
 export type ReactionType = string;

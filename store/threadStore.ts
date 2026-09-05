@@ -592,9 +592,12 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
           console.log('Adding message to state:', newMessage);
 
           // Update participants
-          let updatedParticipants = [...(currentThread.participants || [])];
-          const senderId = newMessage.sender.id;
-          const participantIndex = updatedParticipants.findIndex(p => p.id === senderId);
+          const updatedParticipants = [...(currentThread.participants || [])];
+          const messageSender = newMessage.sender;
+          const senderId = messageSender?.id;
+          const participantIndex = senderId
+            ? updatedParticipants.findIndex(p => p.id === senderId)
+            : -1;
 
           if (participantIndex >= 0) {
             // Update existing participant
@@ -602,13 +605,18 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
               ...updatedParticipants[participantIndex],
               messageCount: (updatedParticipants[participantIndex].messageCount || 0) + 1,
               // Update avatar/name if changed (optional, but good for consistency)
-              avatar: newMessage.sender.avatar || updatedParticipants[participantIndex].avatar,
-              name: newMessage.sender.name || updatedParticipants[participantIndex].name,
+              avatar: messageSender?.avatar || updatedParticipants[participantIndex].avatar,
+              name: messageSender?.name || updatedParticipants[participantIndex].name,
             };
-          } else {
+          } else if (messageSender && senderId) {
             // Add new participant
             updatedParticipants.push({
-              ...newMessage.sender,
+              id: senderId,
+              anonymousId: messageSender.anonymousId,
+              name: messageSender.name || messageSender.anonymousId,
+              avatar: messageSender.avatar || '#cccccc',
+              status: messageSender.status || 'online',
+              isPremium: messageSender.isPremium,
               messageCount: 1,
               reportCount: 0,
             });
