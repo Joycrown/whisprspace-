@@ -212,7 +212,7 @@ export default async function ThreadPage({ params, searchParams }: PageProps) {
         url: new URL(canonicalPath, siteConfig.url).toString(),
         author: {
           '@type': 'Person',
-          name: creator?.username || creator?.anonymous_id || 'Anonymous',
+          name: creator?.anonymous_id || 'Anonymous',
         },
       }
     : null

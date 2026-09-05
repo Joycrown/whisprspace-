@@ -552,7 +552,7 @@ export function useJoinThreadMutation() {
         const newParticipant = {
           id: userId,
           anonymousId,
-          name: isSelf ? (session.user?.username || anonymousId) : anonymousId,
+          name: anonymousId,
           avatar: isSelf ? (session.user as any)?.avatar || '#cccccc' : '#cccccc',
           status: 'online' as const,
           isPremium: isSelf ? session.user?.isPremium : false,
