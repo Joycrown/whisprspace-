@@ -7,6 +7,9 @@ export async function register() {
     return;
   }
 
+
+
+  
   const Sentry = await import("@sentry/nextjs");
 
   const tracesSampleRate = Number(
