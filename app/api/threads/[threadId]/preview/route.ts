@@ -96,7 +96,7 @@ export async function GET(
         id: row.id,
         content: truncateMessage((row.content || '').trim(), MAX_PREVIEW_MESSAGE_LENGTH),
         createdAt: row.created_at,
-        senderName: senderRecord?.username || senderRecord?.anonymous_id || 'Anonymous',
+        senderName: senderRecord?.anonymous_id || 'Anonymous',
       }
     })
 

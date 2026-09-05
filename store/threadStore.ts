@@ -308,7 +308,7 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
     
     // Optimistic Update
     const tempId = `temp-${Date.now()}`;
-    const authorName = user.username || user.anonymousId || 'You';
+    const authorName = user.anonymousId || 'You';
     const optimisticMessage: Message = {
       ...messageData,
       id: tempId,
@@ -546,7 +546,7 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
           if (messageExists) return;
           
           // Transform to Message type
-          const senderName = message.sender.username || message.sender.anonymous_id;
+          const senderName = message.sender.anonymous_id;
           const newMessage: Message = {
             id: message.id,
             threadId: message.thread_id,
@@ -572,7 +572,7 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
               sender: message.parent_message.sender ? {
                  id: message.parent_message.sender.id,
                  anonymousId: message.parent_message.sender.anonymous_id,
-                 name: message.parent_message.sender.username || message.parent_message.sender.anonymous_id,
+                 name: message.parent_message.sender.anonymous_id,
                  avatar: message.parent_message.sender.avatar_url || '#cccccc',
                  status: 'offline' as const, // Default status for replied message sender
               } : {

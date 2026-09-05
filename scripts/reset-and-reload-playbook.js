@@ -116,14 +116,35 @@ async function cleanup() {
   console.log('  Done.\n');
 }
 
+// Mirrors generateAnonymousId in lib/utils.ts
+function generateAnonymousId() {
+  const adjectives = [
+    'Anonymous', 'Mysterious', 'Silent', 'Hidden', 'Secret', 'Quiet',
+    'Invisible', 'Unknown', 'Nameless', 'Faceless', 'Shadowy', 'Enigmatic'
+  ];
+  const nouns = [
+    'Whisper', 'Voice', 'Soul', 'Mind', 'Spirit', 'Thought',
+    'Dream', 'Echo', 'Shadow', 'Phantom', 'Ghost', 'Wanderer'
+  ];
+  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+  const noun = nouns[Math.floor(Math.random() * nouns.length)];
+  const number = Math.floor(Math.random() * 9999) + 1;
+  return `${adjective}${noun}${number}`;
+}
+
 // ─── Step 2: Create seed users ────────────────────────────────────────────────
 async function createSeedUsers() {
   console.log('── Step 2: Creating seed users ──');
 
   let created = 0;
   let skipped = 0;
+  const takenAnonymousIds = new Set();
   for (const profile of SEED_USERS) {
-    const anonymousId = `seed_${profile.persona}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    let anonymousId = generateAnonymousId();
+    while (takenAnonymousIds.has(anonymousId)) {
+      anonymousId = generateAnonymousId();
+    }
+    takenAnonymousIds.add(anonymousId);
     const { error } = await supabase.from('users').insert({
       id: randomId(),
       anonymous_id: anonymousId,
