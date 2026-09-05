@@ -30,6 +30,7 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ userId }) => {
         threadId: thread.id,
         authorId: userId,
         authorName: 'You',
+        type: 'text' as const,
         content: `I commented on your thread: ${thread.title}`,
         timestamp: new Date(new Date(thread.createdAt).getTime() + 60 * 1000).toISOString(),
         likes: 0,
@@ -41,6 +42,7 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ userId }) => {
         threadId: thread.id,
         authorId: 'anonymous',
         authorName: 'Anonymous',
+        type: 'text' as const,
         content: `Someone replied to your thread: ${thread.title}`,
         timestamp: new Date(new Date(thread.createdAt).getTime() + 120 * 1000).toISOString(),
         likes: 0,
@@ -51,8 +53,11 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ userId }) => {
   });
 
   // Combine threads and messages into a single activity feed, sorted by timestamp
+  const activityTime = (item: Thread | Message) =>
+    new Date(('timestamp' in item ? item.timestamp : undefined) || item.createdAt || 0).getTime();
+
   const activityFeed = [...userThreads, ...mockUserMessages]
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    .sort((a, b) => activityTime(b) - activityTime(a));
 
   if (isThreadsLoading) {
     return <div className="text-white p-4">Loading activity feed...</div>;
@@ -101,7 +106,7 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ userId }) => {
               <div>
                 <p className="text-white font-medium">{message.authorId === userId ? 'You wrote:' : 'Someone replied:'}</p>
                 <p className="text-gray-300 text-sm">{message.content}</p>
-                <span className="text-xs text-gray-500">{new Date(message.timestamp).toLocaleString()}</span>
+                <span className="text-xs text-gray-500">{new Date(message.timestamp || message.createdAt || 0).toLocaleString()}</span>
               </div>
             </motion.div>
           );

@@ -32,7 +32,7 @@ type ThreadPreviewMessageRow = {
   id: string
   content: string | null
   created_at: string
-  sender?: { username?: string | null; anonymous_id?: string | null } | Array<{ username?: string | null; anonymous_id?: string | null }>
+  sender?: { anonymous_id?: string | null } | Array<{ anonymous_id?: string | null }>
 }
 
 const truncateMessage = (value: string, maxLength: number) => {
@@ -79,7 +79,7 @@ export async function GET(
 
     const { data: messageRows, error: messagesError } = await supabaseAdmin
       .from('messages')
-      .select('id,content,created_at,sender:users!messages_sender_id_fkey(username,anonymous_id)')
+      .select('id,content,created_at,sender:users!messages_sender_id_fkey(anonymous_id)')
       .eq('thread_id', threadId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
@@ -96,7 +96,7 @@ export async function GET(
         id: row.id,
         content: truncateMessage((row.content || '').trim(), MAX_PREVIEW_MESSAGE_LENGTH),
         createdAt: row.created_at,
-        senderName: senderRecord?.username || senderRecord?.anonymous_id || 'Anonymous',
+        senderName: senderRecord?.anonymous_id || 'Anonymous',
       }
     })
 
