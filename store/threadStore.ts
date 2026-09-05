@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { create } from 'zustand';
 import { Thread, ThreadData, ThreadFilters, CreateThreadForm, Message, Attachment, Participant, ReactionType } from '@/types';
