@@ -68,28 +68,20 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
         const name = (participant.name || '').trim();
         const anonymousId = (participant.anonymousId || '').trim();
 
-        const nameHandle = isMentionSafe(name) ? name : null;
         const anonHandle = isMentionSafe(anonymousId) ? anonymousId : null;
-        const hasCustomName = Boolean(nameHandle && !isAnonymousId(nameHandle));
+        const nameHandle = isMentionSafe(name) && isAnonymousId(name) ? name : null;
 
-        const handle = hasCustomName ? nameHandle : (anonHandle || nameHandle);
+        const handle = anonHandle || nameHandle;
         if (!handle) return null;
 
         const lowerHandle = handle.toLowerCase();
         if (seenHandles.has(lowerHandle)) return null;
         seenHandles.add(lowerHandle);
 
-        const displayName = hasCustomName ? name : (anonymousId || name || handle);
-        const secondaryLabel =
-          hasCustomName && anonHandle && anonHandle.toLowerCase() !== lowerHandle && !/^SEED_/i.test(anonHandle)
-            ? `@${anonHandle}`
-            : undefined;
-
         return {
           id: participant.id,
           handle,
-          displayName,
-          secondaryLabel,
+          displayName: handle,
           messageCount: participant.messageCount || 0,
         };
       })
