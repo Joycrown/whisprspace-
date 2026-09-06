@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (threadErr || !thread || thread.creator_id !== caller.id) {
-    return NextResponse.json({ error: 'Not allowed to import into this thread' }, { status: 403 })
+    return NextResponse.json({ error: 'Not allowed to import into this discussion' }, { status: 403 })
   }
 
   // 2. Caller must be a participant of the conversation being imported.
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
 
   if (convo?.converted_thread_id) {
     return NextResponse.json(
-      { error: 'This conversation has already been turned into a thread.' },
+      { error: 'This conversation has already been turned into a discussion.' },
       { status: 409 }
     )
   }

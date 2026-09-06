@@ -10,7 +10,7 @@ import { useMessageBadge } from '@/lib/messaging';
 
 const navItems = [
   { icon: Home, label: 'Home', href: '/threads' },
-  { icon: FolderOpen, label: 'My Threads', href: '/my-threads' },
+  { icon: FolderOpen, label: 'My Discussions', href: '/my-threads' },
   { icon: MessageCircle, label: 'Messages', href: '/inbox', showMessageBadge: true },
   { icon: DollarSign, label: 'My Earnings', href: '/profile/earnings' },
   { icon: User, label: 'Profile', href: '/profile' },
@@ -49,10 +49,10 @@ const Sidebar = () => {
         {/* Navigation */}
         <nav className="px-3 py-4 flex flex-col items-center gap-6">
           {navItems.map((item) => {
-            // Special handling for thread detail pages: they should highlight "My Threads"
+            // Special handling for thread detail pages: they should highlight "My Discussions"
             let isActive;
             if (pathname?.startsWith('/threads/') && item.href === '/my-threads') {
-              // Thread detail pages should highlight "My Threads"
+              // Thread detail pages should highlight "My Discussions"
               isActive = true;
             } else if (item.href === '/threads' && pathname === '/threads') {
               // Only highlight Home when on the exact /threads route

@@ -295,7 +295,7 @@ export default function PaymentModal({
                   <CheckCircle className="w-10 h-10 text-green-600" />
                 </div>
                 <h3 className="text-xl font-semibold text-gray-900 mb-2">Payment Successful!</h3>
-                <p className="text-gray-600">You now have access to this premium thread</p>
+                <p className="text-gray-600">You now have access to this premium discussion</p>
               </motion.div>
             )}
 

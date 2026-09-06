@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
-  FaPaperPlane, FaImage, FaTimes, FaAt, FaPaperclip
+  FaPaperPlane, FaImage, FaTimes, FaPaperclip
 } from 'react-icons/fa';
 import { Message, Participant } from '@/types';
 
@@ -246,7 +246,7 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
       <div className="max-w-4xl mx-auto">
         {isDisabled && (
           <div className="mb-3 text-xs md:text-sm text-red-300 bg-red-900/30 border border-red-800 rounded px-3 py-2">
-            {disabledMessage || 'You cannot send messages in this thread.'}
+            {disabledMessage || 'You cannot send messages in this discussion.'}
           </div>
         )}
         {replyPreview && (
@@ -432,8 +432,7 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
         </div>
 
         <div className="mt-2 flex items-start gap-1.5 px-1 text-[11px] md:text-xs text-gray-400 min-w-0">
-          <FaAt className="w-3 h-3 text-indigo-300" />
-          <span className="min-w-0 break-words leading-snug">Type @ to pick a participant. Press Ctrl/Cmd + Enter to send.</span>
+          <span className="min-w-0 break-words leading-snug">Press Ctrl/Cmd + Enter to send.</span>
         </div>
       </div>
     </div>

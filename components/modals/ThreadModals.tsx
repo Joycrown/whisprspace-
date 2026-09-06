@@ -134,7 +134,7 @@ export const RemoveModal: React.FC<RemoveModalProps> = ({
     isOpen={isOpen}
     onClose={onClose}
     title="Remove Participant"
-    description={`Are you sure you want to remove ${participantName} from this thread?`}
+    description={`Are you sure you want to remove ${participantName} from this discussion?`}
   >
     <button
       onClick={onClose}
@@ -209,10 +209,10 @@ export const ReportModal: React.FC<ReportModalProps> = ({
     <BaseModal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Report Thread"
+      title="Report Discussion"
       description={
         step === 'confirm'
-          ? "Are you sure you want to report this thread?"
+          ? "Are you sure you want to report this discussion?"
           : "Please select a reason for reporting"
       }
     >
@@ -264,7 +264,7 @@ export const ReportModal: React.FC<ReportModalProps> = ({
                   id="customReason"
                   value={customReason}
                   onChange={(e) => setCustomReason(e.target.value)}
-                  placeholder="Describe why you're reporting this thread..."
+                  placeholder="Describe why you're reporting this discussion..."
                   className="w-full p-2 bg-gray-700 text-white rounded border border-gray-600 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 min-h-[80px]"
                   rows={3}
                 />
@@ -312,10 +312,10 @@ export const VisibilityModal: React.FC<VisibilityModalProps> = ({
   <BaseModal
     isOpen={isOpen}
     onClose={onClose}
-    title="Change Thread Visibility"
+    title="Change Discussion Visibility"
     description={isPublic
-      ? "Making the thread private will restrict access to invited participants only."
-      : "Making the thread public will allow anyone with the link to join."
+      ? "Making the discussion private will restrict access to invited participants only."
+      : "Making the discussion public will allow anyone with the link to join."
     }
   >
     <button
@@ -350,8 +350,8 @@ export const LinkModal: React.FC<LinkModalProps> = ({
   <BaseModal
     isOpen={isOpen}
     onClose={onClose}
-    title="Show Thread Link"
-    description="Are you sure you want to make the thread link visible? This action cannot be reversed."
+    title="Show Discussion Link"
+    description="Are you sure you want to make the discussion link visible? This action cannot be reversed."
   >
     <button
       onClick={onClose}
@@ -387,8 +387,8 @@ export const DeleteModal: React.FC<DeleteModalProps> = ({
   <BaseModal
     isOpen={isOpen}
     onClose={onClose}
-    title="Delete Thread"
-    description="Are you sure you want to delete this thread? This action is permanent and will remove all messages and attachments. This cannot be undone."
+    title="Delete Discussion"
+    description="Are you sure you want to delete this discussion? This action is permanent and will remove all messages and attachments. This cannot be undone."
   >
     <button
       onClick={onClose}
@@ -410,7 +410,7 @@ export const DeleteModal: React.FC<DeleteModalProps> = ({
           Deleting...
         </>
       ) : (
-        'Delete Thread'
+        'Delete Discussion'
       )}
     </button>
   </BaseModal>
@@ -432,8 +432,8 @@ export const LeaveModal: React.FC<LeaveModalProps> = ({
   <BaseModal
     isOpen={isOpen}
     onClose={onClose}
-    title="Leave Thread"
-    description="Are you sure you want to leave this thread? You will no longer receive notifications from this thread."
+    title="Leave Discussion"
+    description="Are you sure you want to leave this discussion? You will no longer receive notifications from this discussion."
   >
     <button
       onClick={onClose}
@@ -455,7 +455,7 @@ export const LeaveModal: React.FC<LeaveModalProps> = ({
           Leaving...
         </>
       ) : (
-        'Leave Thread'
+        'Leave Discussion'
       )}
     </button>
   </BaseModal>

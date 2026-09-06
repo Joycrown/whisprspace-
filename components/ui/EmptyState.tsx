@@ -53,8 +53,8 @@ export function EmptyState({
 export function EmptyThreads() {
   return (
     <EmptyState
-      title="No threads yet"
-      description="Be the first to start a conversation. Create a thread and speak freely."
+      title="No discussions yet"
+      description="Be the first to start a conversation. Create a discussion and speak freely."
     />
   );
 }

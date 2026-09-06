@@ -32,7 +32,7 @@ const getThreadForPurchase = async (threadId: string) => {
     .single()
 
   if (error || !data) {
-    return { thread: null, error: 'Thread not found' }
+    return { thread: null, error: 'Discussion not found' }
   }
 
   return { thread: data as PurchasableThread, error: null }
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     if (!thread.is_premium) {
       return NextResponse.json(
-        { error: 'Thread is not premium' },
+        { error: 'Discussion is not premium' },
         { status: 400 }
       )
     }
@@ -109,28 +109,28 @@ export async function POST(request: NextRequest) {
     const price = Number(thread.price)
     if (!price || Number.isNaN(price) || price <= 0) {
       return NextResponse.json(
-        { error: 'Invalid thread price' },
+        { error: 'Invalid discussion price' },
         { status: 400 }
       )
     }
 
     if (thread.deleted_at) {
       return NextResponse.json(
-        { error: 'Thread is no longer available' },
+        { error: 'Discussion is no longer available' },
         { status: 410 }
       )
     }
 
     if (thread.expires_at && new Date(thread.expires_at) < new Date()) {
       return NextResponse.json(
-        { error: 'Thread has expired' },
+        { error: 'Discussion has expired' },
         { status: 410 }
       )
     }
 
     if (thread.creator_id === user.id) {
       return NextResponse.json(
-        { error: 'Creators cannot purchase their own thread' },
+        { error: 'Creators cannot purchase their own discussion' },
         { status: 403 }
       )
     }
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
     const alreadyPurchased = await hasExistingPurchase(threadId, user.id)
     if (alreadyPurchased) {
       return NextResponse.json(
-        { error: 'Thread already purchased', alreadyPurchased: true },
+        { error: 'Discussion already purchased', alreadyPurchased: true },
         { status: 409 }
       )
     }
@@ -194,8 +194,8 @@ export async function POST(request: NextRequest) {
           originalAmount: price,
         },
         customizations: {
-          title: thread.title ? `Premium Thread: ${thread.title}` : 'Premium Thread Access',
-          description: `Access to premium thread (${formatCurrency(finalAmount, currency)})`,
+          title: thread.title ? `Premium Discussion: ${thread.title}` : 'Premium Discussion Access',
+          description: `Access to premium discussion (${formatCurrency(finalAmount, currency)})`,
         },
       }),
     })
@@ -234,7 +234,7 @@ export async function POST(request: NextRequest) {
           amount_usd: price,
           currency: currency,
           status: 'pending',
-          description: 'Premium thread purchase',
+          description: 'Premium discussion purchase',
           metadata: {
             threadId,
             creatorId: thread.creator_id,

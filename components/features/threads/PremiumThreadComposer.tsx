@@ -224,11 +224,11 @@ export default function PremiumThreadComposer({
                 </div>
                 <div className="flex items-start gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                   <Check className="text-green-500 flex-shrink-0 mt-0.5" size={14} />
-                  <span><strong>Unlimited</strong> premium threads (vs 5/month limit)</span>
+                  <span><strong>Unlimited</strong> premium discussions (vs 5/month limit)</span>
                 </div>
                 <div className="flex items-start gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                   <Check className="text-green-500 flex-shrink-0 mt-0.5" size={14} />
-                  <span>Threads last <strong>7 days</strong> (vs 48 hours) — and can be saved forever</span>
+                  <span>Discussions last <strong>7 days</strong> (vs 48 hours) — and can be saved forever</span>
                 </div>
                 <div className="flex items-start gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-700 dark:text-gray-300">
                   <Check className="text-green-500 flex-shrink-0 mt-0.5" size={14} />
@@ -264,8 +264,8 @@ export default function PremiumThreadComposer({
             </p>
             <p>
               {user.isPremium
-                ? 'You have unlimited premium thread creation with 70% revenue share.'
-                : `You can create up to ${rules.limits.monthly} premium threads per month with 50% revenue share.`
+                ? 'You have unlimited premium discussion creation with 70% revenue share.'
+                : `You can create up to ${rules.limits.monthly} premium discussions per month with 50% revenue share.`
               }
             </p>
             {!user.isPremium && user.premiumThreadsCreatedThisMonth !== undefined && (

@@ -127,8 +127,8 @@ function buildPreExpiryEmail(
     replyCount === 0
       ? "Your thread is still waiting. Sometimes that's okay too."
       : replyCount === 1
-        ? 'One person showed up for your thread.'
-        : `${replyCount} people showed up for your thread.`
+        ? 'One person showed up for your discussion.'
+        : `${replyCount} people showed up for your discussion.`
 
   return `
     <div style="font-family: Georgia, serif; max-width: 520px; margin: 0 auto; padding: 40px 24px; color: #1a1a1a; background: #ffffff;">

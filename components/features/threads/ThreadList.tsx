@@ -91,10 +91,10 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
     try {
       const response = await fetch(`/api/threads/${thread.id}/preview`, { method: 'GET', cache: 'no-store' });
       const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload?.data) throw new Error(payload?.error || 'Failed to load thread preview');
+      if (!response.ok || !payload?.data) throw new Error(payload?.error || 'Failed to load discussion preview');
       setPreviewData(payload.data as ThreadPreviewData);
     } catch (error) {
-      setPreviewError(error instanceof Error ? error.message : 'Failed to load thread preview');
+      setPreviewError(error instanceof Error ? error.message : 'Failed to load discussion preview');
     } finally {
       setPreviewLoading(false);
     }
@@ -193,7 +193,7 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
         tabIndex={0}
         onClick={handleCardClick}
         onKeyDown={handleCardKeyDown}
-        aria-label={`Preview thread ${thread.title}`}
+        aria-label={`Preview discussion ${thread.title}`}
       >
         <div className="flex items-start gap-2.5 md:gap-3 w-full">
           <Identicon seed={authorSeed} size={36} />
@@ -211,7 +211,7 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
                     </span>
                   )}
                   {(thread.privacy === 'private' || thread.privacy === 'invite_only') && (
-                    <FaLock className="w-3 h-3 text-[#5C5C6E] flex-shrink-0" title="Private thread" />
+                    <FaLock className="w-3 h-3 text-[#5C5C6E] flex-shrink-0" title="Private discussion" />
                   )}
                 </h3>
                 <p className="text-[#5C5C6E] text-xs md:text-sm mt-0.5 line-clamp-2 break-words">
@@ -338,7 +338,7 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
                   <div>
                     <h4 className="text-xs uppercase tracking-wide text-[#5C5C6E] mb-2">Message preview</h4>
                     {isThreadBlocked && (
-                      <p className="mb-2 text-xs text-[#E24B4A]">This thread is blocked due to community reports.</p>
+                      <p className="mb-2 text-xs text-[#E24B4A]">This discussion is blocked due to community reports.</p>
                     )}
                     {preview.messages.length === 0 ? (
                       <p className="text-xs text-[#5C5C6E]">No messages yet.</p>
@@ -375,12 +375,12 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
               >
                 {isJoining && <Loader2 className="w-4 h-4 animate-spin" />}
                 {isThreadBlocked
-                  ? 'Thread blocked'
+                  ? 'Discussion blocked'
                   : thread.isPremium && !canAccessPremium
                     ? 'Unlock & join'
                     : isCreator || thread.hasJoined
-                      ? 'Open thread'
-                      : 'Join thread'}
+                      ? 'Open discussion'
+                      : 'Join discussion'}
               </button>
             </div>
           </div>

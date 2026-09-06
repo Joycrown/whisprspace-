@@ -105,7 +105,7 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
     thread && currentUserId && (thread.createdBy?.id === currentUserId || thread.authorId === currentUserId)
   );
   const defaultShareUrl = buildThreadShareUrl();
-  const shareText = thread ? `Check out this thread: ${thread.title}` : 'Check out this thread';
+  const shareText = thread ? `Check out this discussion: ${thread.title}` : 'Check out this discussion';
   const canOpenPreview = typeof onOpenPreview === 'function';
 
   const resolveShareUrl = useCallback(async (forceNew = false) => {
@@ -139,7 +139,7 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
   const getShareUrlOrNotify = async () => {
     const shareUrl = await resolveShareUrl();
     if (shareUrl) return shareUrl;
-    showToast({ type: 'error', title: 'Invite link restricted', message: 'Only the thread creator can share private-thread invite links.', duration: 4000 });
+    showToast({ type: 'error', title: 'Invite link restricted', message: 'Only the discussion creator can share private-discussion invite links.', duration: 4000 });
     setShowShareDropdown(false);
     return null;
   };
@@ -251,7 +251,7 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
             onKeyDown={canOpenPreview ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenPreview?.(); } } : undefined}
             role={canOpenPreview ? 'button' : undefined}
             tabIndex={canOpenPreview ? 0 : undefined}
-            aria-label={canOpenPreview ? 'Open thread preview' : undefined}
+            aria-label={canOpenPreview ? 'Open discussion preview' : undefined}
           >
             {/* Participant identicon stack */}
             <div className="flex-shrink-0 hidden sm:flex -space-x-2">
@@ -274,10 +274,9 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
                 {thread.title}
               </h1>
               <div className="flex items-center gap-1 md:gap-2 text-xs text-[#5C5C6E]">
-                <span className="truncate">by {thread.createdBy?.name || 'Anonymous'}</span>
                 {thread.expiresAt && !thread.isSaved && (
-                  <span className="text-[#EF9F27] hidden sm:inline">
-                    · {timeRemaining}
+                  <span className="text-[#EF9F27]">
+                    {timeRemaining}
                   </span>
                 )}
                 {thread.isSaved && (
@@ -313,7 +312,7 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
               <button
                 onClick={() => setShowShareDropdown(!showShareDropdown)}
                 className="text-[#5C5C6E] hover:text-[#F2F2F6] transition-colors p-2 rounded-lg hover:bg-white/[0.05]"
-                title="Share thread"
+                title="Share discussion"
               >
                 <FaShareAlt className="w-4 h-4" />
               </button>

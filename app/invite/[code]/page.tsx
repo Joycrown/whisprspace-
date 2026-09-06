@@ -28,11 +28,11 @@ const InvitePage = () => {
     if (
       normalized.includes('invalid invite code') ||
       normalized.includes('invite code has expired') ||
-      normalized.includes('thread not found') ||
-      normalized.includes('thread is deleted') ||
-      normalized.includes('thread has expired')
+      normalized.includes('discussion not found') ||
+      normalized.includes('discussion is deleted') ||
+      normalized.includes('discussion has expired')
     ) {
-      return 'Thread expired or deleted. Ask the creator for a new invite.';
+      return 'Discussion expired or deleted. Ask the creator for a new invite.';
     }
 
     return message;
@@ -83,7 +83,7 @@ const InvitePage = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0e0e10] px-4">
       <div className="w-full max-w-md rounded-2xl border border-gray-800 bg-[#141418] p-6 shadow-xl">
-        <h1 className="text-xl font-semibold text-white mb-2">Join Thread</h1>
+        <h1 className="text-xl font-semibold text-white mb-2">Join Discussion</h1>
         <p className="text-sm text-gray-400 mb-6">
           You&apos;ve been invited to a private thread. Sign in or continue as a guest to join.
         </p>
@@ -123,7 +123,7 @@ const InvitePage = () => {
             onClick={redeem}
             className="w-full rounded-lg bg-purple-600 px-4 py-2 text-white font-semibold hover:bg-purple-500 transition-colors"
           >
-            Join Thread
+            Join Discussion
           </button>
         )}
 

@@ -154,12 +154,12 @@ const ThreadPage = () => {
       const payload = await response.json().catch(() => null);
 
       if (!response.ok || !payload?.data) {
-        throw new Error(payload?.error || 'Failed to load thread preview');
+        throw new Error(payload?.error || 'Failed to load discussion preview');
       }
 
       setPreviewData(payload.data as ThreadPreviewData);
     } catch (previewLoadError) {
-      setPreviewError(previewLoadError instanceof Error ? previewLoadError.message : 'Failed to load thread preview');
+      setPreviewError(previewLoadError instanceof Error ? previewLoadError.message : 'Failed to load discussion preview');
     } finally {
       setPreviewLoading(false);
     }
@@ -235,8 +235,8 @@ const ThreadPage = () => {
     if (isThreadLocked) {
       showToast({
         type: 'error',
-        title: 'Thread Blocked',
-        message: 'This thread has been blocked due to community reports.',
+        title: 'Discussion Blocked',
+        message: 'This discussion has been blocked due to community reports.',
         duration: 4500,
       });
     }
@@ -346,8 +346,8 @@ const ThreadPage = () => {
     if (isThreadLocked) {
       showToast({
         type: 'error',
-        title: 'Thread Blocked',
-        message: 'This thread is blocked and no further activity is allowed.',
+        title: 'Discussion Blocked',
+        message: 'This discussion is blocked and no further activity is allowed.',
         duration: 4500,
       });
       return;
@@ -360,7 +360,7 @@ const ThreadPage = () => {
       showToast({
         type: 'success',
         title: 'Invite Sent',
-        message: `${username} has been invited to join this thread.`,
+        message: `${username} has been invited to join this discussion.`,
         duration: 4000,
       });
     } else {
@@ -561,16 +561,16 @@ const ThreadPage = () => {
         type: 'success',
         title: alreadyReported ? 'Already Reported' : 'Report Submitted',
         message: alreadyReported
-          ? 'You have already reported this thread.'
-          : 'Thanks. Our moderation team will review this thread.',
+          ? 'You have already reported this discussion.'
+          : 'Thanks. Our moderation team will review this discussion.',
         duration: 4200,
       });
 
       if (didLockThread) {
         showToast({
           type: 'error',
-          title: 'Thread Blocked',
-          message: 'This thread has been blocked due to high report volume.',
+          title: 'Discussion Blocked',
+          message: 'This discussion has been blocked due to high report volume.',
           duration: 5000,
         });
       }
@@ -773,7 +773,7 @@ const ThreadPage = () => {
     if (!err) return '';
     if (err instanceof Error) return err.message;
     if (typeof err === 'string') return err;
-    return 'Failed to join thread';
+    return 'Failed to join discussion';
   }, [joinThreadMutation.error, joinActionError, isBanned, banPresentation]);
 
   useEffect(() => {
@@ -786,7 +786,7 @@ const ThreadPage = () => {
     const err = joinThreadMutation.error as any;
     const message =
       err instanceof Error ? err.message : typeof err === 'string' ? err : '';
-    if (message.includes('removed from this thread')) {
+    if (message.includes('removed from this discussion')) {
       setIsBanned(true);
       setBanPresentation('toast');
       setShowRemovedModal(false);
@@ -797,7 +797,7 @@ const ThreadPage = () => {
     const err = joinThreadMutation.error as any;
     const message =
       err instanceof Error ? err.message : typeof err === 'string' ? err : '';
-    if (message.includes('removed from this thread')) {
+    if (message.includes('removed from this discussion')) {
       setIsBanned(true);
       setShowRemovedModal(true);
     }
@@ -919,12 +919,12 @@ const ThreadPage = () => {
       <div className="min-h-[100dvh] bg-[#121212] flex items-center justify-center p-4">
         <div className="w-full max-w-md rounded-xl border border-gray-800 bg-[#1E1E1E] p-6 text-white shadow-2xl">
           <h2 className="text-lg font-semibold">
-            {isExpiredThread ? 'Thread Expired' : 'Unable to Open Thread'}
+            {isExpiredThread ? 'Discussion Expired' : 'Unable to Open Discussion'}
           </h2>
           <p className="mt-2 text-sm text-gray-300">
             {isExpiredThread
-              ? 'This thread has expired and is no longer available.'
-              : (queryError?.message || 'Failed to load thread.')}
+              ? 'This discussion has expired and is no longer available.'
+              : (queryError?.message || 'Failed to load discussion.')}
           </p>
           <div className="mt-5 flex gap-2">
             <button
@@ -950,7 +950,7 @@ const ThreadPage = () => {
   }
 
   if (!currentThread) {
-    return <div className="text-white p-4">Thread not found.</div>;
+    return <div className="text-white p-4">Discussion not found.</div>;
   }
 
   const previewFallbackData: ThreadPreviewData = {
@@ -1106,8 +1106,8 @@ const ThreadPage = () => {
           isLoading={createMessageMutation.isPending}
           isDisabled={isThreadBlocked}
           disabledMessage={isThreadLocked
-            ? 'This thread has been blocked due to community reports.'
-            : 'You have been removed from this thread.'}
+            ? 'This discussion has been blocked due to community reports.'
+            : 'You have been removed from this discussion.'}
         />
       </div>
     </>
@@ -1130,7 +1130,7 @@ const ThreadPage = () => {
         {isPrivateBlocked ? (
           <div className="flex-1 flex items-center justify-center p-6 text-center">
             <div className="max-w-md space-y-3">
-              <h2 className="text-xl font-semibold text-white">This thread is private</h2>
+              <h2 className="text-xl font-semibold text-white">This discussion is private</h2>
               <p className="text-sm text-gray-400">
                 This thread requires an invite from the creator before you can join.
               </p>
@@ -1144,7 +1144,7 @@ const ThreadPage = () => {
                 disabled={joinThreadMutation.isPending}
                 className="w-full px-4 py-2 rounded-md bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
               >
-                {joinThreadMutation.isPending ? 'Joining...' : 'Join Thread'}
+                {joinThreadMutation.isPending ? 'Joining...' : 'Join Discussion'}
               </button>
               <button
                 onClick={() => router.push('/threads')}
@@ -1205,7 +1205,7 @@ const ThreadPage = () => {
 
                   {/* Close Button */}
                   <div className="flex-shrink-0 bg-[#1E1E1E] border-b border-gray-800 px-4 py-3 flex items-center justify-between">
-                    <h2 className="text-white font-semibold text-lg">Thread Details</h2>
+                    <h2 className="text-white font-semibold text-lg">Discussion Details</h2>
                     <button
                       onClick={() => setIsSidebarOpen(false)}
                       className="text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700"
@@ -1387,7 +1387,7 @@ const ThreadPage = () => {
       {isBanned && showRemovedModal && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm modal-safe-overlay">
           <div className="w-full max-w-md modal-safe-panel bg-[#1E1E1E] border border-red-800 rounded-xl p-6 text-white shadow-2xl overflow-y-auto">
-            <h2 className="text-lg font-semibold mb-2">Removed from Thread</h2>
+            <h2 className="text-lg font-semibold mb-2">Removed from Discussion</h2>
             <p className="text-sm text-gray-300 mb-4">
               You have been removed from this thread by the creator. You can no longer send or receive messages here.
             </p>

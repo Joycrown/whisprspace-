@@ -30,7 +30,7 @@ const sections: Array<{ heading: string; paragraphs: string[]; bullets?: string[
       'Username or display name',
       'Email address (if provided)',
       'Profile preferences',
-      'Content you create (threads, replies, messages, uploads)',
+      'Content you create (discussions, replies, messages, uploads)',
       'Communications with support',
       'IP address',
       'Device identifiers',

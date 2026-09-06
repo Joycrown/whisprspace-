@@ -255,7 +255,7 @@ export default function CreatorEarningsDashboard({
             Creator Earnings
           </h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">
-            Track your premium thread revenue and payouts
+            Track your premium discussion revenue and payouts
           </p>
         </div>
 
@@ -281,7 +281,7 @@ export default function CreatorEarningsDashboard({
           </div>
           <div className="flex items-center gap-2 text-sm text-purple-100">
             <Sparkles size={14} />
-            <span>{isLoading ? '--' : `${earnings.threadsSold} threads sold`}</span>
+            <span>{isLoading ? '--' : `${earnings.threadsSold} discussions sold`}</span>
           </div>
         </div>
 
@@ -344,7 +344,7 @@ export default function CreatorEarningsDashboard({
           </div>
 
           <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg">
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Threads Sold</p>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Discussions Sold</p>
             <p className="text-2xl font-bold text-gray-900 dark:text-white">
               {isLoading ? '--' : earnings.threadsSold}
             </p>
@@ -524,7 +524,7 @@ export default function CreatorEarningsDashboard({
                 >
                   <div>
                     <p className="font-medium text-gray-900 dark:text-white">
-                      {isPayout ? 'Payout Request' : transaction.threadTitle || 'Thread Sale'}
+                      {isPayout ? 'Payout Request' : transaction.threadTitle || 'Discussion Sale'}
                     </p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       {new Date(transaction.occurredAt).toLocaleDateString()}

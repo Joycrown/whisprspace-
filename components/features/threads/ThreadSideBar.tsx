@@ -91,7 +91,6 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
   const [showRemoveModal, setShowRemoveModal] = useState(false);
   const [isLinkVisible, setIsLinkVisible] = useState(false);
   const [showVisibilityModal, setShowVisibilityModal] = useState(false);
-  const [isPublic, setIsPublic] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -126,7 +125,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
 
   const handleReport = async ({ reason, customReason }: { reason: string; customReason?: string }) => {
     if (thread.isLocked) {
-      showToast({ type: 'error', title: 'Thread blocked', message: 'This thread is already blocked.', duration: 4000 });
+      showToast({ type: 'error', title: 'Discussion blocked', message: 'This discussion is already blocked.', duration: 4000 });
       setShowReportModal(false);
       return;
     }
@@ -160,7 +159,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
 
   const generateInviteLink = async (forceNew = false) => {
     if (thread.privacy !== 'public' && !isCreator) {
-      showToast({ type: 'error', title: 'Restricted', message: 'Only the thread creator can generate invite links.', duration: 4000 });
+      showToast({ type: 'error', title: 'Restricted', message: 'Only the discussion creator can generate invite links.', duration: 4000 });
       return null;
     }
     if (thread.privacy !== 'public') {
@@ -201,9 +200,9 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
   const ThreadLinkSection = () => (
     <div className={sectionCls}>
       <div className="flex items-center justify-between">
-        <CustomTooltip text="Generate a unique link to invite others to join this thread.">
+        <CustomTooltip text="Generate a unique link to invite others to join this discussion.">
           <div className="cursor-help">
-            <p className={labelCls}>Thread link</p>
+            <p className={labelCls}>Discussion link</p>
             <p className={subLabelCls}>Share and connect</p>
           </div>
         </CustomTooltip>
@@ -244,25 +243,34 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
 
   const ThreadStatusSection = () => (
     <div className={sectionCls}>
-      <CustomTooltip text="Manage who can access this thread.">
+      <CustomTooltip text="Manage who can access this discussion.">
         <div className="cursor-help mb-2">
-          <p className={labelCls}>Thread status</p>
+          <p className={labelCls}>Discussion status</p>
           <p className={subLabelCls}>Control visibility</p>
         </div>
       </CustomTooltip>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowVisibilityModal(true)} className="p-1.5 rounded-lg hover:bg-white/[0.05] transition-colors">
+          <span className="p-1.5">
             {thread.privacy === 'public'
               ? <FaGlobe className="text-[#5DCAA5]" />
               : <FaLock className="text-[#EF9F27]" />}
-          </button>
+          </span>
           <span className="text-sm text-[#8F8FA3]">
             {thread.privacy === 'public' ? 'Public' : thread.privacy === 'invite_only' ? 'Invite only' : 'Private'}
           </span>
         </div>
         <span className={subLabelCls}>{thread.privacy === 'public' ? 'Anyone can join' : 'Invite required'}</span>
       </div>
+
+      {isCreator && (
+        <button
+          onClick={() => setShowVisibilityModal(true)}
+          className="mt-3 w-full py-2 px-3 rounded-lg border border-[#23232E] text-sm text-[#C4B5FD] hover:bg-white/[0.05] transition-colors"
+        >
+          {thread.privacy === 'public' ? 'Make private' : 'Make public'}
+        </button>
+      )}
     </div>
   );
 
@@ -300,7 +308,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
             <div className="space-y-0">
               {/* Overview */}
               <div className={sectionCls}>
-                <p className={`${labelCls} mb-2`}>Thread overview</p>
+                <p className={`${labelCls} mb-2`}>Discussion overview</p>
                 <div className="space-y-1.5 text-sm text-[#8F8FA3]">
                   <div className="flex justify-between">
                     <span>Messages</span>
@@ -353,7 +361,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
 
               {/* Reports */}
               <div className={`${sectionCls} flex items-center justify-between`}>
-                <CustomTooltip text="Number of times this thread has been reported.">
+                <CustomTooltip text="Number of times this discussion has been reported.">
                   <span className={`${labelCls} cursor-help`}>Reports</span>
                 </CustomTooltip>
                 <span className="text-sm text-[#8F8FA3]">{thread.reportCount}</span>
@@ -367,7 +375,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
 
               {/* Mute */}
               <div className={`${sectionCls} flex items-center justify-between`}>
-                <CustomTooltip text="Mute to stop notifications from this thread.">
+                <CustomTooltip text="Mute to stop notifications from this discussion.">
                   <span className={`${labelCls} cursor-help`}>{isMuted ? 'Unmute' : 'Mute'} thread</span>
                 </CustomTooltip>
                 <button
@@ -450,7 +458,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
                   onClick={() => {
                     const userIsPremium = thread.author?.isPremium;
                     if (!userIsPremium) {
-                      showToast({ type: 'warning', title: 'Premium feature', message: 'Upgrade to save threads permanently.', duration: 7000 });
+                      showToast({ type: 'warning', title: 'Premium feature', message: 'Upgrade to save discussions permanently.', duration: 7000 });
                       return;
                     }
                     import('@/lib/threads/thread-service').then(({ saveThread }) => {
@@ -458,10 +466,10 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
                       if (userId) {
                         saveThread(thread.id, userId).then(result => {
                           if (result.success) {
-                            showToast({ type: 'success', title: 'Thread saved', message: 'Your thread will never expire.' });
+                            showToast({ type: 'success', title: 'Discussion saved', message: 'Your discussion will never expire.' });
                             window.location.reload();
                           } else {
-                            showToast({ type: 'error', title: 'Failed to save', message: result.error || 'Could not save thread' });
+                            showToast({ type: 'error', title: 'Failed to save', message: result.error || 'Could not save discussion' });
                           }
                         });
                       }
@@ -473,7 +481,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
                       : 'bg-white/[0.03] border border-[#2A2A38] text-[#5C5C6E]'
                   }`}
                 >
-                  Save thread
+                  Save discussion
                   {!thread.author?.isPremium && <span className="text-[#EF9F27] text-[11px]">Premium</span>}
                 </button>
 
@@ -481,7 +489,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
                   onClick={() => {
                     const userIsPremium = thread.author?.isPremium;
                     if (!userIsPremium) {
-                      showToast({ type: 'warning', title: 'Premium feature', message: 'Upgrade to extend thread expiration.', duration: 7000 });
+                      showToast({ type: 'warning', title: 'Premium feature', message: 'Upgrade to extend discussion expiration.', duration: 7000 });
                       return;
                     }
                     import('@/lib/threads/thread-service').then(({ extendThreadExpiration }) => {
@@ -492,7 +500,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
                             showToast({ type: 'success', title: 'Extended', message: `New expiration: ${result.newExpiresAt ? new Date(result.newExpiresAt).toLocaleString() : ''}` });
                             window.location.reload();
                           } else {
-                            showToast({ type: 'error', title: 'Failed', message: result.error || 'Could not extend thread' });
+                            showToast({ type: 'error', title: 'Failed', message: result.error || 'Could not extend discussion' });
                           }
                         });
                       }
@@ -520,7 +528,7 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
               onClick={() => setShowDeleteModal(true)}
               className="w-full bg-[#E24B4A]/[0.08] border border-[#E24B4A]/30 hover:bg-[#E24B4A]/[0.15] text-[#E24B4A] px-4 py-2 rounded-xl text-sm transition-colors"
             >
-              Delete thread
+              Delete discussion
             </button>
           </div>
         ) : isBanned ? (
@@ -560,8 +568,11 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
       <VisibilityModal
         isOpen={showVisibilityModal}
         onClose={() => setShowVisibilityModal(false)}
-        isPublic={isPublic}
-        onToggleVisibility={() => setIsPublic(!isPublic)}
+        isPublic={thread.privacy === 'public'}
+        onToggleVisibility={() => {
+          onUpdateThreadPrivacy?.(thread.privacy === 'public' ? 'private' : 'public');
+          setShowVisibilityModal(false);
+        }}
       />
       <DeleteModal
         isOpen={showDeleteModal}

@@ -6,7 +6,7 @@ import { OG_SIZE, renderThreadOgCard } from './og-card'
 // which edge streaming doesn't provide.
 export const runtime = 'edge'
 export const revalidate = 3600
-export const alt = 'WhisprSpace Thread'
+export const alt = 'WhisprSpace Discussion'
 export const size = OG_SIZE
 export const contentType = 'image/png'
 

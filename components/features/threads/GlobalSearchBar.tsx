@@ -13,7 +13,7 @@ const GlobalSearchBar: React.FC<GlobalSearchBarProps> = ({ className }) => {
   return (
     <div className={className}>
       <SearchBar
-        placeholder="Search all threads..."
+        placeholder="Search all discussions..."
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
       />

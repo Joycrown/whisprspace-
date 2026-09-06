@@ -230,7 +230,7 @@ export default function MyThreadsPage() {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload?.data) {
-        throw new Error(payload?.error || 'Failed to load thread preview');
+        throw new Error(payload?.error || 'Failed to load discussion preview');
       }
 
       setPreviewCache((prev) => ({
@@ -239,7 +239,7 @@ export default function MyThreadsPage() {
       }));
     } catch (error) {
       if (activePreviewThreadRef.current === threadId) {
-        setPreviewError(error instanceof Error ? error.message : 'Failed to load thread preview');
+        setPreviewError(error instanceof Error ? error.message : 'Failed to load discussion preview');
       }
     } finally {
       if (activePreviewThreadRef.current === threadId) {
@@ -278,10 +278,10 @@ export default function MyThreadsPage() {
       fetchThreads(false, { privacy: 'all' }).catch(() => null);
       router.push(getThreadPath(thread));
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'Could not join this thread. Ask the creator to re-send your invite.';
+      const message = error instanceof Error ? error.message : 'Could not join this discussion. Ask the creator to re-send your invite.';
       showToast({
         type: 'error',
-        title: 'Unable to Join Thread',
+        title: 'Unable to Join Discussion',
         message,
         duration: 5000,
       });
@@ -329,8 +329,8 @@ export default function MyThreadsPage() {
       <div className="max-w-6xl mx-auto px-3 md:px-4">
         {/* Header */}
         <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">My Threads</h1>
-          <p className="text-sm md:text-base text-gray-400">Manage your threads and track your activity</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">My Discussions</h1>
+          <p className="text-sm md:text-base text-gray-400">Manage your discussions and track your activity</p>
         </div>
 
         {/* Stats Overview */}
@@ -340,7 +340,7 @@ export default function MyThreadsPage() {
               <div className="p-2 bg-purple-500/20 rounded-lg">
                 <Users className="w-4 h-4 md:w-5 md:h-5 text-purple-400" />
               </div>
-              <span className="text-gray-400 text-xs md:text-sm">Threads Joined</span>
+              <span className="text-gray-400 text-xs md:text-sm">Discussions Joined</span>
             </div>
             <p className="text-2xl md:text-3xl font-bold text-white">{joinedThreads.length}</p>
           </div>
@@ -350,7 +350,7 @@ export default function MyThreadsPage() {
               <div className="p-2 bg-orange-500/20 rounded-lg">
                 <MessageCircle className="w-4 h-4 md:w-5 md:h-5 text-orange-400" />
               </div>
-              <span className="text-gray-400 text-xs md:text-sm">Threads Created</span>
+              <span className="text-gray-400 text-xs md:text-sm">Discussions Created</span>
             </div>
             <p className="text-2xl md:text-3xl font-bold text-white">{createdThreads.length}</p>
           </div>
@@ -360,7 +360,7 @@ export default function MyThreadsPage() {
               <div className="p-2 bg-green-500/20 rounded-lg">
                 <Crown className="w-4 h-4 md:w-5 md:h-5 text-green-400" />
               </div>
-              <span className="text-gray-400 text-xs md:text-sm">Premium Threads</span>
+              <span className="text-gray-400 text-xs md:text-sm">Premium Discussions</span>
             </div>
             <p className="text-2xl md:text-3xl font-bold text-white">
               {createdThreads.filter(t => t.isPremium).length}
@@ -415,17 +415,17 @@ export default function MyThreadsPage() {
               <MessageCircle className="w-12 h-12 md:w-16 md:h-16 text-gray-600 mx-auto mb-4" />
               <h3 className="text-lg md:text-xl font-semibold text-white mb-2">
                 {activeTab === 'joined'
-                  ? 'No Joined Threads'
+                  ? 'No Joined Discussions'
                   : activeTab === 'invited'
-                    ? 'No Invited Threads'
-                    : 'No Created Threads'}
+                    ? 'No Invited Discussions'
+                    : 'No Created Discussions'}
               </h3>
               <p className="text-sm md:text-base text-gray-400 mb-6">
                 {activeTab === 'joined'
-                  ? 'Start exploring and join threads that interest you'
+                  ? 'Start exploring and join discussions that interest you'
                   : activeTab === 'invited'
-                    ? 'You have no pending thread invitations right now'
-                    : 'Create your first thread and start a conversation'}
+                    ? 'You have no pending discussion invitations right now'
+                    : 'Create your first discussion and start a conversation'}
               </p>
               <div className="relative group inline-block">
                 {activeTab === 'created' && !canCreate ? (
@@ -434,16 +434,16 @@ export default function MyThreadsPage() {
                       disabled
                       className="inline-flex items-center gap-2 px-5 md:px-6 py-2.5 md:py-3 bg-gray-800 text-gray-600 text-sm md:text-base rounded-lg cursor-not-allowed border border-gray-700"
                     >
-                      <span className="line-through opacity-50">Create Thread</span>
+                      <span className="line-through opacity-50">Create Discussion</span>
                     </button>
-                    <span className="text-xs text-red-400">Guest accounts cannot create threads</span>
+                    <span className="text-xs text-red-400">Guest accounts cannot create discussions</span>
                   </div>
                 ) : (
                   <Link
                     href={activeTab === 'created' ? '/threads/create' : '/threads'}
                     className="inline-flex items-center gap-2 px-5 md:px-6 py-2.5 md:py-3 bg-gradient-to-r from-purple-600 to-orange-500 text-white text-sm md:text-base rounded-lg hover:opacity-90 transition-opacity"
                   >
-                    {activeTab === 'created' ? 'Create Thread' : 'Browse Threads'}
+                    {activeTab === 'created' ? 'Create Discussion' : 'Browse Discussions'}
                   </Link>
                 )}
 
@@ -479,7 +479,7 @@ export default function MyThreadsPage() {
                       openPreview(thread, isJoinAction);
                     }
                   }}
-                  aria-label={`Preview thread ${thread.title}`}
+                  aria-label={`Preview discussion ${thread.title}`}
                 >
                   <div className="p-4 md:p-6">
                     {/* Thread Header */}
@@ -502,7 +502,7 @@ export default function MyThreadsPage() {
                               title={
                                 thread.unreadCount
                                   ? `${thread.unreadCount} new message${thread.unreadCount === 1 ? '' : 's'} since you last opened this thread`
-                                  : 'New messages since you last opened this thread'
+                                  : 'New messages since you last opened this discussion'
                               }
                             >
                               <Mail className="w-3 h-3 text-purple-400" />
@@ -737,10 +737,10 @@ export default function MyThreadsPage() {
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : null}
                   {previewThread.isLocked
-                    ? 'Thread Blocked'
+                    ? 'Discussion Blocked'
                     : previewIsJoinAction
-                      ? 'Join Thread'
-                      : 'Open Thread'}
+                      ? 'Join Discussion'
+                      : 'Open Discussion'}
                 </button>
               </div>
             </div>

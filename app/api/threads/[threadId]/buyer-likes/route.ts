@@ -14,7 +14,7 @@ export async function GET(
   const { threadId } = await params
 
   if (!threadId || threadId.length > 128) {
-    return NextResponse.json({ error: 'Invalid thread' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid discussion' }, { status: 400 })
   }
 
   const { data, error } = await supabaseAnon.rpc('get_thread_buyer_likes', {

@@ -188,7 +188,7 @@ const GroupDetailPage = () => {
               ))}
             </div>
           ) : (
-            <p className="text-gray-400">No threads found for this group.</p>
+            <p className="text-gray-400">No discussions found for this group.</p>
           )}
         </div>
 

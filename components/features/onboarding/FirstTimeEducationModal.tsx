@@ -49,11 +49,11 @@ const GUIDE_STEPS: GuideStep[] = [
     mainIcon: Sparkles,
     color: 'from-indigo-600 via-purple-600 to-fuchsia-600',
     points: [
-      { text: 'Discover & join public Threads.', icon: Globe },
+      { text: 'Discover & join public Discussions.', icon: Globe },
       { text: 'Private 1-on-1s in your Inbox.', icon: Inbox },
       { text: 'Manage your settings in Profile.', icon: User },
     ],
-    ctaLabel: 'Explore Threads',
+    ctaLabel: 'Explore Discussions',
     ctaHref: '/threads',
   },
   {
@@ -67,7 +67,7 @@ const GUIDE_STEPS: GuideStep[] = [
       { text: 'Set clear privacy controls.', icon: ShieldCheck },
       { text: 'Monetize with Premium access.', icon: Crown },
     ],
-    ctaLabel: 'Create Thread',
+    ctaLabel: 'Create Discussion',
     ctaHref: '/threads/create',
   },
   {
@@ -81,7 +81,7 @@ const GUIDE_STEPS: GuideStep[] = [
       { text: 'Get instant push notifications.', icon: Bell },
       { text: 'Powerful moderation tools.', icon: Settings2 },
     ],
-    ctaLabel: 'Manage Threads',
+    ctaLabel: 'Manage Discussions',
     ctaHref: '/my-threads',
   },
 ]
