@@ -88,7 +88,6 @@ export const SearchResults: React.FC<SearchResultsProps> = ({
                   className="block w-full text-left p-2 hover:bg-gray-700 rounded cursor-pointer"
                 >
                   <p className="text-white font-medium line-clamp-1">{message.content}</p>
-                  <p className="text-sm text-gray-400">by {message.sender.name || message.sender.anonymousId}</p>
                 </button>
               ))}
             </div>

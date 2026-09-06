@@ -49,7 +49,13 @@ const ThreadInput: React.FC<ThreadInputProps> = ({
   const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Thread senders are no longer identified, so there is no handle to mention.
+  // Offering one would expose the persistent anonymous_id this is meant to hide.
+  const MENTIONS_ENABLED_IN_THREADS = false;
+
   const mentionCandidates = useMemo<MentionSuggestion[]>(() => {
+    if (!MENTIONS_ENABLED_IN_THREADS) return [];
+
     const isMentionSafe = (value?: string) => {
       if (!value) return false;
       return /^[a-zA-Z0-9_]+$/.test(value);

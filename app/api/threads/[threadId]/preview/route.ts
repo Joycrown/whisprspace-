@@ -32,7 +32,6 @@ type ThreadPreviewMessageRow = {
   id: string
   content: string | null
   created_at: string
-  sender?: { anonymous_id?: string | null } | Array<{ anonymous_id?: string | null }>
 }
 
 const truncateMessage = (value: string, maxLength: number) => {
@@ -79,7 +78,7 @@ export async function GET(
 
     const { data: messageRows, error: messagesError } = await supabaseAdmin
       .from('messages')
-      .select('id,content,created_at,sender:users!messages_sender_id_fkey(anonymous_id)')
+      .select('id,content,created_at')
       .eq('thread_id', threadId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
@@ -91,12 +90,14 @@ export async function GET(
     }
 
     const messages = (messageRows || []).map((row) => {
-      const senderRecord = Array.isArray(row.sender) ? row.sender[0] : row.sender
       return {
         id: row.id,
         content: truncateMessage((row.content || '').trim(), MAX_PREVIEW_MESSAGE_LENGTH),
         createdAt: row.created_at,
-        senderName: senderRecord?.anonymous_id || 'Anonymous',
+        // Thread senders are not identified. Exposing a stable anonymous_id
+        // here would let anyone correlate a person's activity across every
+        // thread they appear in.
+        senderName: '',
       }
     })
 
