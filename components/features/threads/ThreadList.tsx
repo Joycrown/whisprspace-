@@ -9,6 +9,7 @@ import { FaLock } from 'react-icons/fa';
 import PaymentModal from "@/components/modals/PaymentModal";
 import { useUserStore } from "@/store/userStore";
 import { redeemThreadAccessCode } from "@/lib/threads/thread-service";
+import { getThreadAvatarSeed } from "@/lib/threads/display-identity";
 import { useJoinThreadMutation } from "@/lib/threads/hooks/useThreadMutations";
 import { Loader2 } from "lucide-react";
 import { buildThreadPath } from "@/lib/threads/thread-url";
@@ -177,7 +178,7 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
     messages: [] as ThreadPreviewMessage[],
   };
 
-  const authorSeed = thread.author.anonymousId || thread.author.name || thread.id;
+  const authorSeed = getThreadAvatarSeed(thread.author?.id, thread.id);
 
   return (
     <>
@@ -236,9 +237,6 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
                 {thread.isPremium && thread.price ? (
                   <span className="text-[#C4B5FD] font-medium">${thread.price.toFixed(2)}</span>
                 ) : null}
-                <span className="text-[#C4B5FD] text-[10px] md:text-xs">
-                  by {thread.author.name || thread.author.anonymousId}
-                </span>
               </div>
 
               <div className="flex-shrink-0">
@@ -348,7 +346,9 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
                       <div className="space-y-2">
                         {preview.messages.map((msg) => (
                           <div key={msg.id} className="rounded-xl border border-[#23232E] bg-white/[0.02] px-3 py-2">
-                            <p className="text-[11px] text-[#5C5C6E]">{msg.senderName}</p>
+                            {msg.senderName && (
+                              <p className="text-[11px] text-[#5C5C6E]">{msg.senderName}</p>
+                            )}
                             <p className="text-sm text-[#8F8FA3] break-words">{msg.content}</p>
                           </div>
                         ))}

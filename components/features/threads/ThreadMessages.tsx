@@ -10,6 +10,7 @@ import { Attachment, Message, ReactionType } from '@/types';
 import { formatTimestamp } from '@/lib/utils/utils/helpers/threadHelpers';
 import MessageUserButton from './MessageUserButton';
 import { getAvatarUrl } from '@/lib/utils/avatar';
+import { getThreadAvatarSeed, getThreadSenderLabel, getThreadSenderLabelText } from '@/lib/threads/display-identity';
 
 interface ThreadMessagesProps {
   messages: Message[];
@@ -59,9 +60,10 @@ const ThreadMessages: React.FC<ThreadMessagesProps> = ({
 
     if (messageFilter.keyword) {
       const keywordLower = messageFilter.keyword.toLowerCase();
+      // Sender identity is hidden in threads, so searching by it would
+      // reintroduce the linkability it is meant to remove.
       filtered = filtered.filter(msg =>
-        msg.content.toLowerCase().includes(keywordLower) ||
-        msg.sender.name.toLowerCase().includes(keywordLower)
+        msg.content.toLowerCase().includes(keywordLower)
       );
     }
 
@@ -323,13 +325,15 @@ const MessageItem: React.FC<{
         >
           <div className="flex items-center gap-2 mb-1">
             <img
-              src={getAvatarUrl(repliedMessage.sender.id)}
-              alt={repliedMessage.sender.name}
+              src={getAvatarUrl(getThreadAvatarSeed(repliedMessage.sender.id, threadId))}
+              alt={getThreadSenderLabelText(repliedMessage.sender.id, currentUserId, repliedMessage.sender.name, threadCreatorId)}
               className="w-6 h-6 rounded-full border border-purple-500/50 ring-1 ring-purple-500/20"
             />
-            <span className="text-sm font-semibold text-purple-400">
-              {repliedMessage.sender.id === currentUserId ? 'You' : repliedMessage.sender.name}
-            </span>
+            {getThreadSenderLabel(repliedMessage.sender.id, currentUserId, repliedMessage.sender.name, threadCreatorId) && (
+              <span className="text-sm font-semibold text-purple-400">
+                {getThreadSenderLabel(repliedMessage.sender.id, currentUserId, repliedMessage.sender.name, threadCreatorId)}
+              </span>
+            )}
           </div>
           <p className="text-sm text-gray-300 line-clamp-2 break-words">
             {repliedMessage.content || 'Attachment'}
@@ -344,17 +348,19 @@ const MessageItem: React.FC<{
           transition={{ type: "spring", stiffness: 400 }}
         >
           <img
-            src={getAvatarUrl(message.sender.id)}
-            alt={message.sender.name}
+            src={getAvatarUrl(getThreadAvatarSeed(message.sender.id, threadId))}
+            alt={getThreadSenderLabelText(message.sender.id, currentUserId, message.sender.name, threadCreatorId)}
             className="w-8 h-8 md:w-10 md:h-10 rounded-full border-2 border-gray-700 object-cover ring-2 ring-purple-500/20 hover:ring-purple-500/40 transition-all"
           />
         </motion.div>
 
         <div className="flex-1 min-w-0 space-y-2 max-w-full overflow-hidden">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-white truncate bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-              {isCurrentUser ? 'You' : message.sender.name}
-            </span>
+            {getThreadSenderLabel(message.sender.id, currentUserId, message.sender.name, threadCreatorId) && (
+              <span className="font-semibold text-white truncate bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+                {getThreadSenderLabel(message.sender.id, currentUserId, message.sender.name, threadCreatorId)}
+              </span>
+            )}
             <span className="text-xs text-gray-500 font-medium flex items-center gap-1">
               {formatTimestamp(message.timestamp)}
               {message.isEdited && (
@@ -478,7 +484,7 @@ const MessageItem: React.FC<{
             {!isCurrentUser && (
               <MessageUserButton
                 userId={message.sender.id}
-                userAnonymousId={message.sender.name}
+                userAnonymousId={getThreadSenderLabelText(message.sender.id, currentUserId, message.sender.name, threadCreatorId)}
                 threadId={threadId}
                 variant="icon"
               />

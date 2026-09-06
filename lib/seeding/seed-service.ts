@@ -4,7 +4,6 @@
  */
 
 import { supabaseAdmin } from '@/lib/core/supabase/admin-client';
-import { generateAnonymousId } from '@/lib/utils';
 import { SEED_USERS } from './seed-personas';
 import { SEED_THREADS, PlaybookThread, PlaybookReply } from './content-playbook';
 
@@ -46,6 +45,21 @@ export async function updateSeedConfig(updates: Partial<SeedConfig>): Promise<Se
 
 // ─── SEED USERS ──────────────────────────────────────────────
 
+/**
+ * Seed anonymous IDs mirror the real-user shape (ANON_ + 8 chars) so seeded
+ * threads don't announce themselves in the feed. Real users get 8 digits from
+ * the handle_new_user trigger; seeds use 8 letters, so the system can still
+ * tell them apart without the is_seed lookup being the only signal.
+ */
+export function generateSeedAnonymousId(): string {
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let suffix = '';
+  for (let i = 0; i < 8; i++) {
+    suffix += letters[Math.floor(Math.random() * letters.length)];
+  }
+  return `ANON_${suffix}`;
+}
+
 export async function getSeedUsers() {
   const { data, error } = await supabaseAdmin
     .from('users')
@@ -72,9 +86,9 @@ export async function createSeedUsers(): Promise<{ created: number; skipped: num
       continue;
     }
 
-    let anonymousId = generateAnonymousId();
+    let anonymousId = generateSeedAnonymousId();
     while (takenAnonymousIds.has(anonymousId)) {
-      anonymousId = generateAnonymousId();
+      anonymousId = generateSeedAnonymousId();
     }
     takenAnonymousIds.add(anonymousId);
 

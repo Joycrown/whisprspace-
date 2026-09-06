@@ -39,25 +39,22 @@ if (!SUPABASE_URL || !SERVICE_KEY) {
 
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY);
 
-// Mirrors generateAnonymousId in lib/utils.ts
+// Mirrors generateSeedAnonymousId in lib/seeding/seed-service.ts
 function generateAnonymousId() {
-  const adjectives = [
-    'Anonymous', 'Mysterious', 'Silent', 'Hidden', 'Secret', 'Quiet',
-    'Invisible', 'Unknown', 'Nameless', 'Faceless', 'Shadowy', 'Enigmatic'
-  ];
-  const nouns = [
-    'Whisper', 'Voice', 'Soul', 'Mind', 'Spirit', 'Thought',
-    'Dream', 'Echo', 'Shadow', 'Phantom', 'Ghost', 'Wanderer'
-  ];
-  const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const noun = nouns[Math.floor(Math.random() * nouns.length)];
-  const number = Math.floor(Math.random() * 9999) + 1;
-  return `${adjective}${noun}${number}`;
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  let suffix = '';
+  for (let i = 0; i < 8; i++) {
+    suffix += letters[Math.floor(Math.random() * letters.length)];
+  }
+  return `ANON_${suffix}`;
 }
 
+// Target shape: ANON_ + 8 uppercase letters. Anything else on a seed row is
+// stale — the old SEED_/seed_ prefixes, or the word-style IDs used briefly
+// before this format was settled on.
 function needsBackfill(anonymousId) {
   if (!anonymousId) return true;
-  return /^SEED_/i.test(anonymousId) || /^seed_/.test(anonymousId);
+  return !/^ANON_[A-Z]{8}$/.test(anonymousId);
 }
 
 async function main() {

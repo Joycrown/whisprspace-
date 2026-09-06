@@ -46,7 +46,7 @@ export default function ThreadCard({
           {author.avatar?.startsWith('/avatars/') ? (
             <img
               src={author.avatar}
-              alt={author.name}
+              alt=""
               className="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover flex-shrink-0"
             />
           ) : (
@@ -59,7 +59,6 @@ export default function ThreadCard({
             {/* Header Section - Stacked on Mobile */}
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-1 md:gap-2 mb-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-white font-medium text-sm md:text-base truncate">{author.name}</span>
                 {isPremium && (
                   <div className="flex items-center gap-1 px-1.5 py-0.5 bg-gradient-to-r from-purple-600 to-orange-500 rounded-full flex-shrink-0">
                     <Crown className="w-3 h-3 text-white" />
