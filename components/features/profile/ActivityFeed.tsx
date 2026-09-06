@@ -31,7 +31,7 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ userId }) => {
         authorId: userId,
         authorName: 'You',
         type: 'text' as const,
-        content: `I commented on your thread: ${thread.title}`,
+        content: `I commented on your discussion: ${thread.title}`,
         timestamp: new Date(new Date(thread.createdAt).getTime() + 60 * 1000).toISOString(),
         likes: 0,
         hasLiked: false,
@@ -43,7 +43,7 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ userId }) => {
         authorId: 'anonymous',
         authorName: 'Anonymous',
         type: 'text' as const,
-        content: `Someone replied to your thread: ${thread.title}`,
+        content: `Someone replied to your discussion: ${thread.title}`,
         timestamp: new Date(new Date(thread.createdAt).getTime() + 120 * 1000).toISOString(),
         likes: 0,
         hasLiked: false,
@@ -86,7 +86,7 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({ userId }) => {
             >
               <GitPullRequest className="w-5 h-5 text-purple-400" />
               <div>
-                <p className="text-white font-medium">You created a thread:</p>
+                <p className="text-white font-medium">You created a discussion:</p>
                 <p className="text-gray-300 text-sm">{thread.title}</p>
                 <span className="text-xs text-gray-500">{new Date(thread.createdAt).toLocaleString()}</span>
               </div>

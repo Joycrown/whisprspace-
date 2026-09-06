@@ -43,8 +43,8 @@ export default function AccessManagement({
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Thread access link',
-          text: 'Use this link to get free access to my premium thread.',
+          title: 'Discussion access link',
+          text: 'Use this link to get free access to my premium discussion.',
           url: link,
         });
       } catch { /* user cancelled */ }
@@ -210,7 +210,7 @@ export default function AccessManagement({
                       ? (!isUnlimited(accessCode) && accessCode.currentUses >= accessCode.maxUses)
                         ? 'Fully Used'
                         : 'Inactive'
-                      : 'Thread expired'}
+                      : 'Discussion expired'}
                   </span>
                 </div>
               </div>

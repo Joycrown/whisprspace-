@@ -181,14 +181,18 @@ const ThreadsPage = () => {
             }`}
         >
           {!isMounted ? (
-            /* Skeleton placeholder during SSR/hydration */
-            <div className="w-full bg-gray-700 py-3 md:py-4 px-4 md:px-6 rounded-xl md:rounded-2xl min-h-[48px] animate-pulse" />
+            /* Matches the real button so hydration doesn't flash a grey block */
+            <div className="w-full bg-gradient-to-r from-purple-600 to-orange-500 py-3 md:py-4 px-4 md:px-6 rounded-xl md:rounded-2xl min-h-[48px] shadow-lg flex items-center justify-center gap-2 text-white font-bold text-base md:text-lg">
+              <span className="text-xl md:text-2xl">+</span>
+              <span className="hidden sm:inline">Create New Discussion</span>
+              <span className="sm:hidden">New Discussion</span>
+            </div>
           ) : canCreate ? (
             <Link href="/threads/create">
               <button className="w-full bg-gradient-to-r from-purple-600 to-orange-500 hover:from-purple-700 hover:to-orange-600 active:scale-[0.98] py-3 md:py-4 px-4 md:px-6 rounded-xl md:rounded-2xl text-white font-bold text-base md:text-lg shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2 group min-h-[48px]">
                 <span className="text-xl md:text-2xl group-hover:rotate-90 transition-transform duration-300">+</span>
-                <span className="hidden sm:inline">Create New Thread</span>
-                <span className="sm:hidden">New Thread</span>
+                <span className="hidden sm:inline">Create New Discussion</span>
+                <span className="sm:hidden">New Discussion</span>
               </button>
             </Link>
           ) : (
@@ -199,16 +203,16 @@ const ThreadsPage = () => {
               >
                 <div className="flex items-center justify-center gap-2 w-full">
                   <span className="text-xl md:text-2xl line-through opacity-50">+</span>
-                  <span className="hidden sm:inline line-through opacity-50">Create New Thread</span>
-                  <span className="sm:hidden line-through opacity-50">New Thread</span>
+                  <span className="hidden sm:inline line-through opacity-50">Create New Discussion</span>
+                  <span className="sm:hidden line-through opacity-50">New Discussion</span>
                 </div>
               </button>
-              <div className="text-xs text-red-400 font-medium">Guest accounts cannot create threads</div>
+              <div className="text-xs text-red-400 font-medium">Guest accounts cannot create discussions</div>
 
               {/* Tooltip */}
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 shadow-xl border border-gray-700">
                 <div className="text-center">
-                  <p className="font-semibold">Sign up to create threads</p>
+                  <p className="font-semibold">Sign up to create discussions</p>
                 </div>
                 <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
               </div>
@@ -266,7 +270,7 @@ const ThreadsPage = () => {
           <div className="divide-y divide-gray-800 w-full pb-28 md:pb-4">
             {error && (
               <div className="p-4 bg-red-900/20 border border-red-500 rounded-lg m-4">
-                <p className="text-red-500 text-center">{error?.message || 'Failed to load threads'}</p>
+                <p className="text-red-500 text-center">{error?.message || 'Failed to load discussions'}</p>
               </div>
             )}
 
@@ -274,14 +278,14 @@ const ThreadsPage = () => {
               <AppLoadingState
                 fullScreen={false}
                 className="bg-transparent py-12"
-                title="Syncing your conversations..."
+                title="Opening your space..."
               />
             ) : (
               <>
                 {threads.length === 0 && !isLoading && !error ? (
                   <div className="text-center py-12">
-                    <p className="text-gray-400 text-lg">No threads found</p>
-                    <p className="text-gray-500 text-sm mt-2">Try adjusting your filters or create a new thread</p>
+                    <p className="text-gray-400 text-lg">No discussions found</p>
+                    <p className="text-gray-500 text-sm mt-2">Try adjusting your filters or create a new discussion</p>
                   </div>
                 ) : (
                   threads.map((thread: Thread) => (
@@ -294,7 +298,7 @@ const ThreadsPage = () => {
                     {isFetchingNextPage && (
                       <div className="flex justify-center items-center gap-2">
                         <div className="w-5 h-5 border-2 border-purple-200 border-t-purple-600 rounded-full animate-spin"></div>
-                        <span>Loading more threads...</span>
+                        <span>Loading more discussions...</span>
                       </div>
                     )}
                   </div>

@@ -117,7 +117,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
 
   if (!threadId) {
     return {
-      title: 'Thread Not Found | WhisprSpace',
+      title: 'Discussion Not Found | WhisprSpace',
       robots: { index: false, follow: false },
     }
   }
@@ -125,14 +125,14 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
   const thread = await getThreadForSeo(threadId)
   if (!thread) {
     return {
-      title: 'Thread Not Found | WhisprSpace',
+      title: 'Discussion Not Found | WhisprSpace',
       robots: { index: false, follow: false },
     }
   }
 
   const canonicalPath = buildThreadPath({ id: thread.id, title: thread.title || undefined })
   const canonicalUrl = new URL(canonicalPath, siteConfig.url).toString()
-  const title = thread.title?.trim() || 'Untitled Thread'
+  const title = thread.title?.trim() || 'Untitled Discussion'
   const description = buildThreadDescription(thread)
   const isIndexable = siteConfig.indexingEnabled && isPublicIndexableThread(thread)
 
@@ -171,7 +171,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
       images: [`${siteConfig.appUrl}/threads/${thread.id}/og`],
     },
     keywords: [
-      'anonymous thread',
+      'anonymous discussion',
       'public discussion',
       'whisprspace',
       thread.category || 'general',
@@ -205,7 +205,7 @@ export default async function ThreadPage({ params, searchParams }: PageProps) {
     ? {
         '@context': 'https://schema.org',
         '@type': 'DiscussionForumPosting',
-        headline: thread.title || 'Untitled Thread',
+        headline: thread.title || 'Untitled Discussion',
         text: thread.content || '',
         datePublished: thread.created_at,
         dateModified: thread.updated_at,
@@ -228,7 +228,7 @@ export default async function ThreadPage({ params, searchParams }: PageProps) {
       {isIndexable ? (
         <noscript>
           <article>
-            <h1>{thread.title || 'Untitled Thread'}</h1>
+            <h1>{thread.title || 'Untitled Discussion'}</h1>
             <p>{thread.content || ''}</p>
           </article>
         </noscript>

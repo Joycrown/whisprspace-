@@ -141,7 +141,7 @@ const ThreadSettingsPanel: React.FC<ThreadSettingsPanelProps> = ({
                   <div className="flex h-full flex-col overflow-y-auto bg-gray-900 shadow-xl">
                     <div className="bg-gray-800 px-4 py-6 sm:px-6">
                       <div className="flex items-start justify-between">
-                        <Dialog.Title className="text-lg font-medium text-white">Thread Settings</Dialog.Title>
+                        <Dialog.Title className="text-lg font-medium text-white">Discussion Settings</Dialog.Title>
                         <div className="ml-3 flex h-7 items-center">
                           <button
                             type="button"
@@ -159,7 +159,7 @@ const ThreadSettingsPanel: React.FC<ThreadSettingsPanelProps> = ({
                       <div className="space-y-6">
                         {/* Privacy Settings */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-300 mb-2">Thread Privacy</label>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">Discussion Privacy</label>
                           <div className="mt-1 space-y-2">
                             <label className="flex items-center p-3 rounded-md bg-gray-800 border border-gray-700 cursor-pointer hover:bg-gray-700">
                               <input
@@ -329,7 +329,7 @@ const ThreadSettingsPanel: React.FC<ThreadSettingsPanelProps> = ({
                               <label className={`flex items-center justify-between p-3 rounded-md bg-gray-800 border border-gray-700 hover:bg-gray-700 ${currentPrivacy === 'invite_only' ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}>
                                 <div className="flex items-center gap-2">
                                   {isThreadLocked ? <FaLock className="text-red-400" /> : <FaUnlock className="text-green-400" />}
-                                  <span className="text-white">Lock Thread</span>
+                                  <span className="text-white">Lock Discussion</span>
                                 </div>
                                 <input
                                   type="checkbox"

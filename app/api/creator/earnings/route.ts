@@ -217,7 +217,7 @@ export async function GET(request: NextRequest) {
 
     if (threadsResult.error) {
       console.error('Failed to load creator threads:', threadsResult.error)
-      return NextResponse.json({ error: 'Failed to load thread data' }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to load discussion data' }, { status: 500 })
     }
 
     if (payoutsResult.error) {
@@ -241,7 +241,7 @@ export async function GET(request: NextRequest) {
 
     for (const row of threadRows) {
       threadById.set(row.id, {
-        title: row.title || 'Untitled Thread',
+        title: row.title || 'Untitled Discussion',
         price: toNumber(row.price),
         createdAt: row.created_at || new Date().toISOString(),
       })
@@ -284,7 +284,7 @@ export async function GET(request: NextRequest) {
       const existing = threadMap.get(row.thread_id)
       const next: ThreadEarnings = existing || {
         threadId: row.thread_id,
-        threadTitle: threadInfo?.title || 'Unknown Thread',
+        threadTitle: threadInfo?.title || 'Unknown Discussion',
         price: threadInfo?.price || toNumber(row.amount),
         totalSales: 0,
         purchaseCount: 0,

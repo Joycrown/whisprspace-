@@ -26,9 +26,9 @@ function humanizeImpact(summary: ThreadSummary) {
 
   const voices =
     p === 0 ? "Your thread waited in silence. That's still honest."
-    : p === 1 ? 'One person found their voice in your thread.'
+    : p === 1 ? 'One person found their voice in your discussion.'
     : p < 5 ? `${p} people found their voice here.`
-    : `${p} people showed up for your thread.`
+    : `${p} people showed up for your discussion.`
 
   const perspectives =
     persp === 0 ? null
@@ -40,7 +40,7 @@ function humanizeImpact(summary: ThreadSummary) {
     r === 0 ? "Some things don't need a reaction — they just need to be said."
     : r < 5 ? 'A few people said this hit home.'
     : r < 20 ? 'This clearly hit a nerve with people.'
-    : 'This thread struck something deep in people.'
+    : 'This discussion struck something deep in people.'
 
   const duration =
     h < 24 ? `${h}h`

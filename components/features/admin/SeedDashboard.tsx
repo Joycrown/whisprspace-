@@ -195,7 +195,7 @@ export default function SeedDashboard() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">{status.stats?.seedThreads}</p>
-              <p className="text-sm text-gray-500">Live Threads</p>
+              <p className="text-sm text-gray-500">Live Discussions</p>
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900 dark:text-white">{status.stats?.seedMessages}</p>
@@ -393,9 +393,9 @@ export default function SeedDashboard() {
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-px bg-gray-200 dark:bg-gray-700">
           {[
-            { key: 'threads_per_day', label: 'Threads / Day' },
-            { key: 'thread_spacing_minutes', label: 'Thread Spacing (min)' },
-            { key: 'first_thread_hour', label: 'First Thread Hour (24h)' },
+            { key: 'threads_per_day', label: 'Discussions / Day' },
+            { key: 'thread_spacing_minutes', label: 'Discussion Spacing (min)' },
+            { key: 'first_thread_hour', label: 'First Discussion Hour (24h)' },
             { key: 'max_participants_per_thread', label: 'Max Participants' },
             { key: 'messages_per_user', label: 'Messages / User' },
             { key: 'reply_interval_minutes', label: 'Reply Interval (min)' },

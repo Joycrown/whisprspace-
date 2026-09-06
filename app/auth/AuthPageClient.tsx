@@ -140,7 +140,7 @@ const AuthPage = () => {
           type: 'success',
           title: isAnonymous ? 'Anonymous session created' : 'Welcome back',
           message: isAnonymous
-            ? 'You can browse, like, and comment. Sign up to create threads.'
+            ? 'You can browse, like, and comment. Sign up to create discussions.'
             : 'You have full access to all features.',
           duration: 4000,
         });
@@ -606,7 +606,7 @@ const AuthPage = () => {
                 </h2>
                 <p className="text-[#8F8FA3] text-sm leading-relaxed">
                   {sessionInfo
-                    ? 'Browse, like, comment — anonymously. Sign up to create threads.'
+                    ? 'Browse, like, comment — anonymously. Sign up to create discussions.'
                     : 'Your account is ready. Full access unlocked.'}
                 </p>
               </div>

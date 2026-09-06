@@ -106,7 +106,7 @@ const ThreadListSidebar = ({ threads: threadsProp }: ThreadListSidebarProps) => 
             {/* Active Threads - Hidden until we have actual data */}
             {/* 
             <div className="bg-gray-900 rounded-xl p-4">
-              <h2 className="text-white font-bold mb-3">Active Threads</h2>
+              <h2 className="text-white font-bold mb-3">Active Discussions</h2>
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
                   <div className="flex -space-x-2">
@@ -144,7 +144,7 @@ const ThreadListSidebar = ({ threads: threadsProp }: ThreadListSidebarProps) => 
             {!isPremiumUser && (
               <div className="bg-gradient-to-r from-purple-900 to-purple-800 rounded-xl p-4">
                 <h2 className="text-white font-bold">Upgrade to Premium</h2>
-                <p className="text-gray-300 text-sm mt-1">Get extended thread duration and more features</p>
+                <p className="text-gray-300 text-sm mt-1">Get extended discussion duration and more features</p>
                 <button
                   onClick={() => setShowUpgradeModal(true)}
                   className="w-full bg-white text-purple-900 font-semibold py-2 rounded-full mt-3 hover:bg-gray-100 transition-colors"

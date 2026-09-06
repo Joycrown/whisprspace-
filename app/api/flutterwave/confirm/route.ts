@@ -28,7 +28,7 @@ const getThreadForPurchase = async (threadId: string) => {
     .single()
 
   if (error || !data) {
-    return { thread: null, error: 'Thread not found' }
+    return { thread: null, error: 'Discussion not found' }
   }
 
   return { thread: data as PurchasableThread, error: null }
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
 
     if (metaThreadId !== threadId) {
       return NextResponse.json(
-        { error: 'Thread mismatch in payment metadata' },
+        { error: 'Discussion mismatch in payment metadata' },
         { status: 400 }
       )
     }
@@ -176,28 +176,28 @@ export async function POST(request: NextRequest) {
 
     if (!thread.is_premium) {
       return NextResponse.json(
-        { error: 'Thread is not premium' },
+        { error: 'Discussion is not premium' },
         { status: 400 }
       )
     }
 
     if (thread.deleted_at) {
       return NextResponse.json(
-        { error: 'Thread is no longer available' },
+        { error: 'Discussion is no longer available' },
         { status: 410 }
       )
     }
 
     if (thread.expires_at && new Date(thread.expires_at) < new Date()) {
       return NextResponse.json(
-        { error: 'Thread has expired' },
+        { error: 'Discussion has expired' },
         { status: 410 }
       )
     }
 
     if (thread.creator_id === user.id) {
       return NextResponse.json(
-        { error: 'Creators cannot purchase their own thread' },
+        { error: 'Creators cannot purchase their own discussion' },
         { status: 403 }
       )
     }
@@ -398,7 +398,7 @@ export async function POST(request: NextRequest) {
           currency: expectedCurrency || 'USD',
           amount_usd: amountUsd,
           status: 'completed',
-          description: 'Premium thread purchase',
+          description: 'Premium discussion purchase',
           metadata: {
             threadId,
             creatorId: thread.creator_id,
@@ -425,7 +425,7 @@ export async function POST(request: NextRequest) {
           type: 'thread_like',
           category: 'system',
           title: 'Purchase Successful',
-          message: 'You now have access to the premium thread!',
+          message: 'You now have access to the premium discussion!',
           data: { thread_id: threadId },
         },
         {
@@ -433,7 +433,7 @@ export async function POST(request: NextRequest) {
           type: 'thread_like',
           category: 'system',
           title: 'New Sale!',
-          message: `You earned $${creatorEarnings.toFixed(2)} from a thread purchase!`,
+          message: `You earned $${creatorEarnings.toFixed(2)} from a discussion purchase!`,
           data: { thread_id: threadId, amount: creatorEarnings },
         },
       ])

@@ -49,7 +49,7 @@ export default function manifest(): MetadataRoute.Manifest {
       {
         name: 'Threads',
         short_name: 'Threads',
-        description: 'Open the latest threads',
+        description: 'Open the latest discussions',
         url: '/threads',
         icons: [{ src: `/icons/icon-192x192.png?v=${iconVersion}`, sizes: '192x192' }],
       },

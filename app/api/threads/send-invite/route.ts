@@ -25,7 +25,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Email and invite link are required' }, { status: 400 });
     }
 
-    const safeThreadTitle = threadTitle || 'a private thread';
+    const safeThreadTitle = threadTitle || 'a private discussion';
     const safeThreadTitleHtml = escapeHtml(safeThreadTitle);
     const safeInviteUrlHtml = escapeHtml(inviteUrl);
 
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Thread Invite</title>
+  <title>Discussion Invite</title>
   <style>
     body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; color: #1f2937; }
     .wrapper { width: 100%; table-layout: fixed; background-color: #f3f4f6; padding-bottom: 40px; }
@@ -87,12 +87,12 @@ export async function POST(request: Request) {
         </tr>
         <tr>
           <td class="content">
-            <h2 style="margin: 0 0 16px; font-size: 22px; color: #111827;">Thread Invitation</h2>
+            <h2 style="margin: 0 0 16px; font-size: 22px; color: #111827;">Discussion Invitation</h2>
             <p style="margin: 0 0 18px; line-height: 1.6; font-size: 16px; color: #4b5563;">
               You have been invited to join "${safeThreadTitleHtml}".
             </p>
             <div class="button-container">
-              <a href="${safeInviteUrlHtml}" class="button">Join Thread</a>
+              <a href="${safeInviteUrlHtml}" class="button">Join Discussion</a>
             </div>
             <p style="margin: 0; line-height: 1.6; font-size: 14px; color: #6b7280;">
               If the button does not work, copy and paste this link into your browser:

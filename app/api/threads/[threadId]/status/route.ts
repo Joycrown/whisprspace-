@@ -22,7 +22,7 @@ export async function GET(
     const { threadId } = await context.params
     if (!threadId) {
       return NextResponse.json(
-        { code: 'THREAD_ID_REQUIRED', message: 'Thread ID is required' },
+        { code: 'THREAD_ID_REQUIRED', message: 'Discussion ID is required' },
         { status: 400 }
       )
     }
@@ -35,40 +35,40 @@ export async function GET(
 
     if (error || !thread) {
       return NextResponse.json(
-        { code: 'THREAD_NOT_FOUND', message: 'This thread is no longer available.' },
+        { code: 'THREAD_NOT_FOUND', message: 'This discussion is no longer available.' },
         { status: 404 }
       )
     }
 
     if (thread.deleted_at) {
       return NextResponse.json(
-        { code: 'THREAD_UNAVAILABLE', message: 'This thread is no longer available.' },
+        { code: 'THREAD_UNAVAILABLE', message: 'This discussion is no longer available.' },
         { status: 410 }
       )
     }
 
     if (thread.expires_at && new Date(thread.expires_at) <= new Date()) {
       return NextResponse.json(
-        { code: 'THREAD_EXPIRED', message: 'This thread has expired.' },
+        { code: 'THREAD_EXPIRED', message: 'This discussion has expired.' },
         { status: 410 }
       )
     }
 
     if (thread.privacy !== 'public') {
       return NextResponse.json(
-        { code: 'THREAD_RESTRICTED', message: 'You do not have access to this thread.' },
+        { code: 'THREAD_RESTRICTED', message: 'You do not have access to this discussion.' },
         { status: 403 }
       )
     }
 
     return NextResponse.json(
-      { code: 'THREAD_ACTIVE', message: 'Thread is active.' },
+      { code: 'THREAD_ACTIVE', message: 'Discussion is active.' },
       { status: 200, headers: { 'Cache-Control': 'no-store' } }
     )
   } catch (error) {
     console.error('Thread status API error:', error)
     return NextResponse.json(
-      { code: 'THREAD_STATUS_FAILED', message: 'Failed to inspect thread status.' },
+      { code: 'THREAD_STATUS_FAILED', message: 'Failed to inspect discussion status.' },
       { status: 500 }
     )
   }

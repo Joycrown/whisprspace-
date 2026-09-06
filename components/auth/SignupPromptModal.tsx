@@ -49,10 +49,10 @@ const SignupPromptModal: React.FC<SignupPromptModalProps> = ({ isOpen, onClose, 
       }
     : {
         title: 'Sign Up Required',
-        subtitle: 'Unlock thread creation',
-        intro: 'Create an account to start your own threads and join the conversation as a creator.',
+        subtitle: 'Unlock discussion creation',
+        intro: 'Create an account to start your own discussions and join the conversation as a creator.',
         benefits: [
-          { icon: MessageCircle, color: 'text-purple-600', text: <><strong>Create unlimited threads</strong> and start discussions</> },
+          { icon: MessageCircle, color: 'text-purple-600', text: <><strong>Create unlimited discussions</strong> and start discussions</> },
           { icon: Reply, color: 'text-orange-600', text: <><strong>Reply and take part</strong> across the community</> },
           { icon: Bell, color: 'text-green-600', text: <><strong>Build trust</strong> through thoughtful participation</> },
         ],

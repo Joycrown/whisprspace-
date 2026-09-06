@@ -279,7 +279,7 @@ export default function CreatorEarningsDashboard() {
       <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
         <div className="flex items-center gap-2 mb-6">
           <Crown className="w-5 h-5 text-yellow-400" />
-          <h3 className="text-lg font-semibold text-white">Top Performing Premium Threads</h3>
+          <h3 className="text-lg font-semibold text-white">Top Performing Premium Discussions</h3>
         </div>
         <div className="space-y-4">
           {earningsData.topPerformingThreads.map((thread, index) => (
