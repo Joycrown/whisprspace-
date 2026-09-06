@@ -50,7 +50,7 @@ interface ThreadComposerProps {
   initialForm?: Partial<CreateThreadForm>;
   /**
    * Runs after the thread is created, before navigation. Used by the
-   * "turn inbox into thread" flow to import the conversation's messages into the
+   * "turn inbox into discussion" flow to import the conversation's messages into the
    * new thread. If it throws, thread creation still succeeded but the caller is
    * informed via toast.
    */
@@ -193,7 +193,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
     }
 
     if (formData.isPremium && (!formData.price || formData.price <= 0)) {
-      newErrors.price = 'Premium threads must have a valid price';
+      newErrors.price = 'Premium discussions must have a valid price';
     }
 
     if (formData.type === 'poll' && (!formData.pollDuration || formData.pollDuration <= 0)) {
@@ -203,7 +203,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
     // Only validate memberLimit if privacy is 'invite_only'
     if (formData.privacy === 'invite_only') {
       if (!formData.memberLimit || formData.memberLimit <= 0) {
-        newErrors.memberLimit = 'Member limit is required and must be a positive number for invite-only threads';
+        newErrors.memberLimit = 'Member limit is required and must be a positive number for invite-only discussions';
       } else if (formData.memberLimit > 1000) { // Example max limit
         newErrors.memberLimit = 'Member limit cannot exceed 1000';
       }
@@ -221,7 +221,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
       showToast({
         type: 'warning',
         title: 'Authentication Required',
-        message: 'Please sign up or log in to create threads',
+        message: 'Please sign up or log in to create discussions',
       });
       return;
     }
@@ -251,8 +251,8 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
             console.error('ThreadComposer onCreated hook failed:', hookErr);
             showToast({
               type: 'warning',
-              title: 'Thread created',
-              message: 'The thread was created, but importing the messages failed.',
+              title: 'Discussion created',
+              message: 'The discussion was created, but importing the messages failed.',
             });
           }
         }
@@ -260,8 +260,8 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
         // Show success message
         showToast({
           type: 'success',
-          title: 'Thread Created!',
-          message: 'Your thread has been published successfully',
+          title: 'Discussion Created!',
+          message: 'Your discussion has been published successfully',
         });
 
         // Reset form
@@ -288,7 +288,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
           router.push(buildThreadPath({ id: threadId, title: formData.title }));
         }, 500);
       } else {
-        throw new Error(storeError || 'Failed to create thread');
+        throw new Error(storeError || 'Failed to create discussion');
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : ''
@@ -298,7 +298,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
         title: isBlocked ? 'Hold on.' : 'Creation Failed',
         message: isBlocked
           ? 'This space is built on honest expression — not harm. Please rephrase and try again.'
-          : msg || 'Failed to create thread. Please try again.',
+          : msg || 'Failed to create discussion. Please try again.',
       });
     }
   };
@@ -402,7 +402,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
                 <Type className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 truncate">Create Thread</h2>
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900 truncate">Create Discussion</h2>
                 <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">
                   {lastSaved ? `Last saved ${lastSaved.toLocaleTimeString()}` : 'Not saved'}
                   {hasUnsavedChanges && <span className="text-orange-500 ml-1">• Unsaved changes</span>}
@@ -443,7 +443,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
               <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
                 {/* Thread Type Selection */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-900 mb-2 sm:mb-3">Thread Type</label>
+                  <label className="block text-sm font-medium text-gray-900 mb-2 sm:mb-3">Discussion Type</label>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                     {THREAD_TYPES
                       .filter((type) => !allowedTypes || allowedTypes.includes(type.value as ThreadType))
@@ -547,7 +547,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
                 {formData.type !== 'premium' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-900 mb-2">Thread Privacy</label>
+                      <label className="block text-sm font-medium text-gray-900 mb-2">Discussion Privacy</label>
                       <div className="mt-1 space-y-2">
                         <label className="flex items-center p-3 rounded-md bg-gray-50 border border-gray-200 cursor-pointer hover:bg-gray-100">
                           <input
@@ -608,7 +608,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
                     <div className="flex items-start gap-2 sm:gap-3">
                       <DollarSign className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600 flex-shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <h4 className="text-sm sm:text-base font-semibold text-gray-900 mb-2">Premium Thread Access</h4>
+                        <h4 className="text-sm sm:text-base font-semibold text-gray-900 mb-2">Premium Discussion Access</h4>
                         <p className="text-xs sm:text-sm text-gray-700 mb-2 sm:mb-3">
                           Users must pay <strong>${formData.price?.toFixed(2) || '0.00'}</strong> to access this thread. As the creator, you can also generate invite codes to grant free access to collaborators.
                         </p>
@@ -904,7 +904,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
                 ) : (
                   <Send className="w-4 h-4" />
                 )}
-                {isLoading ? 'Creating...' : 'Create Thread'}
+                {isLoading ? 'Creating...' : 'Create Discussion'}
               </button>
             </div>
           </div>

@@ -55,7 +55,7 @@ export async function GET(
   try {
     const { threadId } = await context.params
     if (!threadId) {
-      return NextResponse.json({ error: 'Thread ID is required' }, { status: 400 })
+      return NextResponse.json({ error: 'Discussion ID is required' }, { status: 400 })
     }
 
     const { data: thread, error: threadError } = await supabaseAdmin
@@ -65,15 +65,15 @@ export async function GET(
       .maybeSingle<ThreadPreviewRow>()
 
     if (threadError || !thread) {
-      return NextResponse.json({ error: 'Thread not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Discussion not found' }, { status: 404 })
     }
 
     if (thread.deleted_at) {
-      return NextResponse.json({ error: 'Thread is no longer available', status: 'deleted' }, { status: 410 })
+      return NextResponse.json({ error: 'Discussion is no longer available', status: 'deleted' }, { status: 410 })
     }
 
     if (thread.expires_at && new Date(thread.expires_at) <= new Date()) {
-      return NextResponse.json({ error: 'Thread has expired', status: 'expired' }, { status: 410 })
+      return NextResponse.json({ error: 'Discussion has expired', status: 'expired' }, { status: 410 })
     }
 
     const { data: messageRows, error: messagesError } = await supabaseAdmin
@@ -118,7 +118,7 @@ export async function GET(
         success: true,
         data: {
           id: thread.id,
-          title: thread.title || 'Untitled Thread',
+          title: thread.title || 'Untitled Discussion',
           content: thread.content || '',
           category: thread.category || 'general',
           type: thread.type || 'text',
@@ -139,6 +139,6 @@ export async function GET(
     )
   } catch (error) {
     console.error('Thread preview API error:', error)
-    return NextResponse.json({ error: 'Failed to load thread preview' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to load discussion preview' }, { status: 500 })
   }
 }

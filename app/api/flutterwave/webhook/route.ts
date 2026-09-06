@@ -26,7 +26,7 @@ const getThreadForPayment = async (threadId: string) => {
     .single()
 
   if (error || !data) {
-    return { thread: null, error: 'Thread not found' }
+    return { thread: null, error: 'Discussion not found' }
   }
 
   return { thread: data as ThreadForPayment, error: null }
@@ -480,7 +480,7 @@ async function handleChargeCompleted(data: any, flutterwaveSecretKey: string) {
           currency: ledgerCurrency,
           amount_usd: amountDecimal,
           status: 'completed',
-          description: 'Premium thread purchase',
+          description: 'Premium discussion purchase',
           metadata: {
             threadId,
             creatorId,
@@ -499,7 +499,7 @@ async function handleChargeCompleted(data: any, flutterwaveSecretKey: string) {
         type: 'thread_like',
         category: 'system',
         title: 'Purchase Successful',
-        message: 'You now have access to the premium thread!',
+        message: 'You now have access to the premium discussion!',
         data: { thread_id: threadId },
       })
 
@@ -508,7 +508,7 @@ async function handleChargeCompleted(data: any, flutterwaveSecretKey: string) {
         type: 'thread_like',
         category: 'system',
         title: 'New Sale!',
-        message: `You earned $${creatorEarnings.toFixed(2)} from a thread purchase!`,
+        message: `You earned $${creatorEarnings.toFixed(2)} from a discussion purchase!`,
         data: { thread_id: threadId, amount: creatorEarnings },
       })
     }

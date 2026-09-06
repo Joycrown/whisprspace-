@@ -4,7 +4,7 @@ import { generateMetadata as generateSEO, siteConfig } from '@/lib/seo'
 
 export const metadata: Metadata = generateSEO({
   title: 'Getting Started',
-  description: 'Learn how to use WhisprSpace: share your anonymous inbox, start threads, and earn with premium content.',
+  description: 'Learn how to use WhisprSpace: share your anonymous inbox, start discussions, and earn with premium content.',
   image: `${siteConfig.appUrl}/og`,
   url: '/getting-started',
 })
@@ -24,7 +24,7 @@ const steps = [
       },
       {
         heading: 'Conversational messages',
-        body: 'The sender decides to keep the thread open. You can reply, they reply back — a full anonymous conversation where neither side knows who the other is.',
+        body: 'The sender decides to keep the discussion open. You can reply, they reply back — a full anonymous conversation where neither side knows who the other is.',
       },
       {
         heading: 'How to find your link',
@@ -36,10 +36,10 @@ const steps = [
   {
     number: '02',
     emoji: '💬',
-    title: 'Start a Thread',
+    title: 'Start a Discussion',
     color: 'orange',
     description:
-      'Got something on your mind that you\'d normally keep to yourself? Drop it as a thread. Share the link, and anyone who has it can respond anonymously — no account needed to reply.',
+      'Got something on your mind that you\'d normally keep to yourself? Drop it as a discussion. Share the link, and anyone who has it can respond anonymously — no account needed to reply.',
     details: [
       {
         heading: 'What to post',
@@ -47,7 +47,7 @@ const steps = [
       },
       {
         heading: 'How it works',
-        body: 'Create your thread, copy the link, share it wherever your audience is. Responses come in anonymously. You moderate your own space.',
+        body: 'Create your discussion, copy the link, share it wherever your audience is. Responses come in anonymously. You moderate your own space.',
       },
       {
         heading: 'Privacy',
@@ -59,14 +59,14 @@ const steps = [
   {
     number: '03',
     emoji: '✨',
-    title: 'Premium Threads — Earn From Your Content',
+    title: 'Premium Discussions — Earn From Your Content',
     color: 'green',
     description:
-      'Premium threads are gated conversations that people pay to join. You set the access fee. Anyone who wants in pays before they can see the content or reply. You earn directly.',
+      'Premium discussions are gated conversations that people pay to join. You set the access fee. Anyone who wants in pays before they can see the content or reply. You earn directly.',
     details: [
       {
         heading: 'How to create one',
-        body: 'When creating a thread, toggle it to Premium and set your price. The thread gets a shareable link just like a regular thread.',
+        body: 'When creating a discussion, toggle it to Premium and set your price. The discussion gets a shareable link just like a regular discussion.',
       },
       {
         heading: 'What people pay for',
@@ -78,7 +78,7 @@ const steps = [
       },
       {
         heading: 'Who can go Premium',
-        body: 'Any registered account can create premium threads. Anonymous/guest accounts cannot — create a full account to unlock this.',
+        body: 'Any registered account can create premium discussions. Anonymous/guest accounts cannot — create a full account to unlock this.',
       },
     ],
     cta: { label: 'Create a premium thread', href: '/threads' },
@@ -96,8 +96,8 @@ const steps = [
         body: 'When someone messages you via your inbox link, you have no way to know who they are. The anonymity is absolute.',
       },
       {
-        heading: 'Thread replies are anonymous',
-        body: 'Everyone who replies to your thread appears without a name or identity. You see the content, not the person.',
+        heading: 'Discussion replies are anonymous',
+        body: 'Everyone who replies to your discussion appears without a name or identity. You see the content, not the person.',
       },
       {
         heading: 'Guest accounts are temporary',

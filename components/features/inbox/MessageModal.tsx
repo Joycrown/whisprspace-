@@ -146,7 +146,7 @@ const MessageModal: React.FC<MessageModalProps> = ({
                       ) : (
                         <Sparkles className="w-4 h-4" />
                       )}
-                      Turn into thread
+                      Turn into discussion
                     </button>
                   )}
                   <button

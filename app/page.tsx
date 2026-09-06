@@ -37,7 +37,7 @@ const WhisprSpaceLanding = () => {
     },
     {
       icon: <Users className="w-6 h-6" />,
-      title: "Private Threads",
+      title: "Private Discussions",
       description: "Create intimate spaces for meaningful discussions"
     },
     {
@@ -244,7 +244,7 @@ const WhisprSpaceLanding = () => {
               <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-teal-500 rounded-full flex items-center justify-center mx-auto mb-6">
                 <span className="text-2xl font-bold">2</span>
               </div>
-              <h3 className="text-2xl font-semibold mb-4 text-gray-900">Join or Create Threads</h3>
+              <h3 className="text-2xl font-semibold mb-4 text-gray-900">Join or Create Discussions</h3>
               <p className="text-gray-600">Find your community or build one. Share thoughts, vote on decisions, chat freely.</p>
             </div>
 

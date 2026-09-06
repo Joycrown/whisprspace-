@@ -129,7 +129,7 @@ export async function GET(_req: NextRequest) {
 
           {/* Feature rows */}
           {[
-            { icon: '💬', label: 'Anonymous Threads' },
+            { icon: '💬', label: 'Anonymous Discussions' },
             { icon: '📥', label: 'Anonymous Inbox' },
             { icon: '💰', label: 'Earn with Premium' },
           ].map((f) => (

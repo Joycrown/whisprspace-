@@ -181,10 +181,10 @@ function humanizeImpact(
     participants === 0
       ? "Your thread waited in silence. That's still honest."
       : participants === 1
-        ? 'One person found their voice in your thread.'
+        ? 'One person found their voice in your discussion.'
         : participants < 5
           ? `${participants} people found their voice here.`
-          : `${participants} people showed up for your thread.`
+          : `${participants} people showed up for your discussion.`
 
   const perspectivesLine =
     perspectives === 0
@@ -202,7 +202,7 @@ function humanizeImpact(
         ? 'A few people said this hit home.'
         : reactions < 20
           ? 'This clearly hit a nerve with people.'
-          : 'This thread struck something deep in people.'
+          : 'This discussion struck something deep in people.'
 
   const duration =
     hours < 24

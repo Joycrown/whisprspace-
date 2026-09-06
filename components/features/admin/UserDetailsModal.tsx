@@ -102,7 +102,7 @@ export default function UserDetailsModal({ userId, onClose }: UserDetailsModalPr
                   </h4>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                     <div className="p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">Total Threads</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">Total Discussions</div>
                       <div className="text-xl font-semibold text-gray-900 dark:text-white">{summary.totalThreads || 0}</div>
                     </div>
                     <div className="p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm">

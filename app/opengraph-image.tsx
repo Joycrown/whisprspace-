@@ -59,7 +59,7 @@ export default function Image() {
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 44px', gap: '20px' }}>
           {[
-            { icon: '💬', label: 'Anonymous Threads' },
+            { icon: '💬', label: 'Anonymous Discussions' },
             { icon: '📥', label: 'Anonymous Inbox' },
             { icon: '💰', label: 'Earn with Premium' },
           ].map((f) => (

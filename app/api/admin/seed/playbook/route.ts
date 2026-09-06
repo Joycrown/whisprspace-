@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
       .select('id')
       .single();
 
-    if (tErr || !thread) throw tErr || new Error('Failed to create thread template');
+    if (tErr || !thread) throw tErr || new Error('Failed to create discussion template');
 
     // Insert replies if provided
     if (replies && Array.isArray(replies)) {
@@ -104,7 +104,7 @@ export async function PATCH(req: NextRequest) {
     const body = await req.json();
     const { id, ...updates } = body;
 
-    if (!id) return NextResponse.json({ error: 'Thread template ID is required' }, { status: 400 });
+    if (!id) return NextResponse.json({ error: 'Discussion template ID is required' }, { status: 400 });
 
     if (updates.type === 'reply') {
       const { error } = await supabaseAdmin
@@ -143,7 +143,7 @@ export async function DELETE(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get('id');
 
-    if (!id) return NextResponse.json({ error: 'Thread template ID is required' }, { status: 400 });
+    if (!id) return NextResponse.json({ error: 'Discussion template ID is required' }, { status: 400 });
 
     // Cascade deletes replies automatically
     const { error } = await supabaseAdmin.from('seed_playbook_threads').delete().eq('id', id);

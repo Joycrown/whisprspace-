@@ -28,7 +28,7 @@ const BottomNav = () => {
     },
     {
       icon: FolderOpen,
-      label: 'My Threads',
+      label: 'My Discussions',
       href: '/my-threads',
       isActive: pathname === '/my-threads',
     },
@@ -122,7 +122,7 @@ const BottomNav = () => {
               <button
                 type="button"
                 disabled
-                aria-label="Create thread disabled for guest users"
+                aria-label="Create discussion disabled for guest users"
                 className="relative flex flex-col items-center cursor-not-allowed"
               >
                 <motion.div

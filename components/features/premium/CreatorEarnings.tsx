@@ -102,7 +102,7 @@ export function CreatorEarnings() {
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
-                      <div className="font-medium">Thread Sale</div>
+                      <div className="font-medium">Discussion Sale</div>
                       <span
                         className={`text-xs px-2 py-1 rounded-full ${
                           earning.status === 'paid'

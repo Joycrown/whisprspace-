@@ -100,7 +100,7 @@ export default function ConversationPage() {
   const otherDisplayName =
     otherUser?.user?.username || otherUser?.user?.anonymousId || 'Anonymous User';
 
-  // "Turn into thread" — same handoff as the one-off MessageModal: prefill the
+  // "Turn into discussion" — same handoff as the one-off MessageModal: prefill the
   // create form with the first 3 messages and carry the conversationId so its
   // messages import on publish. Gated to signed-in, non-guest, not-yet-converted.
   const isGuest = session.user?.isAnonymous ?? false;
@@ -526,10 +526,10 @@ export default function ConversationPage() {
             onClick={handleTurnIntoThread}
             disabled={preparingThread}
             className="ml-auto inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-orange-500 px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
-            title="Turn this conversation into a thread"
+            title="Turn this conversation into a discussion"
           >
             {preparingThread ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            <span className="hidden sm:inline">Turn into thread</span>
+            <span className="hidden sm:inline">Turn into discussion</span>
           </button>
         )}
       </div>

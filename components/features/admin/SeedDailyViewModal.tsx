@@ -129,7 +129,7 @@ export default function SeedDailyViewModal({ date, onClose, onApproved }: SeedDa
       const { replaced } = data.data
       toast.success(
         'Content removed',
-        replaced ? 'Replaced with a new thread from the playbook.' : 'Removed. No replacement available — playbook may be exhausted.'
+        replaced ? 'Replaced with a new discussion from the playbook.' : 'Removed. No replacement available — playbook may be exhausted.'
       )
       setConfirmRemoveItem(null)
       await fetchItems()
@@ -148,7 +148,7 @@ export default function SeedDailyViewModal({ date, onClose, onApproved }: SeedDa
         <div className="flex items-center justify-between gap-2 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700">
           <div className="min-w-0">
             <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white truncate">Review Schedule: {date}</h2>
-            <p className="text-sm text-gray-500">Review and edit the threads and replies before approving.</p>
+            <p className="text-sm text-gray-500">Review and edit the discussions and replies before approving.</p>
           </div>
           <button 
             onClick={onClose}

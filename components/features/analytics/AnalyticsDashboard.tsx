@@ -64,7 +64,7 @@ export default function AnalyticsDashboard() {
         />
 
         <StatsCard
-          title="Total Threads"
+          title="Total Discussions"
           value={stats?.totalThreads || 0}
           icon={<FileText className="w-6 h-6" />}
           color="blue"
@@ -135,7 +135,7 @@ export default function AnalyticsDashboard() {
           <div className="space-y-3">
             <div>
               <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600 dark:text-gray-400">Threads</span>
+                <span className="text-gray-600 dark:text-gray-400">Discussions</span>
                 <span className="font-medium text-gray-900 dark:text-white">
                   {today?.totalThreads || 0}
                 </span>

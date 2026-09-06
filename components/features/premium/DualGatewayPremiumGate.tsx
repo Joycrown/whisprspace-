@@ -119,7 +119,7 @@ export function DualGatewayPremiumGate({
             </svg>
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-white">Premium Thread</h2>
+            <h2 className="text-lg font-semibold text-white">Premium Discussion</h2>
             <p className="text-xs text-gray-400">Unlock full access to view and participate.</p>
           </div>
         </div>

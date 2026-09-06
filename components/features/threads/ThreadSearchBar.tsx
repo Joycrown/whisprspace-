@@ -12,7 +12,7 @@ interface SearchBarProps {
 }
 
 export const SearchBar: React.FC<SearchBarProps> = ({
-  placeholder = "Search in thread...",
+  placeholder = "Search in discussion...",
   className = "",
   searchQuery,
   setSearchQuery,

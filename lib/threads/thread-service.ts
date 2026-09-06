@@ -188,18 +188,23 @@ export const fetchThreads = async (
       }
     }
 
+    // Unread counts are an enhancement: rawDb.rpc throws when the function is
+    // missing (an environment that has not run the migration yet), so this must
+    // not be allowed to take down the whole feed.
     let unreadCounts: Map<string, number> | undefined
     if (safeUserId) {
-      const { data: unreadRows, error: unreadError } = await rawDb.rpc('get_thread_unread_counts', {
-        p_user_id: safeUserId,
-      })
+      try {
+        const { data: unreadRows } = await rawDb.rpc('get_thread_unread_counts', {
+          p_user_id: safeUserId,
+        })
 
-      if (unreadError) {
+        if (Array.isArray(unreadRows)) {
+          unreadCounts = new Map(
+            unreadRows.map((row: any) => [row.thread_id, Number(row.unread_count) || 0])
+          )
+        }
+      } catch (unreadError) {
         console.warn('Failed to fetch thread unread counts:', unreadError)
-      } else if (Array.isArray(unreadRows)) {
-        unreadCounts = new Map(
-          unreadRows.map((row: any) => [row.thread_id, Number(row.unread_count) || 0])
-        )
       }
     }
 

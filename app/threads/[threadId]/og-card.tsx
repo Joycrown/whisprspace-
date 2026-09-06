@@ -42,7 +42,7 @@ export async function renderThreadOgCard(threadRef: string): Promise<ImageRespon
 
   const threadId = extractThreadIdFromRef(threadRef)
 
-  let title    = 'Anonymous Thread'
+  let title    = 'Anonymous Discussion'
   let content  = 'An honest conversation happening right now on WhisprSpace.'
   let category = 'general'
 

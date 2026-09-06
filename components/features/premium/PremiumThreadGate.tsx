@@ -101,7 +101,7 @@ export function PremiumThreadGate({
                 />
               </svg>
             </div>
-            <span>Lifetime access to thread content</span>
+            <span>Lifetime access to discussion content</span>
           </div>
           <div className="flex items-center gap-3">
             <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">

@@ -298,9 +298,9 @@ const ProfilePage = () => {
             <div className="space-y-2 mb-6 sm:mb-8">
               <h3 className="font-semibold text-base sm:text-lg mb-2 sm:mb-3">Premium Features:</h3>
               {[
-                'Save threads forever',
-                'Extend threads by 7 days',
-                'Earn more from premium threads',
+                'Save discussions forever',
+                'Extend discussions by 7 days',
+                'Earn more from premium discussions',
                 "Manage who's in your thread",
                 'Change username every 7 days',
                 'Premium badge',
