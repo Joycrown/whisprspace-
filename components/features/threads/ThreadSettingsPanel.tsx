@@ -278,8 +278,8 @@ const ThreadSettingsPanel: React.FC<ThreadSettingsPanelProps> = ({
                                 className="block w-full rounded-md bg-gray-800 border-gray-700 text-white shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm py-2 px-3"
                               >
                                 <option value="">All Participants</option>
-                                {participants.map(p => (
-                                  <option key={p.id} value={p.id}>{p.name || p.anonymousId}</option>
+                                {participants.map((p, index) => (
+                                  <option key={p.id} value={p.id}>Participant {index + 1}</option>
                                 ))}
                               </select>
                             </div>

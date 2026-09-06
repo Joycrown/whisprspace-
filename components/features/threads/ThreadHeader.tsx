@@ -10,6 +10,7 @@ import {
 } from 'react-icons/fa';
 import { formatTimeRemaining } from '@/lib/utils/utils/helpers/threadHelpers';
 import { ThreadData } from '@/types';
+import { getThreadAvatarSeed } from '@/lib/threads/display-identity';
 import { createThreadInvite } from '@/lib/threads';
 import { useToast } from '@/components/ui/Toast';
 import { buildThreadPath } from '@/lib/threads/thread-url';
@@ -256,7 +257,7 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
             <div className="flex-shrink-0 hidden sm:flex -space-x-2">
               {visibleParticipants.map(p => (
                 <div key={p.id} className="ring-2 ring-[#0E0E16] rounded-[22%]">
-                  <Identicon seed={p.anonymousId || p.id || p.name || '?'} size={32} />
+                  <Identicon seed={getThreadAvatarSeed(p.id, thread?.id)} size={32} />
                 </div>
               ))}
               {extraParticipants > 0 && (

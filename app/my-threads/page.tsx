@@ -706,7 +706,9 @@ export default function MyThreadsPage() {
                         <div className="space-y-2">
                           {preview.messages.map((message) => (
                             <div key={message.id} className="rounded-lg border border-gray-800 bg-gray-900/50 px-3 py-2">
-                              <p className="text-[11px] text-gray-400">{message.senderName}</p>
+                              {message.senderName && (
+                                <p className="text-[11px] text-gray-400">{message.senderName}</p>
+                              )}
                               <p className="text-sm text-gray-200 break-words">{message.content}</p>
                             </div>
                           ))}
