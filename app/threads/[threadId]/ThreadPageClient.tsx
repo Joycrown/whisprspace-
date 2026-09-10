@@ -1125,6 +1125,7 @@ const ThreadPage = () => {
             onToggleSidebar={() => setIsSidebarOpen(true)}
             currentUserId={currentUserId}
             onOpenPreview={handleOpenThreadPreview}
+            onExport={isCreator ? () => router.push(`${canonicalThreadPath}/export`) : undefined}
           />
         </div>
         {isPrivateBlocked ? (

@@ -12,8 +12,12 @@ import { setAccessToken } from '@/lib/utils/auth-token-cache'
 // Stable outside component — never recreated
 const PUBLIC_PREFIXES = ['/auth', '/privacy-policy', '/community-guidelines', '/getting-started', '/profile', '/invite', '/message', '/claim']
 
+// Matches only the sender-facing prompt landing page (/prompts/[id]), never
+// /prompts/create or /prompts/[id]/manage|export — those stay behind auth.
+const PUBLIC_PROMPT_PAGE = /^\/prompts\/[^/]+\/?$/
+
 function isPublicRoute(path: string): boolean {
-  return path === '/' || PUBLIC_PREFIXES.some(p => path.startsWith(p))
+  return path === '/' || PUBLIC_PREFIXES.some(p => path.startsWith(p)) || PUBLIC_PROMPT_PAGE.test(path)
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {

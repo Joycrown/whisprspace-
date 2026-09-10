@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import ThreadComposer from '@/components/features/threads/ThreadComposer';
 import { ThreadDraft, CreateThreadForm } from '@/types';
 import { INBOX_THREAD_DRAFT_KEY } from '@/components/features/inbox/MessageModal';
+import { PROMPT_THREAD_DRAFT_KEY, type PromptThreadDraft } from '@/lib/prompts/open-floor';
 import * as rawAuth from '@/lib/core/supabase/raw-auth';
 
 interface InboxThreadDraft {
@@ -22,10 +23,12 @@ function CreateThreadContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromInbox = searchParams?.get('from') === 'inbox';
+  const fromPrompt = searchParams?.get('from') === 'prompt';
 
   const [draft, setDraft] = useState<ThreadDraft | undefined>();
   const [initialForm, setInitialForm] = useState<Partial<CreateThreadForm> | undefined>();
   const [inboxConversationId, setInboxConversationId] = useState<string | null>(null);
+  const [promptId, setPromptId] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
   // Handle mount state
@@ -53,6 +56,20 @@ function CreateThreadContent() {
       }
     }
 
+    if (fromPrompt) {
+      const raw = localStorage.getItem(PROMPT_THREAD_DRAFT_KEY);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw) as PromptThreadDraft;
+          setInitialForm(parsed.form);
+          setPromptId(parsed.promptId);
+          return;
+        } catch {
+          localStorage.removeItem(PROMPT_THREAD_DRAFT_KEY);
+        }
+      }
+    }
+
     const savedDraft = localStorage.getItem('thread_draft');
     if (savedDraft) {
       try {
@@ -61,7 +78,7 @@ function CreateThreadContent() {
         localStorage.removeItem('thread_draft');
       }
     }
-  }, [mounted, fromInbox]);
+  }, [mounted, fromInbox, fromPrompt]);
 
   const handleClose = () => {
     router.back();
@@ -100,6 +117,28 @@ function CreateThreadContent() {
     }
   };
 
+  // The thread is deliberately created by the normal composer first. This
+  // preserves the creator's explicit privacy/category choice before any
+  // anonymous prompt response crosses into a public discussion.
+  const importPromptHighlights = async (threadId: string) => {
+    if (!promptId) return;
+    const token = rawAuth.getSession()?.access_token;
+    const res = await fetch(`/api/prompts/${promptId}/open-floor`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ threadId }),
+    });
+
+    localStorage.removeItem(PROMPT_THREAD_DRAFT_KEY);
+    if (!res.ok && res.status !== 409) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data?.error || 'Failed to import prompt highlights');
+    }
+  };
+
   // Prevent hydration mismatch
   if (!mounted) {
     return <LoadingFallback />;
@@ -112,9 +151,9 @@ function CreateThreadContent() {
         onClose={handleClose}
         draft={draft}
         initialForm={initialForm}
-        onCreated={inboxConversationId ? importInboxMessages : undefined}
+        onCreated={inboxConversationId ? importInboxMessages : promptId ? importPromptHighlights : undefined}
         // A converted inbox conversation can be a Text or Premium thread — never a poll.
-        allowedTypes={inboxConversationId ? ['text', 'premium'] : undefined}
+        allowedTypes={inboxConversationId ? ['text', 'premium'] : promptId ? ['text'] : undefined}
       />
     </div>
   );
