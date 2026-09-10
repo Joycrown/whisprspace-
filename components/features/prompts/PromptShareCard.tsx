@@ -4,13 +4,12 @@ import { forwardRef } from 'react'
 
 interface PromptShareCardProps {
   question: string
-  creatorName: string
   expiresAt: string
   promptUrl: string
 }
 
 const PromptShareCard = forwardRef<HTMLDivElement, PromptShareCardProps>(
-  ({ question, creatorName, expiresAt, promptUrl }, ref) => {
+  ({ question, expiresAt, promptUrl }, ref) => {
     const hoursLeft = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60)))
     const shortUrl = promptUrl.replace(/^https?:\/\//, '')
 
@@ -49,7 +48,7 @@ const PromptShareCard = forwardRef<HTMLDivElement, PromptShareCardProps>(
 
         <div style={{ position: 'relative', borderTop: '1px solid #2A2A38', paddingTop: 34 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-            <span style={{ color: '#8F8FA3', fontSize: 25 }}>Asked by {creatorName}</span>
+            <span style={{ color: '#8F8FA3', fontSize: 25 }}>No name. No trace.</span>
             <span style={{ color: '#5DCAA5', fontSize: 25, fontWeight: 700 }}>Closes in {hoursLeft}h</span>
           </div>
           <div style={{ display: 'inline-flex', padding: '19px 30px', borderRadius: 999, background: 'linear-gradient(100deg, #8B5CF6, #F97316)', fontSize: 26, fontWeight: 750 }}>

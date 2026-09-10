@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/store/userStore';
 import { createPremiumUpgradeSession } from '@/lib/flutterwave/flutterwave-service';
 import { getUserCountry } from '@/lib/payments/geo';
-import { getCurrencyForCountry, convertPrice, formatCurrency } from '@/lib/payments/currency';
+import { getCurrencyForCountry, formatCurrency, SupportedCurrency } from '@/lib/payments/currency';
 import posthog from 'posthog-js';
 
 interface PremiumPaymentFormProps {
@@ -26,12 +26,13 @@ export default function PremiumPaymentForm({
   const router = useRouter();
   const { session } = useUserStore();
   const [userCountry, setUserCountry] = useState<string>('US');
+  const [localPrice, setLocalPrice] = useState<number | null>(null);
+  const [localCurrency, setLocalCurrency] = useState<SupportedCurrency>('USD');
 
   React.useEffect(() => {
     getUserCountry().then(setUserCountry);
   }, []);
 
-  const currency = getCurrencyForCountry(userCountry);
   void onSuccess;
 
   type PlanDetail = {
@@ -41,12 +42,48 @@ export default function PremiumPaymentForm({
     savings?: string;
   };
 
+  // Kept in sync with PLAN_CONFIG in app/api/flutterwave/upgrade/route.ts —
+  // that route is the source of truth for what actually gets charged.
   const planDetails: Record<'monthly' | 'annual', PlanDetail> = {
-    monthly: { price: 1.5, name: 'Monthly Plan', period: 'month' },
-    annual: { price: 13.5, name: 'Annual Plan', period: 'year', savings: '25%' }
+    monthly: { price: 2.5, name: 'Monthly Plan', period: 'month' },
+    annual: { price: 22.5, name: 'Annual Plan', period: 'year', savings: '25%' }
   };
 
   const selectedPlanDetails = planDetails[selectedPlan];
+
+  // Fetch the live Flutterwave rate for the selected plan's USD price — same
+  // endpoint the backend uses via convertWithLiveRate, so the number shown here
+  // matches what Flutterwave actually charges at checkout.
+  React.useEffect(() => {
+    let active = true
+    getUserCountry().then(async (country) => {
+      if (!active) return
+      const currency = getCurrencyForCountry(country)
+      setLocalCurrency(currency)
+
+      try {
+        const res = await fetch(`/api/flutterwave/rate?currency=${currency}&amount=${selectedPlanDetails.price}`)
+        if (!active) return
+        if (res.ok) {
+          const data = await res.json()
+          setLocalPrice(data.convertedAmount)
+        } else {
+          setLocalPrice(selectedPlanDetails.price)
+          setLocalCurrency('USD')
+        }
+      } catch {
+        if (!active) return
+        setLocalPrice(selectedPlanDetails.price)
+        setLocalCurrency('USD')
+      }
+    })
+    return () => { active = false }
+  }, [selectedPlanDetails.price])
+
+  const currency = localCurrency
+  const displayPrice = localPrice != null
+    ? formatCurrency(localPrice, currency)
+    : formatCurrency(selectedPlanDetails.price, 'USD')
 
   // Start premium upgrade checkout
   const handlePayment = async () => {
@@ -142,7 +179,7 @@ export default function PremiumPaymentForm({
             <div className="text-right">
               <p className="text-sm text-gray-600 dark:text-gray-400">Total</p>
               <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                {formatCurrency(convertPrice(selectedPlanDetails.price, currency), currency)}
+                {displayPrice}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400">per {selectedPlanDetails.period}</p>
             </div>

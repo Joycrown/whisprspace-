@@ -914,7 +914,7 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
       {/* Premium Payment Modal */}
       {showPremiumPayment && (
         <PremiumPaymentForm
-          plan="monthly"
+          initialPlan="monthly"
           onSuccess={() => {
             setShowPremiumPayment(false);
             // You can add logic here to update user premium status

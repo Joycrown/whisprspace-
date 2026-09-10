@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: PromptPageProps): Promise<Met
   const canonicalPath = buildPromptPath({ id: prompt.id, question: prompt.question })
   const url = `${siteConfig.appUrl}${canonicalPath}`
   const description = 'Answer anonymously on WhisprSpace. No name. No trace.'
-  const ogImageUrl = `${siteConfig.appUrl}/prompts/${prompt.id}/og`
+  const ogImageUrl = `${siteConfig.appUrl}/curiosity-ask/${prompt.id}/og`
   const isIndexable = siteConfig.indexingEnabled && isIndexablePrompt(prompt)
 
   return {

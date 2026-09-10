@@ -51,7 +51,7 @@ export function buildPromptRef(source: PromptUrlSource): string {
 
 export function buildPromptPath(source: PromptUrlSource): string {
   const ref = buildPromptRef(source)
-  return `/prompts/${ref || source.id}`
+  return `/curiosity-ask/${ref || source.id}`
 }
 
 export function isCanonicalPromptRef(

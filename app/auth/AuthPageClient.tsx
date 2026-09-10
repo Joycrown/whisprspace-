@@ -701,7 +701,7 @@ const AuthPage = () => {
                 {handleSaving ? <><Spinner /> Claiming…</> : 'Claim this handle'}
               </button>
 
-              <button onClick={() => reasonParam === 'prompt' ? router.push('/prompts/create') : setView('welcome')} className={ghostBtnCls}>
+              <button onClick={() => reasonParam === 'prompt' ? router.push('/curiosity-ask/create') : setView('welcome')} className={ghostBtnCls}>
                 Skip — I&apos;ll set it later
               </button>
             </motion.div>
@@ -739,7 +739,7 @@ const AuthPage = () => {
                 </div>
               </div>
 
-              <button onClick={reasonParam === 'prompt' ? () => router.push('/prompts/create') : shareInbox} className={heroBtnCls}>
+              <button onClick={reasonParam === 'prompt' ? () => router.push('/curiosity-ask/create') : shareInbox} className={heroBtnCls}>
                 {reasonParam === 'prompt' ? 'Create my first curiosity ask' : 'Share to WhatsApp Status'}
               </button>
 
