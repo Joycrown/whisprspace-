@@ -102,8 +102,6 @@ export default function PromptComposer() {
   if (needsSignup) return null
 
   if (createdPrompt) {
-    const creatorName = session.user?.username || session.user?.anonymousId || 'me'
-
     const openSharePicker = () => {
       if (!shareButtonRef.current) return
       openDropdown(shareButtonRef.current.getBoundingClientRect())
@@ -140,7 +138,7 @@ export default function PromptComposer() {
         )}
 
         <div className="pointer-events-none fixed -left-[2000px] top-0">
-          <PromptShareCard ref={shareCardRef} question={createdPrompt.question} creatorName={creatorName} expiresAt={createdPrompt.expires_at} promptUrl={promptUrl} />
+          <PromptShareCard ref={shareCardRef} question={createdPrompt.question} expiresAt={createdPrompt.expires_at} promptUrl={promptUrl} />
         </div>
       </div>
     )
