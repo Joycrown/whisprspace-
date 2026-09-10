@@ -12,9 +12,9 @@ import { setAccessToken } from '@/lib/utils/auth-token-cache'
 // Stable outside component — never recreated
 const PUBLIC_PREFIXES = ['/auth', '/privacy-policy', '/community-guidelines', '/getting-started', '/profile', '/invite', '/message', '/claim']
 
-// Matches only the sender-facing prompt landing page (/prompts/[id]), never
-// /prompts/create or /prompts/[id]/manage|export — those stay behind auth.
-const PUBLIC_PROMPT_PAGE = /^\/prompts\/[^/]+\/?$/
+// Matches only the sender-facing ask landing page (/curiosity-ask/[id]), never
+// /curiosity-ask/create or /curiosity-ask/[id]/manage|export — those stay behind auth.
+const PUBLIC_PROMPT_PAGE = /^\/curiosity-ask\/[^/]+\/?$/
 
 function isPublicRoute(path: string): boolean {
   return path === '/' || PUBLIC_PREFIXES.some(p => path.startsWith(p)) || PUBLIC_PROMPT_PAGE.test(path)

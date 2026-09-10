@@ -34,9 +34,9 @@ export default function MainLayout({
     return <>{children}</>
   }
 
-  // Matches only the sender-facing ask landing page (/prompts/[id]), never
-  // /prompts/create or /prompts/[id]/manage|export — those keep the app chrome.
-  const isPublicPromptPage = /^\/prompts\/[^/]+\/?$/.test(pathname || '')
+  // Matches only the sender-facing ask landing page (/curiosity-ask/[id]), never
+  // /curiosity-ask/create or /curiosity-ask/[id]/manage|export — those keep the app chrome.
+  const isPublicPromptPage = /^\/curiosity-ask\/[^/]+\/?$/.test(pathname || '')
 
   const isPublicRoute =
     publicRoutes.includes(pathname || '') ||

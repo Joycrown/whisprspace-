@@ -96,7 +96,7 @@ export default function PromptComposer() {
 
   const needsSignup = sessionValidated && (!session.user?.id || session.user.isAnonymous)
   useEffect(() => {
-    if (needsSignup) router.replace('/auth?force=1&view=signup&reason=prompt&redirect=%2Fprompts%2Fcreate')
+    if (needsSignup) router.replace('/auth?force=1&view=signup&reason=prompt&redirect=%2Fcuriosity-ask%2Fcreate')
   }, [needsSignup, router])
 
   if (needsSignup) return null
@@ -119,7 +119,7 @@ export default function PromptComposer() {
           <div className="space-y-3">
             <button ref={shareButtonRef} onClick={openSharePicker} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white"><Share2 className="h-4 w-4" /> Share this ask</button>
             <button onClick={copyLink} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#2A2A38] text-sm text-[#F2F2F6]"><Copy className="h-4 w-4" /> {copied ? 'Copied' : 'Copy link'}</button>
-            <button onClick={() => router.push(`/prompts/${createdPrompt.id}/manage`)} className="h-11 w-full text-sm text-[#8F8FA3] hover:text-white">View responses</button>
+            <button onClick={() => router.push(`/curiosity-ask/${createdPrompt.id}/manage`)} className="h-11 w-full text-sm text-[#8F8FA3] hover:text-white">View responses</button>
           </div>
         </div>
 
