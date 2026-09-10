@@ -145,7 +145,12 @@ const AuthPage = () => {
           duration: 4000,
         });
       } else if (view === 'signup') {
-        if (reasonParam === 'inbox') {
+        if (reasonParam === 'prompt') {
+          import('posthog-js').then(({ default: posthog }) => {
+            posthog.capture('prompt_signup_completed')
+          }).catch(() => {})
+        }
+        if (reasonParam === 'inbox' || reasonParam === 'prompt') {
           // Prefill the picker with the user's EXISTING handle (upgraded guests
           // already have one — it's the link they shared and that received
           // messages). Only fall back to a generated pseudonym for brand-new
@@ -696,7 +701,7 @@ const AuthPage = () => {
                 {handleSaving ? <><Spinner /> Claiming…</> : 'Claim this handle'}
               </button>
 
-              <button onClick={() => setView('welcome')} className={ghostBtnCls}>
+              <button onClick={() => reasonParam === 'prompt' ? router.push('/prompts/create') : setView('welcome')} className={ghostBtnCls}>
                 Skip — I&apos;ll set it later
               </button>
             </motion.div>
@@ -718,8 +723,8 @@ const AuthPage = () => {
               </div>
 
               <div className="space-y-1">
-                <h2 className="text-xl font-medium text-[#F2F2F6] tracking-[-0.3px]">Your inbox is live.</h2>
-                <p className="text-[#8F8FA3] text-sm">Share this link and let people tell you the truth — anonymously.</p>
+                <h2 className="text-xl font-medium text-[#F2F2F6] tracking-[-0.3px]">{reasonParam === 'prompt' ? 'Your creator space is ready.' : 'Your inbox is live.'}</h2>
+                <p className="text-[#8F8FA3] text-sm">{reasonParam === 'prompt' ? 'Create the question your people will want to answer.' : 'Share this link and let people tell you the truth — anonymously.'}</p>
               </div>
 
               <div className="rounded-xl border border-[#23232E] bg-white/[0.02] p-4 space-y-2 text-left">
@@ -734,12 +739,12 @@ const AuthPage = () => {
                 </div>
               </div>
 
-              <button onClick={shareInbox} className={heroBtnCls}>
-                Share to WhatsApp Status
+              <button onClick={reasonParam === 'prompt' ? () => router.push('/prompts/create') : shareInbox} className={heroBtnCls}>
+                {reasonParam === 'prompt' ? 'Create my first curiosity ask' : 'Share to WhatsApp Status'}
               </button>
 
               <button onClick={() => router.push(redirectTo)} className={ghostBtnCls}>
-                Go to my feed
+                {reasonParam === 'prompt' ? 'Maybe later' : 'Go to my feed'}
               </button>
             </motion.div>
           )}
