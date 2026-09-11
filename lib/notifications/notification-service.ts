@@ -7,7 +7,7 @@ import * as rawRealtime from '@/lib/core/supabase/raw-realtime'
  * Handles all notification-related operations (Migrated to use Raw Utils)
  */
 
-export type NotificationType = 
+export type NotificationType =
   | 'thread_like'
   | 'thread_message'
   | 'direct_message'
@@ -17,6 +17,7 @@ export type NotificationType =
   | 'thread_invite'
   | 'poll_ending_soon'
   | 'thread_expiring_soon'
+  | 'prompt_response'
 
 export type NotificationCategory = 'all' | 'interactions' | 'system' | 'social'
 
@@ -446,6 +447,8 @@ export const getNotificationIcon = (type: NotificationType): string => {
       return '\u{23F0}'
     case 'thread_expiring_soon':
       return '\u{231B}'
+    case 'prompt_response':
+      return '\u{2728}'
     default:
       return '\u{1F514}'
   }
@@ -474,6 +477,8 @@ export const getNotificationColor = (type: NotificationType): string => {
       return 'text-orange-500'
     case 'thread_expiring_soon':
       return 'text-orange-500'
+    case 'prompt_response':
+      return 'text-purple-500'
     default:
       return 'text-gray-500'
   }
