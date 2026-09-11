@@ -15,7 +15,6 @@ import UserShareCard from '@/components/features/inbox/UserShareCard';
 import { useInboxShare } from '@/lib/hooks/useInboxShare';
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal';
 import { SYSTEM_USER_ID } from '@/lib/welcome/templates';
-import PromptList from '@/components/features/prompts/PromptList';
 
 type TabType = 'all' | 'unread';
 
@@ -355,8 +354,6 @@ function InboxPageContent() {
           </div>
         ) : (
         <>
-        <PromptList />
-
         {/* Stats */}
         <div className="grid grid-cols-3 md:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
           <div className="bg-gray-800 border border-gray-700 rounded-xl p-3 md:p-6">

@@ -6,9 +6,11 @@ import { useUserStore } from '@/store/userStore';
 import { motion } from 'framer-motion';
 import { Settings, TrendingUp, Calendar, Clock, ArrowLeft, DollarSign, Crown, Edit3, BarChart3, Shield } from 'lucide-react';
 import NotificationPreferencesModal from '@/components/features/notifications/NotificationPreferencesModal';
+import NotificationBell from '@/components/features/notifications/NotificationBell';
 import ActivityFeed from '@/components/features/profile/ActivityFeed';
 import PremiumPaymentForm from '@/components/features/premium/PremiumPaymentForm';
 import UsernameChanger from '@/components/features/profile/UsernameChanger';
+import SessionPanel from '@/components/SessionPanel';
 import { getUserPollStats } from '@/lib/threads/thread-service';
 import { confirmPremiumUpgrade } from '@/lib/flutterwave/flutterwave-service';
 import AppLoadingState from '@/components/ui/AppLoadingState';
@@ -23,6 +25,7 @@ const ProfilePage = () => {
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual' | null>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [showSessionPanel, setShowSessionPanel] = useState(false);
   const [pollStats, setPollStats] = useState<{ weeklyCount: number; activeCount: number } | null>(null);
   const premiumConfirmRef = useRef(false);
 
@@ -111,9 +114,22 @@ const ProfilePage = () => {
       <div className="flex items-center justify-between p-4 border-b border-gray-800">
         <button onClick={() => router.push('/threads')} className="text-gray-400 hover:text-white"><ArrowLeft className="w-5 h-5" /></button>
         <h1 className="text-xl font-bold text-white">My Profile</h1>
-        <button onClick={() => setShowPreferencesModal(true)} className="text-gray-400 hover:text-white">
-          <Settings className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-1">
+          <NotificationBell />
+          <button
+            onClick={() => setShowSessionPanel(true)}
+            className="relative p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors"
+            aria-label="Session info"
+          >
+            <Shield className="w-5 h-5" />
+            {session.isAuthenticated && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full border-2 border-[#121212]" />
+            )}
+          </button>
+          <button onClick={() => setShowPreferencesModal(true)} className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-colors">
+            <Settings className="w-5 h-5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-hide p-4 pb-28 sm:pb-4">
@@ -252,6 +268,12 @@ const ProfilePage = () => {
       <NotificationPreferencesModal
         isOpen={showPreferencesModal}
         onClose={() => setShowPreferencesModal(false)}
+      />
+
+      {/* Session Panel */}
+      <SessionPanel
+        isOpen={showSessionPanel}
+        onClose={() => setShowSessionPanel(false)}
       />
 
 

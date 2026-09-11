@@ -1,16 +1,25 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, Bell, Smartphone, ThumbsUp, MessageSquare, Users, AtSign, Settings } from 'lucide-react';
+import { X, Mail, Bell, ThumbsUp, MessageSquare, Users, AtSign, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { useUserStore } from '@/store/userStore';
 import { UserPreferences } from '@/types';
-import PushNotificationSettingsModal from './PushNotificationSettingsModal';
+import {
+  getCurrentPushSubscription,
+  isIosInstallRequiredForPush,
+  isPushSupported,
+  sendPushTestNotification,
+  subscribeDeviceToPush,
+  unsubscribeDeviceFromPush,
+} from '@/lib/notifications/push-client';
 
 interface NotificationPreferencesModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
+
+type EnableNotice = { tone: 'success' | 'error'; message: string } | null;
 
 const NotificationPreferencesModal: React.FC<NotificationPreferencesModalProps> = ({
   isOpen,
@@ -33,13 +42,43 @@ const NotificationPreferencesModal: React.FC<NotificationPreferencesModalProps> 
       allowDirectMessages: true,
     },
   });
-  const [showPushSettingsModal, setShowPushSettingsModal] = useState(false);
+
+  // Push has its own confirmed-working state, separate from the plain toggles
+  // above: a single "Enable" tap subscribes, sends a real test notification,
+  // and only then counts as done — so this never has to be revisited.
+  const [isPushConfirmed, setIsPushConfirmed] = useState(false);
+  const [isEnablingPush, setIsEnablingPush] = useState(false);
+  const [pushNotice, setPushNotice] = useState<EnableNotice>(null);
+  const [requiresIosInstall, setRequiresIosInstall] = useState(false);
+  const [isBrowserSupported, setIsBrowserSupported] = useState(true);
 
   useEffect(() => {
     if (session.user?.preferences) {
       setPreferences(session.user.preferences);
     }
   }, [session.user?.preferences]);
+
+  const syncPushStatus = useCallback(async () => {
+    const supported = isPushSupported();
+    setIsBrowserSupported(supported);
+    setRequiresIosInstall(isIosInstallRequiredForPush());
+
+    if (!supported) {
+      setIsPushConfirmed(false);
+      return;
+    }
+
+    const hasPermission = Notification.permission === 'granted';
+    const subscription = await getCurrentPushSubscription();
+    const prefersPush = session.user?.preferences?.notifications?.push === true;
+    setIsPushConfirmed(Boolean(subscription && hasPermission && prefersPush));
+  }, [session.user?.preferences?.notifications?.push]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setPushNotice(null);
+    syncPushStatus();
+  }, [isOpen, syncPushStatus]);
 
   const handleToggle = (category: keyof UserPreferences['notifications']) => {
     setPreferences(prev => ({
@@ -49,6 +88,63 @@ const NotificationPreferencesModal: React.FC<NotificationPreferencesModalProps> 
         [category]: !prev.notifications[category],
       },
     }));
+  };
+
+  const handleEnablePush = async () => {
+    if (!isBrowserSupported || isEnablingPush) return;
+    setPushNotice(null);
+    setIsEnablingPush(true);
+
+    try {
+      await subscribeDeviceToPush();
+      await sendPushTestNotification();
+
+      if (session.user?.preferences) {
+        await updatePreferences({
+          ...session.user.preferences,
+          notifications: { ...session.user.preferences.notifications, push: true },
+        });
+      }
+      setPreferences(prev => ({ ...prev, notifications: { ...prev.notifications, push: true } }));
+      setIsPushConfirmed(true);
+      setPushNotice({ tone: 'success', message: 'Notifications enabled — you\'re all set.' });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Something went wrong.';
+      const permissionIssue = Notification.permission === 'denied' || /denied|not supported/i.test(message);
+      setPushNotice({
+        tone: 'error',
+        message: permissionIssue
+          ? 'Notifications are blocked for this site. Enable them in your browser or device settings, then try again.'
+          : message,
+      });
+    } finally {
+      setIsEnablingPush(false);
+    }
+  };
+
+  const handleDisablePush = async () => {
+    if (isEnablingPush) return;
+    setPushNotice(null);
+    setIsEnablingPush(true);
+
+    try {
+      await unsubscribeDeviceFromPush();
+      if (session.user?.preferences) {
+        await updatePreferences({
+          ...session.user.preferences,
+          notifications: { ...session.user.preferences.notifications, push: false },
+        });
+      }
+      setPreferences(prev => ({ ...prev, notifications: { ...prev.notifications, push: false } }));
+      setIsPushConfirmed(false);
+    } catch (cause) {
+      setPushNotice({
+        tone: 'error',
+        message: cause instanceof Error ? cause.message : 'Could not turn off notifications.',
+      });
+    } finally {
+      setIsEnablingPush(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -94,70 +190,109 @@ const NotificationPreferencesModal: React.FC<NotificationPreferencesModalProps> 
               </p>
             </div>
 
+            {/* Push — one-tap enable, confirmed with a real test notification */}
+            <div>
+              <h3 className="text-xl font-semibold mb-3">Push Notifications</h3>
+
+              {!isBrowserSupported && (
+                <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg flex items-center gap-2 mb-3">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                  <span>This browser/device does not support push notifications.</span>
+                </div>
+              )}
+
+              {requiresIosInstall && (
+                <div className="p-3 bg-blue-100 border border-blue-300 text-blue-800 rounded-lg flex items-center gap-2 mb-3">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                  <span>On iOS, install the app to your Home Screen first, then enable notifications from the installed app.</span>
+                </div>
+              )}
+
+              {isPushConfirmed ? (
+                <div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <Check className="w-5 h-5 flex-shrink-0" />
+                    Push notifications are on for this device.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleDisablePush}
+                    disabled={isEnablingPush}
+                    className="text-sm font-medium text-green-800 underline hover:text-green-900 disabled:opacity-50"
+                  >
+                    Turn off
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleEnablePush}
+                  disabled={!isBrowserSupported || isEnablingPush}
+                  className="w-full flex items-center justify-center gap-2 p-3 rounded-lg bg-purple-600 text-white font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isEnablingPush ? <Loader2 className="w-5 h-5 animate-spin" /> : <Bell className="w-5 h-5" />}
+                  {isEnablingPush ? 'Enabling…' : 'Enable notifications'}
+                </button>
+              )}
+
+              {pushNotice && (
+                <div
+                  className={`mt-3 p-3 rounded-lg flex items-center gap-2 ${
+                    pushNotice.tone === 'success'
+                      ? 'bg-green-100 border border-green-400 text-green-700'
+                      : 'bg-red-100 border border-red-400 text-red-700'
+                  }`}
+                >
+                  {pushNotice.tone === 'success' ? <Check className="w-5 h-5 flex-shrink-0" /> : <AlertCircle className="w-5 h-5 flex-shrink-0" />}
+                  <span>{pushNotice.message}</span>
+                </div>
+              )}
+            </div>
+
             {/* General Notification Types */}
             <div>
               <h3 className="text-xl font-semibold mb-3">Delivery Methods</h3>
               <div className="space-y-4">
-                <NotificationToggle 
-                  icon={<Mail className="w-5 h-5" />} 
-                  label="Email Notifications" 
+                <NotificationToggle
+                  icon={<Mail className="w-5 h-5" />}
+                  label="Email Notifications"
                   checked={preferences.notifications.email}
                   onToggle={() => handleToggle('email')}
                 />
-                <NotificationToggle 
-                  icon={<Smartphone className="w-5 h-5" />} 
-                  label="Push Notifications" 
-                  checked={preferences.notifications.push}
-                  onToggle={() => handleToggle('push')}
-                />
-                <NotificationToggle 
-                  icon={<Bell className="w-5 h-5" />} 
-                  label="In-App Notifications" 
+                <NotificationToggle
+                  icon={<Bell className="w-5 h-5" />}
+                  label="In-App Notifications"
                   checked={preferences.notifications.inApp}
                   onToggle={() => handleToggle('inApp')}
                 />
               </div>
             </div>
 
-            {/* Push Notification Button */}
-            <div className="border-t border-gray-200 pt-6 mt-6">
-              <button
-                onClick={() => setShowPushSettingsModal(true)}
-                className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-gray-800 font-medium"
-              >
-                <div className="flex items-center gap-3">
-                  <Settings className="w-5 h-5 text-gray-700" />
-                  <span>Manage Push Notification Settings</span>
-                </div>
-                <Bell className="w-5 h-5 text-purple-600" />
-              </button>
-            </div>
-
             {/* Category-specific Notifications */}
             <div>
               <h3 className="text-xl font-semibold mb-3">Content Notifications</h3>
               <div className="space-y-4">
-                <NotificationToggle 
-                  icon={<ThumbsUp className="w-5 h-5" />} 
-                  label="Likes" 
+                <NotificationToggle
+                  icon={<ThumbsUp className="w-5 h-5" />}
+                  label="Likes"
                   checked={preferences.notifications.likes}
                   onToggle={() => handleToggle('likes')}
                 />
-                <NotificationToggle 
-                  icon={<MessageSquare className="w-5 h-5" />} 
-                  label="Replies" 
+                <NotificationToggle
+                  icon={<MessageSquare className="w-5 h-5" />}
+                  label="Replies"
                   checked={preferences.notifications.replies}
                   onToggle={() => handleToggle('replies')}
                 />
-                <NotificationToggle 
-                  icon={<AtSign className="w-5 h-5" />} 
-                  label="Mentions" 
+                <NotificationToggle
+                  icon={<AtSign className="w-5 h-5" />}
+                  label="Mentions"
                   checked={preferences.notifications.mentions}
                   onToggle={() => handleToggle('mentions')}
                 />
-                <NotificationToggle 
-                  icon={<Users className="w-5 h-5" />} 
-                  label="Group Invites" 
+                <NotificationToggle
+                  icon={<Users className="w-5 h-5" />}
+                  label="Group Invites"
                   checked={preferences.notifications.groupInvites}
                   onToggle={() => handleToggle('groupInvites')}
                 />
@@ -178,12 +313,6 @@ const NotificationPreferencesModal: React.FC<NotificationPreferencesModalProps> 
           </div>
         </motion.div>
       </motion.div>
-
-      {/* Push Notification Settings Modal */}
-      <PushNotificationSettingsModal
-        isOpen={showPushSettingsModal}
-        onClose={() => setShowPushSettingsModal(false)}
-      />
     </AnimatePresence>
   );
 };
@@ -198,9 +327,9 @@ interface NotificationToggleProps {
 }
 
 const NotificationToggle: React.FC<NotificationToggleProps> = ({
-  icon, 
-  label, 
-  checked, 
+  icon,
+  label,
+  checked,
   onToggle
 }) => {
   return (

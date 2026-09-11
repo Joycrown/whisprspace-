@@ -1,17 +1,15 @@
 'use client'
 
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, FolderOpen, MessageCircle, User, Plus, Shield } from 'lucide-react';
+import { Home, FolderOpen, MessageCircle, User, Plus, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useMessageBadge } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
-import SessionPanel from '../SessionPanel';
 
 const BottomNav = () => {
   const pathname = usePathname();
-  const [isSessionPanelOpen, setIsSessionPanelOpen] = useState(false);
   const { session } = useUserStore();
   const isAnonymous = session.user?.isAnonymous ?? true;
   const canCreateThread = session.isAuthenticated && !isAnonymous;
@@ -43,6 +41,12 @@ const BottomNav = () => {
       isActive: pathname === '/inbox',
     },
     {
+      icon: Sparkles,
+      label: 'Curiosity Ask',
+      href: '/curiosity-ask',
+      isActive: pathname?.startsWith('/curiosity-ask') ?? false,
+    },
+    {
       icon: User,
       label: 'Profile',
       href: '/profile',
@@ -56,7 +60,6 @@ const BottomNav = () => {
   }
 
   return (
-    <>
       <nav
         className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-gray-950/95 backdrop-blur-lg border-t border-gray-800"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -82,6 +85,17 @@ const BottomNav = () => {
                     transition={{ type: 'spring', stiffness: 400, damping: 17 }}
                   >
                     <Icon className="w-4.5 h-4.5" />
+
+                    {isActive && (
+                      <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-8 h-1">
+                        <motion.div
+                          initial={{ opacity: 0, scaleX: 0.6 }}
+                          animate={{ opacity: 1, scaleX: 1 }}
+                          className="h-full w-full bg-purple-600 rounded-full"
+                          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                        />
+                      </div>
+                    )}
                   </motion.div>
 
                   <span
@@ -90,14 +104,6 @@ const BottomNav = () => {
                   >
                     {item.label}
                   </span>
-
-                  {isActive && (
-                    <motion.div
-                      layoutId="bottomNavIndicator"
-                      className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-8 h-1 bg-purple-600 rounded-full"
-                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    />
-                  )}
                 </Link>
               );
             })}
@@ -166,6 +172,17 @@ const BottomNav = () => {
                         {item.badge > 99 ? '99+' : item.badge}
                       </motion.span>
                     )}
+
+                    {isActive && (
+                      <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-8 h-1">
+                        <motion.div
+                          initial={{ opacity: 0, scaleX: 0.6 }}
+                          animate={{ opacity: 1, scaleX: 1 }}
+                          className="h-full w-full bg-purple-600 rounded-full"
+                          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                        />
+                      </div>
+                    )}
                   </motion.div>
 
                   <span
@@ -174,45 +191,12 @@ const BottomNav = () => {
                   >
                     {item.label}
                   </span>
-
-                  {isActive && (
-                    <motion.div
-                      layoutId="bottomNavIndicator"
-                      className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-8 h-1 bg-purple-600 rounded-full"
-                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                    />
-                  )}
                 </Link>
               );
             })}
-
-            <button
-              type="button"
-              onClick={() => setIsSessionPanelOpen(true)}
-              className="relative flex flex-col items-center min-w-[48px] py-0.5"
-            >
-              <motion.div
-                className="relative flex items-center justify-center w-10 h-10 rounded-xl transition-colors text-gray-400 hover:text-gray-200 hover:bg-gray-800/40"
-                whileTap={{ scale: 0.9 }}
-                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
-              >
-                <Shield className="w-4.5 h-4.5" />
-                {session.isAuthenticated && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-gray-950" />
-                )}
-              </motion.div>
-              <span className="text-[9px] font-medium mt-0.5 text-gray-500">
-                Session
-              </span>
-            </button>
           </div>
         </div>
       </nav>
-      <SessionPanel
-        isOpen={isSessionPanelOpen}
-        onClose={() => setIsSessionPanelOpen(false)}
-      />
-    </>
   );
 };
 

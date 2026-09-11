@@ -1,6 +1,7 @@
 import webpush from 'web-push'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
 import { buildThreadPath } from '@/lib/threads/thread-url'
+import { buildPromptPath } from '@/lib/prompts/prompt-url'
 
 type PushSubscriptionRow = {
   id: string
@@ -90,6 +91,10 @@ const buildNotificationUrl = (notification: NotificationDispatchRecord) => {
     (typeof data.conversation_id === 'string' && data.conversation_id) ||
     (typeof data.conversationId === 'string' && data.conversationId) ||
     null
+  const promptId =
+    (typeof data.prompt_id === 'string' && data.prompt_id) ||
+    (typeof data.promptId === 'string' && data.promptId) ||
+    null
 
   if (threadId) {
     return buildThreadPath({ id: threadId, title: threadTitle })
@@ -97,6 +102,12 @@ const buildNotificationUrl = (notification: NotificationDispatchRecord) => {
 
   if (conversationId) {
     return `/inbox?conversationId=${encodeURIComponent(conversationId)}`
+  }
+
+  if (promptId) {
+    // Deep-links the creator straight to their curation screen — the
+    // notification is only useful once they can see and star the answer.
+    return `${buildPromptPath({ id: promptId })}/manage`
   }
 
   return '/notifications'
