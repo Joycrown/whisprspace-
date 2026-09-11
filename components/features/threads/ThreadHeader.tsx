@@ -14,6 +14,7 @@ import { getThreadAvatarSeed } from '@/lib/threads/display-identity';
 import { createThreadInvite } from '@/lib/threads';
 import { useToast } from '@/components/ui/Toast';
 import { buildThreadPath } from '@/lib/threads/thread-url';
+import { Download } from 'lucide-react';
 
 interface ThreadHeaderProps {
   thread: ThreadData | null;
@@ -21,6 +22,7 @@ interface ThreadHeaderProps {
   onToggleSidebar?: () => void;
   currentUserId?: string;
   onOpenPreview?: () => void;
+  onExport?: () => void;
 }
 
 // Deterministic identicon — matches design rules (no human photos in participant stack)
@@ -51,6 +53,7 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
   onToggleSidebar,
   currentUserId,
   onOpenPreview,
+  onExport,
 }) => {
   const [timeRemaining, setTimeRemaining] = useState('');
   const [showShareDropdown, setShowShareDropdown] = useState(false);
@@ -102,7 +105,7 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
 
   const requiresInviteLink = thread?.privacy !== 'public';
   const isCreator = Boolean(
-    thread && currentUserId && (thread.createdBy?.id === currentUserId || thread.authorId === currentUserId)
+    thread && currentUserId && (thread.creatorId === currentUserId || thread.authorId === currentUserId)
   );
   const defaultShareUrl = buildThreadShareUrl();
   const shareText = thread ? `Check out this discussion: ${thread.title}` : 'Check out this discussion';
@@ -317,6 +320,15 @@ const ThreadHeader: React.FC<ThreadHeaderProps> = ({
                 <FaShareAlt className="w-4 h-4" />
               </button>
             </div>
+            {isCreator && onExport && (
+              <button
+                onClick={onExport}
+                className="text-[#5C5C6E] hover:text-[#F2F2F6] transition-colors p-2 rounded-lg hover:bg-white/[0.05]"
+                title="Export discussion"
+              >
+                <Download className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
       </div>

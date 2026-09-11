@@ -1,0 +1,34 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { ArrowUpRight, MessageSquarePlus, Sparkles } from 'lucide-react'
+import type { Prompt } from '@/lib/prompts/types'
+import { promptApi } from '@/lib/prompts/api-client'
+
+const getStatus = (prompt: Prompt) => {
+  const remaining = new Date(prompt.expires_at).getTime() - Date.now()
+  if (remaining <= 0) return prompt.is_saved ? 'Closed · Saved' : 'Closed'
+  const hours = Math.ceil(remaining / (60 * 60 * 1000))
+  return `Closes in ${hours}h`
+}
+
+export default function PromptList() {
+  const [prompts, setPrompts] = useState<Prompt[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    promptApi<{ prompts: Prompt[] }>('/api/prompts')
+      .then((result) => { if (active) setPrompts(result.prompts) })
+      .catch(() => { if (active) setPrompts([]) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  const visible = prompts.slice(0, 3)
+  return <section className="mb-6 rounded-2xl border border-[#35304A] bg-gradient-to-r from-[#24183D]/60 to-[#301C20]/40 p-4 md:mb-8 md:p-6"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-[#FCA46A]" /><h2 className="text-lg font-semibold text-white">Curiosity Ask</h2></div><p className="mt-1 text-xs text-gray-400 md:text-sm">Ask one good question. Curate the answers. Share the story.</p></div><Link href="/curiosity-ask/create" className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-gradient-to-r from-purple-600 to-orange-500 px-3 py-2 text-xs font-semibold text-white transition-opacity hover:opacity-90 md:px-4 md:text-sm"><MessageSquarePlus className="h-4 w-4" />New Ask</Link></div>
+    {!loading && visible.length === 0 && <div className="mt-4 rounded-xl border border-dashed border-[#4B4267] bg-black/10 p-4 text-sm text-gray-300">No asks yet. Start with a question your people will want to answer.</div>}
+    {visible.length > 0 && <div className="mt-4 grid gap-2">{visible.map((prompt) => <Link key={prompt.id} href={`/curiosity-ask/${prompt.id}/manage`} className="group flex items-center justify-between gap-4 rounded-xl border border-[#3B354E] bg-[#111019]/70 p-3 transition-colors hover:border-purple-500/60"><div className="min-w-0"><p className="truncate text-sm font-medium text-[#F2F2F6]">{prompt.question}</p><p className="mt-1 text-xs text-[#8F8FA3]">{prompt.response_count} answers · {getStatus(prompt)}</p></div><ArrowUpRight className="h-4 w-4 shrink-0 text-[#8F8FA3] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" /></Link>)}</div>}
+  </section>
+}

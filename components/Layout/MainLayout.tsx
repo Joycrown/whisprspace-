@@ -34,6 +34,10 @@ export default function MainLayout({
     return <>{children}</>
   }
 
+  // Matches only the sender-facing ask landing page (/curiosity-ask/[id]), never
+  // /curiosity-ask/create or /curiosity-ask/[id]/manage|export — those keep the app chrome.
+  const isPublicPromptPage = /^\/curiosity-ask\/[^/]+\/?$/.test(pathname || '')
+
   const isPublicRoute =
     publicRoutes.includes(pathname || '') ||
     (pathname?.startsWith('/auth/') ?? false) ||
@@ -41,14 +45,16 @@ export default function MainLayout({
     (pathname?.startsWith('/message/') ?? false) ||
     // Seed-account claim links (/claim/[token]) are standalone, logged-out pages —
     // no app chrome, no other user's sidebar/session should bleed through.
-    (pathname?.startsWith('/claim/') ?? false)
+    (pathname?.startsWith('/claim/') ?? false) ||
+    isPublicPromptPage
 
-  // Anonymous message-drop and claim pages have their own prominent send button.
-  // A floating chat FAB next to it reads as "send your message here", so support
-  // messages were landing in the support inbox instead of the recipient's.
+  // Anonymous message-drop, ask, and claim pages have their own prominent send
+  // button. A floating chat FAB next to it reads as "send your message here", so
+  // support messages were landing in the support inbox instead of the recipient's.
   const hidesSupportFab =
     (pathname?.startsWith('/message/') ?? false) ||
-    (pathname?.startsWith('/claim/') ?? false)
+    (pathname?.startsWith('/claim/') ?? false) ||
+    isPublicPromptPage
 
   if (isPublicRoute) {
     return (
