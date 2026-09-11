@@ -9,7 +9,7 @@ async function resolvePromptOwner(request: NextRequest, promptId: string) {
 
   const { data: prompt, error } = await supabaseAdmin
     .from('prompts')
-    .select('id, creator_id, question, mode, category, library_key, response_count, expires_at, is_saved, created_at')
+    .select('id, creator_id, question, mode, category, library_key, response_count, expires_at, is_saved, export_count, created_at')
     .eq('id', promptId)
     .is('deleted_at', null)
     .maybeSingle()

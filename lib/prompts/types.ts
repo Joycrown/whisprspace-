@@ -22,6 +22,7 @@ export interface Prompt {
   response_count: number
   expires_at: string
   is_saved: boolean
+  export_count: number
   created_at: string
 }
 
