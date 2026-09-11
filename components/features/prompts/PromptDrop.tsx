@@ -41,7 +41,7 @@ export default function PromptDrop({ promptId, question, expiresAt }: PromptDrop
   }
 
   if (dismissed) {
-    return <div className="mx-auto w-full max-w-lg rounded-2xl border border-[#23232E] bg-[#12121A] p-7 text-center"><CheckCircle2 className="mx-auto mb-4 h-10 w-10 text-[#5DCAA5]" /><h1 className="text-xl font-medium text-[#F2F2F6]">Thank you.</h1><p className="mt-2 text-sm text-[#8F8FA3]">Create an account to run your own anonymous discussions — and get your own inbox link so your audience can tell you the truth, privately.</p><button onClick={() => { try { posthog.capture('prompt_cta_clicked', { prompt_id: promptId }) } catch {} ; router.push('/auth?force=1&view=signup&reason=prompt&redirect=%2Fcuriosity-ask%2Fcreate') }} className="mt-6 h-12 w-full rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white">Create your own curiosity ask</button></div>
+    return <div className="mx-auto w-full max-w-lg rounded-2xl border border-[#23232E] bg-[#12121A] p-7 text-center"><CheckCircle2 className="mx-auto mb-4 h-10 w-10 text-[#5DCAA5]" /><h1 className="text-xl font-medium text-[#F2F2F6]">Thank you.</h1><p className="mt-2 text-sm text-[#8F8FA3]">Ask what people are afraid to say out loud. Create an account and run your own Curiosity Ask — the questions everyone thinks, nobody says.</p><button onClick={() => { try { posthog.capture('prompt_cta_clicked', { prompt_id: promptId }) } catch {} ; router.push('/auth?force=1&view=signup&reason=prompt&redirect=%2Fcuriosity-ask%2Fcreate') }} className="mt-6 h-12 w-full rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white">Create your own curiosity ask</button></div>
   }
 
   if (sent) {
