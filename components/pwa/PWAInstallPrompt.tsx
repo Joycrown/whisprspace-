@@ -14,6 +14,7 @@ type BeforeInstallPromptEvent = Event & {
 
 const DISMISS_KEY = 'whispr_pwa_prompt_dismissed_at'
 const DISMISS_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000
+const INSTALLED_KEY = 'whispr_pwa_installed'
 
 const isInStandaloneMode = () => {
   if (typeof window === 'undefined') return false
@@ -52,6 +53,25 @@ export default function PWAInstallPrompt() {
     setIsStandalone(standalone)
 
     if (standalone) {
+      // Confirms the app is actually being used as installed right now —
+      // refresh the "recently installed" window so continued real usage keeps
+      // suppressing the prompt; it only lapses after a genuine stretch of not
+      // launching from the home-screen icon (e.g. after an uninstall).
+      window.localStorage.setItem(INSTALLED_KEY, String(Date.now()))
+      setIsVisible(false)
+      setShowManualGuide(false)
+      return
+    }
+
+    // appinstalled fired earlier in this browser profile but the user is
+    // currently viewing the site in a plain browser tab rather than the
+    // installed app (matchMedia/navigator.standalone only report true when
+    // launched from the home-screen icon, so this looks identical to "never
+    // installed" otherwise). Treat it as installed for a while rather than
+    // forever — an uninstall should eventually let the prompt come back.
+    const installedAt = Number(window.localStorage.getItem(INSTALLED_KEY) || '0')
+    const installedRecently = installedAt > 0 && Date.now() - installedAt < DISMISS_COOLDOWN_MS
+    if (installedRecently) {
       setIsVisible(false)
       setShowManualGuide(false)
       return
@@ -71,6 +91,7 @@ export default function PWAInstallPrompt() {
     }
 
     const handleAppInstalled = () => {
+      window.localStorage.setItem(INSTALLED_KEY, String(Date.now()))
       setDeferredPrompt(null)
       setIsStandalone(true)
       setIsVisible(false)

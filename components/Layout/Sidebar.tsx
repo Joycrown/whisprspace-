@@ -1,17 +1,20 @@
 'use client'
 
-import React, { useState } from 'react';
-import { Home, User, MessageCircle, FolderOpen, DollarSign } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Bell, Home, User, MessageCircle, FolderOpen, DollarSign, Sparkles } from 'lucide-react';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useUserStore } from '@/store/userStore';
 import SessionPanel from '../SessionPanel';
+import NotificationPanel from '../features/notifications/NotificationPanel';
+import { useNotificationBadge } from '@/lib/notifications';
 import { useMessageBadge } from '@/lib/messaging';
 
 const navItems = [
   { icon: Home, label: 'Home', href: '/threads' },
   { icon: FolderOpen, label: 'My Discussions', href: '/my-threads' },
   { icon: MessageCircle, label: 'Messages', href: '/inbox', showMessageBadge: true },
+  { icon: Sparkles, label: 'Curiosity Ask', href: '/curiosity-ask' },
   { icon: DollarSign, label: 'My Earnings', href: '/profile/earnings' },
   { icon: User, label: 'Profile', href: '/profile' },
 ];
@@ -21,6 +24,9 @@ const Sidebar = () => {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
   const [isSessionPanelOpen, setIsSessionPanelOpen] = useState(false);
+  const [isNotificationPanelOpen, setIsNotificationPanelOpen] = useState(false);
+  const notificationPanelRef = useRef<HTMLDivElement>(null);
+  const { unreadCount: unreadNotificationCount } = useNotificationBadge();
   const { session } = useUserStore();
   const { unreadCount: unreadMessageCount } = useMessageBadge({
     enableRealtime: false,
@@ -111,7 +117,38 @@ const Sidebar = () => {
         </nav>
 
         {/* Profile Section */}
-        <div className="absolute bottom-6 left-0 right-0 flex justify-center">
+        <div className="absolute bottom-6 left-0 right-0 flex flex-col items-center gap-3">
+          <div className="relative group" ref={notificationPanelRef}>
+            {/* Tooltip */}
+            {hoveredItem === 'notifications' && (
+              <div className="absolute left-16 bg-gray-900 text-white text-sm py-1 px-3 rounded-md whitespace-nowrap">
+                Notifications
+              </div>
+            )}
+
+            <button
+              onClick={() => setIsNotificationPanelOpen((open) => !open)}
+              onMouseEnter={() => setHoveredItem('notifications')}
+              onMouseLeave={() => setHoveredItem(null)}
+              className="relative w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/10 to-orange-400/10 flex items-center justify-center hover:from-purple-500/20 hover:to-orange-400/20 transition-all duration-300"
+              aria-label="Notifications"
+            >
+              <Bell size={20} className="text-gray-400 group-hover:text-white transition-colors" />
+
+              {unreadNotificationCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-orange-600 rounded-full border-2 border-gray-950">
+                  {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                </span>
+              )}
+            </button>
+
+            {isNotificationPanelOpen && (
+              <div className="absolute bottom-0 left-16 z-50">
+                <NotificationPanel onClose={() => setIsNotificationPanelOpen(false)} />
+              </div>
+            )}
+          </div>
+
           <div className="relative group">
             {/* Tooltip */}
             {hoveredItem === 'session' && (
