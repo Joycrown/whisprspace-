@@ -17,7 +17,7 @@ async function getPublicPrompt(ref: string) {
 
   const { data } = await supabaseAdmin
     .from('prompts')
-    .select('id, question, response_count, expires_at, deleted_at')
+    .select('id, question, expires_at, deleted_at')
     .eq('id', promptId)
     .maybeSingle()
 
@@ -77,5 +77,5 @@ export default async function PromptPage({ params }: PromptPageProps) {
     return <div className="min-h-screen bg-[#0A0A10] px-5 py-20 text-center text-[#F2F2F6]"><p className="text-2xl font-medium">This prompt has closed.</p><p className="mt-2 text-sm text-[#8F8FA3]">The answers are private to its creator.</p></div>
   }
 
-  return <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0A0A10] px-4 py-12"><div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 60% 45% at 50% 0%, rgba(139,92,246,0.14), transparent 70%)' }} /><div className="relative w-full"><PromptDrop promptId={prompt.id} question={prompt.question} expiresAt={prompt.expires_at} responseCount={prompt.response_count} /></div></main>
+  return <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0A0A10] px-4 py-12"><div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 60% 45% at 50% 0%, rgba(139,92,246,0.14), transparent 70%)' }} /><div className="relative w-full"><PromptDrop promptId={prompt.id} question={prompt.question} expiresAt={prompt.expires_at} /></div></main>
 }
