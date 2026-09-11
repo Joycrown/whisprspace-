@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from('prompts')
-      .select('id, creator_id, question, mode, category, library_key, response_count, expires_at, is_saved, created_at')
+      .select('id, creator_id, question, mode, category, library_key, response_count, expires_at, is_saved, export_count, created_at')
       .eq('creator_id', creator.id)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
         library_key: libraryPrompt?.key ?? null,
         expires_at: expiresAt,
       })
-      .select('id, creator_id, question, mode, category, library_key, response_count, expires_at, is_saved, created_at')
+      .select('id, creator_id, question, mode, category, library_key, response_count, expires_at, is_saved, export_count, created_at')
       .single()
 
     if (error || !prompt) {

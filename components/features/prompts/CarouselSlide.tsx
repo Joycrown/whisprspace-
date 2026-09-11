@@ -1,10 +1,15 @@
 'use client'
 
 import { forwardRef } from 'react'
+import { FaFacebook, FaInstagram, FaThreads, FaTiktok, FaXTwitter } from 'react-icons/fa6'
 import type { AspectRatio, CarouselReply, ReplySlide } from '@/lib/prompts/carousel-layout'
 
+const SOCIAL_HANDLE = '@whisprspace'
+const WEB_DOMAIN = 'app.whisprspace.com'
+const SOCIAL_ICONS = [FaInstagram, FaTiktok, FaXTwitter, FaFacebook, FaThreads]
+
 export type ExportSlide =
-  | { kind: 'cover'; featured: CarouselReply[] }
+  | { kind: 'cover' }
   | ReplySlide
   | { kind: 'cta'; url: string; cta: string }
 
@@ -42,21 +47,19 @@ const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
           <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1 }}>
             <div style={{ color: '#F97316', fontSize: 20, letterSpacing: '0.14em', fontWeight: 700, textTransform: 'uppercase', marginBottom: 25 }}>{isPrompt ? 'The question' : 'The discussion'}</div>
             <div style={{ fontSize: questionFontSize, lineHeight: 1.1, fontWeight: 800, letterSpacing: '-1.8px' }}>{question}</div>
-            <div style={{ marginTop: 42, borderLeft: '3px solid #8B5CF6', paddingLeft: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {slide.featured.map((reply) => (
-                <div key={reply.id} style={{ color: '#D7D7E0', fontSize: isStory ? 30 : 25, lineHeight: 1.4 }}>&ldquo;{reply.content}&rdquo;</div>
-              ))}
+            <div style={{ marginTop: 48, display: 'inline-flex', alignSelf: 'flex-start', alignItems: 'center', gap: 14, borderRadius: 999, padding: '16px 28px', background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)' }}>
+              <span style={{ color: '#C4B5FD', fontSize: isStory ? 30 : 26, fontWeight: 800 }}>{responseCount}</span>
+              <span style={{ color: '#B9B9C6', fontSize: isStory ? 21 : 19 }}>{isPrompt ? 'anonymous answers' : 'replies'}</span>
             </div>
-            <div style={{ marginTop: 38, color: '#8F8FA3', fontSize: 20 }}>{isPrompt ? `${responseCount} anonymous answers collected` : `${responseCount} replies in this discussion`}</div>
           </div>
         )}
 
         {slide.kind === 'responses' && (
           <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'center', gap: 22 }}>
-            {slide.replies.map((reply, index) => (
-              <div key={reply.id} style={{ border: '1px solid #29283A', borderRadius: 24, padding: isStory ? '32px 30px' : '26px 28px', background: 'rgba(255,255,255,0.035)' }}>
-                <div style={{ color: '#F97316', fontSize: 16, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 13 }}>{isPrompt ? 'Anonymous' : 'Reply'} {index + 1}</div>
-                <div style={{ color: '#ECECF1', fontSize: isStory ? 31 : 27, lineHeight: 1.42 }}>&ldquo;{reply.content}&rdquo;</div>
+            {slide.replies.map((reply) => (
+              <div key={reply.id} style={{ border: '1px solid #29283A', borderRadius: 28, padding: isStory ? '48px 40px' : '40px 40px', background: 'rgba(255,255,255,0.035)' }}>
+                <div style={{ color: '#F97316', fontSize: 17, fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 20 }}>{isPrompt ? 'Anonymous' : 'Reply'}</div>
+                <div style={{ color: '#ECECF1', fontSize: isStory ? 40 : 34, lineHeight: 1.4, fontWeight: 600 }}>&ldquo;{reply.content}&rdquo;</div>
               </div>
             ))}
           </div>
@@ -67,7 +70,13 @@ const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
             <div style={{ color: '#F97316', fontSize: 20, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 28 }}>Your turn</div>
             <div style={{ fontSize: isStory ? 72 : 62, lineHeight: 1.08, fontWeight: 800, letterSpacing: '-2px', maxWidth: 780 }}>{slide.cta}.</div>
             <div style={{ marginTop: 44, borderRadius: 999, padding: '20px 32px', background: 'linear-gradient(100deg, #8B5CF6, #F97316)', color: '#fff', fontSize: 23, fontWeight: 700 }}>{isPrompt ? 'No name. No trace.' : 'Join the conversation.'}</div>
-            <div style={{ maxWidth: 760, overflowWrap: 'anywhere', marginTop: 28, color: '#8F8FA3', fontSize: 19 }}>{slide.url.replace(/^https?:\/\//, '')}</div>
+            <div style={{ marginTop: 46, display: 'flex', alignItems: 'center', gap: 20 }}>
+              {SOCIAL_ICONS.map((Icon, index) => (
+                <Icon key={index} size={isStory ? 34 : 30} color="#C4B5FD" />
+              ))}
+            </div>
+            <div style={{ marginTop: 20, color: '#8F8FA3', fontSize: 20, fontWeight: 600 }}>{SOCIAL_HANDLE}</div>
+            <div style={{ marginTop: 6, color: '#5C5C6E', fontSize: 18 }}>{WEB_DOMAIN}</div>
           </div>
         )}
       </div>
