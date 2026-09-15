@@ -22,7 +22,7 @@ export async function PATCH(
     .eq('creator_id', user.id)
     .is('deleted_at', null)
     .maybeSingle()
-  if (!prompt) return NextResponse.json({ error: 'Prompt not found.' }, { status: 404 })
+  if (!prompt) return NextResponse.json({ error: 'Ask not found.' }, { status: 404 })
 
   const body = await request.json().catch(() => null)
   if (!body || typeof body !== 'object' || typeof (body as Record<string, unknown>).isStarred !== 'boolean') {

@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, ChevronLeft, Copy, Loader2, Share2 } from 'lucide-react'
+import { Check, ChevronLeft, Copy, Loader2, Plus, Share2, Star, Trash2 } from 'lucide-react'
 import posthog from 'posthog-js'
 import { PROMPT_LIBRARY } from '@/lib/prompts/library'
 import { promptApi } from '@/lib/prompts/api-client'
-import { PROMPT_CATEGORIES, PROMPT_DURATIONS, type Prompt, type PromptCategory, type PromptDuration } from '@/lib/prompts/types'
+import { PROMPT_CATEGORIES, PROMPT_DURATIONS, type Prompt, type PromptCategory, type PromptDuration, type PromptResponseFormat } from '@/lib/prompts/types'
 import { useUserStore } from '@/store/userStore'
 import { useShareLink } from '@/lib/hooks/useShareLink'
 import { ShareDropdown } from '@/components/features/inbox/ShareDropdown'
@@ -14,12 +14,15 @@ import { buildPromptPath } from '@/lib/prompts/prompt-url'
 import PromptShareCard from './PromptShareCard'
 
 const categoryLabels: Record<PromptCategory, string> = {
-  work: 'Work', money: 'Money', love: 'Love', family: 'Family', campus: 'Campus', general: 'General',
+  work: 'Work', money: 'Money', love: 'Love', family: 'Family', campus: 'Campus', general: 'General', icebreakers: 'Icebreakers',
 }
 
 const durationLabels: Record<PromptDuration, string> = {
   '24h': '24 hours', '48h': '48 hours', '7d': '7 days',
 }
+
+const MIN_OPTIONS = 2
+const MAX_OPTIONS = 5
 
 export default function PromptComposer() {
   const router = useRouter()
@@ -29,6 +32,9 @@ export default function PromptComposer() {
   const [category, setCategory] = useState<PromptCategory>('general')
   const [duration, setDuration] = useState<PromptDuration>('48h')
   const [libraryKey, setLibraryKey] = useState<string | null>(null)
+  const [responseFormat, setResponseFormat] = useState<PromptResponseFormat>('text')
+  const [options, setOptions] = useState<string[]>(['', ''])
+  const [correctOptionIndex, setCorrectOptionIndex] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [createdPrompt, setCreatedPrompt] = useState<Prompt | null>(null)
@@ -74,21 +80,72 @@ export default function PromptComposer() {
     setLibraryKey(selected.key)
     setQuestion(selected.question)
     setCategory(selected.category)
+
+    if (selected.responseFormat === 'choice') {
+      setResponseFormat('choice')
+      setOptions(selected.options && selected.options.length >= MIN_OPTIONS ? [...selected.options] : ['', ''])
+      setCorrectOptionIndex(selected.correctOptionIndex ?? 0)
+    } else {
+      setResponseFormat('text')
+    }
   }
 
+  const setFormat = (format: PromptResponseFormat) => {
+    setResponseFormat(format)
+    setLibraryKey(null)
+    if (format === 'choice' && options.length < MIN_OPTIONS) {
+      setOptions(['', ''])
+    }
+  }
+
+  const updateOption = (index: number, value: string) => {
+    setLibraryKey(null)
+    setOptions((current) => current.map((option, i) => (i === index ? value.slice(0, 80) : option)))
+  }
+
+  const addOption = () => {
+    if (options.length >= MAX_OPTIONS) return
+    setLibraryKey(null)
+    setOptions((current) => [...current, ''])
+  }
+
+  const removeOption = (index: number) => {
+    if (options.length <= MIN_OPTIONS) return
+    setLibraryKey(null)
+    setOptions((current) => current.filter((_, i) => i !== index))
+    setCorrectOptionIndex((current) => {
+      if (index === current) return 0
+      return index < current ? current - 1 : current
+    })
+  }
+
+  const isChoiceValid =
+    responseFormat === 'text' ||
+    (options.length >= MIN_OPTIONS &&
+      options.length <= MAX_OPTIONS &&
+      options.every((option) => option.trim().length > 0))
+
   const handleCreate = async () => {
-    if (!question.trim() || isSubmitting) return
+    if (!question.trim() || !isChoiceValid || isSubmitting) return
     setError(null)
     setIsSubmitting(true)
     try {
       const { prompt } = await promptApi<{ prompt: Prompt }>('/api/prompts', {
         method: 'POST',
-        body: JSON.stringify({ question, category, duration, libraryKey }),
+        body: JSON.stringify({
+          question,
+          category,
+          duration,
+          libraryKey,
+          responseFormat,
+          options: responseFormat === 'choice' ? options.map((option) => option.trim()) : undefined,
+          correctOptionIndex: responseFormat === 'choice' ? correctOptionIndex : undefined,
+        }),
       })
       setCreatedPrompt(prompt)
-      try { posthog.capture('prompt_created', { category: prompt.category, duration, library_key: prompt.library_key }) } catch { /* analytics is optional */ }
+      try { posthog.capture('prompt_created', { category: prompt.category, duration, library_key: prompt.library_key, response_format: prompt.response_format }) } catch { /* analytics is optional */ }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to create your prompt.')
+      setError(cause instanceof Error ? cause.message : 'Unable to create your ask.')
     } finally {
       setIsSubmitting(false)
     }
@@ -152,14 +209,68 @@ export default function PromptComposer() {
 
         <div className="space-y-6 rounded-2xl border border-[#23232E] bg-[#12121A] p-5 md:p-7">
           <section>
-            <label className="mb-2 block text-sm font-medium">Question</label>
-            <textarea value={question} onChange={(event) => { setQuestion(event.target.value.slice(0, 280)); setLibraryKey(null) }} rows={3} placeholder="What do you want people to answer honestly?" className="w-full resize-none rounded-xl border border-[#2A2A38] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-[#5C5C6E] focus:border-[#8B5CF6]/70 focus:outline-none" />
-            <div className="mt-1 text-right text-xs text-[#5C5C6E]">{question.length}/280</div>
+            <label className="mb-2 block text-sm font-medium">Format</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setFormat('text')} className={`rounded-xl border p-3 text-left transition-colors ${responseFormat === 'text' ? 'border-[#8B5CF6]/70 bg-[#8B5CF6]/15 text-[#E9E1FF]' : 'border-[#2A2A38] text-[#8F8FA3] hover:border-[#8B5CF6]/35'}`}>
+                <span className="block text-sm font-medium">Open question</span>
+                <span className="mt-1 block text-xs opacity-80">People write a free-text answer</span>
+              </button>
+              <button type="button" onClick={() => setFormat('choice')} className={`rounded-xl border p-3 text-left transition-colors ${responseFormat === 'choice' ? 'border-[#F97316]/60 bg-[#F97316]/10 text-white' : 'border-[#2A2A38] text-[#8F8FA3] hover:border-[#F97316]/35'}`}>
+                <span className="block text-sm font-medium">Icebreaker guess</span>
+                <span className="mt-1 block text-xs opacity-80">People pick from your options</span>
+              </button>
+            </div>
           </section>
 
           <section>
+            <label className="mb-2 block text-sm font-medium">{responseFormat === 'choice' ? 'Question (e.g. "Which one is the lie?")' : 'Question'}</label>
+            <textarea value={question} onChange={(event) => { setQuestion(event.target.value.slice(0, 280)); setLibraryKey(null) }} rows={3} placeholder={responseFormat === 'choice' ? 'Which one is the lie?' : 'What do you want people to answer honestly?'} className="w-full resize-none rounded-xl border border-[#2A2A38] bg-white/[0.03] px-4 py-3 text-sm text-white placeholder:text-[#5C5C6E] focus:border-[#8B5CF6]/70 focus:outline-none" />
+            <div className="mt-1 text-right text-xs text-[#5C5C6E]">{question.length}/280</div>
+          </section>
+
+          {responseFormat === 'choice' && (
+            <section>
+              <div className="mb-2 flex items-baseline justify-between">
+                <label className="block text-sm font-medium">Options</label>
+                <span className="text-xs text-[#5C5C6E]">Tap the star on the true one</span>
+              </div>
+              <div className="space-y-2">
+                {options.map((option, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCorrectOptionIndex(index)}
+                      aria-label={correctOptionIndex === index ? 'This is the true option' : 'Mark as the true option'}
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors ${correctOptionIndex === index ? 'border-[#F97316]/60 bg-[#F97316]/15 text-[#FCA46A]' : 'border-[#2A2A38] text-[#5C5C6E] hover:border-[#F97316]/40 hover:text-[#FCA46A]'}`}
+                    >
+                      <Star className="h-4 w-4" fill={correctOptionIndex === index ? 'currentColor' : 'none'} />
+                    </button>
+                    <input
+                      value={option}
+                      onChange={(event) => updateOption(index, event.target.value)}
+                      placeholder={`Option ${index + 1}`}
+                      className="w-full rounded-xl border border-[#2A2A38] bg-white/[0.03] px-4 py-2.5 text-sm text-white placeholder:text-[#5C5C6E] focus:border-[#8B5CF6]/70 focus:outline-none"
+                    />
+                    {options.length > MIN_OPTIONS && (
+                      <button type="button" onClick={() => removeOption(index)} aria-label="Remove option" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#2A2A38] text-[#5C5C6E] hover:border-red-400/40 hover:text-red-300">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {options.length < MAX_OPTIONS && (
+                <button type="button" onClick={addOption} className="mt-2 flex items-center gap-1.5 text-xs text-[#C4B5FD] hover:text-white">
+                  <Plus className="h-3.5 w-3.5" /> Add option
+                </button>
+              )}
+              <p className="mt-2 text-xs text-[#5C5C6E]">The true option is never shown to participants — you're the only one who sees it.</p>
+            </section>
+          )}
+
+          <section>
             <label className="mb-2 block text-sm font-medium">Category</label>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">{PROMPT_CATEGORIES.map((value) => <button key={value} type="button" onClick={() => setCategory(value)} className={`rounded-lg border px-2 py-2 text-xs capitalize transition-colors ${category === value ? 'border-[#8B5CF6]/70 bg-[#8B5CF6]/15 text-[#E9E1FF]' : 'border-[#2A2A38] text-[#8F8FA3] hover:border-[#8B5CF6]/35'}`}>{categoryLabels[value]}</button>)}</div>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">{PROMPT_CATEGORIES.map((value) => <button key={value} type="button" onClick={() => setCategory(value)} className={`rounded-lg border px-2 py-2 text-xs capitalize transition-colors ${category === value ? 'border-[#8B5CF6]/70 bg-[#8B5CF6]/15 text-[#E9E1FF]' : 'border-[#2A2A38] text-[#8F8FA3] hover:border-[#8B5CF6]/35'}`}>{categoryLabels[value]}</button>)}</div>
           </section>
 
           <section>
@@ -182,7 +293,7 @@ export default function PromptComposer() {
           </section>
 
           {error && <p className="rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}
-          <button disabled={!question.trim() || isSubmitting} onClick={handleCreate} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40">{isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}{isSubmitting ? 'Publishing…' : 'Publish ask'}</button>
+          <button disabled={!question.trim() || !isChoiceValid || isSubmitting} onClick={handleCreate} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40">{isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}{isSubmitting ? 'Publishing…' : 'Publish ask'}</button>
         </div>
       </div>
     </div>
