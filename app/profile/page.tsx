@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserStore } from '@/store/userStore';
 import { motion } from 'framer-motion';
-import { Settings, TrendingUp, Calendar, Clock, ArrowLeft, DollarSign, Crown, Edit3, BarChart3, Shield } from 'lucide-react';
+import { Settings, TrendingUp, Calendar, Clock, ArrowLeft, DollarSign, Crown, Edit3, BarChart3, Shield, X, CreditCard, AlertTriangle } from 'lucide-react';
 import NotificationPreferencesModal from '@/components/features/notifications/NotificationPreferencesModal';
 import NotificationBell from '@/components/features/notifications/NotificationBell';
 import ActivityFeed from '@/components/features/profile/ActivityFeed';
@@ -26,6 +26,7 @@ const ProfilePage = () => {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
   const [showSessionPanel, setShowSessionPanel] = useState(false);
+  const [showManageSubModal, setShowManageSubModal] = useState(false);
   const [pollStats, setPollStats] = useState<{ weeklyCount: number; activeCount: number } | null>(null);
   const premiumConfirmRef = useRef(false);
 
@@ -210,7 +211,7 @@ const ProfilePage = () => {
                     </p>
                   )}
                 </div>
-                <button className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors mt-auto">Manage Subscription</button>
+                <button onClick={() => setShowManageSubModal(true)} className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors mt-auto">Manage Subscription</button>
               </div>
             ) : (
               <div className="flex flex-col flex-1">
@@ -276,6 +277,70 @@ const ProfilePage = () => {
         onClose={() => setShowSessionPanel(false)}
       />
 
+
+      {/* Manage Subscription Modal */}
+      {showManageSubModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-safe-overlay">
+          <div className="relative w-full max-w-md modal-safe-panel bg-[#1A1A2E] border border-gray-700 rounded-2xl shadow-2xl p-6 text-white">
+            <button
+              onClick={() => setShowManageSubModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 mb-5">
+              <div className="w-10 h-10 bg-purple-600/20 border border-purple-500/30 rounded-full flex items-center justify-center">
+                <CreditCard className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold">Manage Subscription</h2>
+                <p className="text-xs text-gray-400">WhisprSpace Premium</p>
+              </div>
+            </div>
+
+            <div className="bg-gray-800/60 border border-gray-700 rounded-xl p-4 mb-5 space-y-2">
+              <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                Active Premium Member
+              </div>
+              {currentUser?.premiumExpiresAt && (
+                <p className="text-sm text-gray-400">
+                  Renews on {new Date(currentUser.premiumExpiresAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  setShowManageSubModal(false);
+                  setShowUpgradeModal(true);
+                }}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium transition-colors"
+              >
+                <Crown className="w-4 h-4" />
+                Switch Plan
+              </button>
+
+              <div className="border border-red-500/20 rounded-xl p-4 bg-red-500/5">
+                <div className="flex items-start gap-2 mb-3">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-gray-400 leading-relaxed">
+                    To cancel your subscription, contact our support team. Your premium access will remain active until the end of your current billing period.
+                  </p>
+                </div>
+                <a
+                  href="mailto:support@whisprspace.com?subject=Cancel%20Premium%20Subscription&body=Hi%2C%20I%20would%20like%20to%20cancel%20my%20WhisprSpace%20Premium%20subscription."
+                  className="w-full flex items-center justify-center gap-2 py-2 px-4 border border-red-500/40 hover:bg-red-500/10 rounded-lg text-sm text-red-400 transition-colors"
+                >
+                  Request Cancellation
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Upgrade to Premium Modal */}
       {showUpgradeModal && !showPaymentForm && (

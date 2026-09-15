@@ -1,6 +1,11 @@
-import type { PromptResponse } from './types'
+import type { PromptResponse, PromptResponseFormat } from './types'
 
 export type ExportSourceKind = 'prompt' | 'thread'
+
+export interface ExportChoiceMeta {
+  options: string[]
+  correctOptionIndex: number | null
+}
 
 export interface ExportSource {
   id: string
@@ -11,4 +16,6 @@ export interface ExportSource {
   responses: PromptResponse[]
   url: string
   finalCta: string
+  responseFormat?: PromptResponseFormat
+  choice?: ExportChoiceMeta
 }

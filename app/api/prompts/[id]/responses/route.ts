@@ -44,33 +44,55 @@ export async function POST(
   try {
     const { id } = await context.params
     const promptId = sanitizeUuid(id)
-    if (!promptId) return NextResponse.json({ error: 'Invalid prompt.' }, { status: 400 })
+    if (!promptId) return NextResponse.json({ error: 'Invalid ask.' }, { status: 400 })
 
     const body = await request.json().catch(() => null)
-    const rawContent = (body as Record<string, unknown> | null)?.content
-    if (typeof rawContent !== 'string' || rawContent.trim().length > 1000) {
-      return NextResponse.json({ error: 'Your answer cannot exceed 1000 characters.' }, { status: 400 })
-    }
-    const content = sanitizeMultilineInput(rawContent, { maxLength: 1000 })
-    if (!content) return NextResponse.json({ error: 'Your answer cannot be empty.' }, { status: 400 })
+    const raw = (body as Record<string, unknown> | null) ?? {}
 
     const { data: prompt, error: promptError } = await supabaseAdmin
       .from('prompts')
-      .select('id, mode, expires_at, deleted_at')
+      .select('id, mode, expires_at, deleted_at, response_format, options')
       .eq('id', promptId)
       .maybeSingle()
 
     if (promptError || !prompt || prompt.deleted_at) {
-      return NextResponse.json({ error: 'This prompt is no longer available.' }, { status: 404 })
+      return NextResponse.json({ error: 'This ask is no longer available.' }, { status: 404 })
     }
 
     if (new Date(prompt.expires_at).getTime() <= Date.now()) {
-      return NextResponse.json({ error: 'This prompt has closed.' }, { status: 410 })
+      return NextResponse.json({ error: 'This ask has closed.' }, { status: 410 })
     }
 
     // Open-mode unlock mechanics are intentionally not live yet.
     if (prompt.mode !== 'private') {
-      return NextResponse.json({ error: 'This prompt is not accepting responses yet.' }, { status: 409 })
+      return NextResponse.json({ error: 'This ask is not accepting responses yet.' }, { status: 409 })
+    }
+
+    let content: string | null = null
+    let optionIndex: number | null = null
+
+    if (prompt.response_format === 'choice') {
+      const options = Array.isArray(prompt.options) ? (prompt.options as string[]) : []
+      const rawIndex = Number((raw as Record<string, unknown>).optionIndex)
+      if (!Number.isInteger(rawIndex) || rawIndex < 0 || rawIndex >= options.length) {
+        return NextResponse.json({ error: 'Choose one of the options.' }, { status: 400 })
+      }
+      optionIndex = rawIndex
+
+      const rawComment = raw.content
+      if (typeof rawComment === 'string' && rawComment.trim()) {
+        if (rawComment.trim().length > 1000) {
+          return NextResponse.json({ error: 'Your comment cannot exceed 1000 characters.' }, { status: 400 })
+        }
+        content = sanitizeMultilineInput(rawComment, { maxLength: 1000 })
+      }
+    } else {
+      const rawContent = raw.content
+      if (typeof rawContent !== 'string' || rawContent.trim().length > 1000) {
+        return NextResponse.json({ error: 'Your answer cannot exceed 1000 characters.' }, { status: 400 })
+      }
+      content = sanitizeMultilineInput(rawContent, { maxLength: 1000 })
+      if (!content) return NextResponse.json({ error: 'Your answer cannot be empty.' }, { status: 400 })
     }
 
     const existingToken = request.cookies.get(SENDER_TOKEN_COOKIE)?.value
@@ -82,10 +104,11 @@ export async function POST(
       return NextResponse.json({ error: 'Too many answers. Please try again in an hour.' }, { status: 429 })
     }
 
-    const blocked = containsBlockedContent(content).blocked
+    const blocked = content ? containsBlockedContent(content).blocked : false
     const { error: insertError } = await supabaseAdmin.from('prompt_responses').insert({
       prompt_id: promptId,
       content,
+      option_index: optionIndex,
       moderation_status: blocked ? 'blocked' : 'passed',
       sender_token_hash: senderTokenHash,
       ip_hash: ipHash,

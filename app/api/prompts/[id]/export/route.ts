@@ -14,7 +14,7 @@ export async function POST(
 ) {
   const { id } = await context.params
   const promptId = sanitizeUuid(id)
-  if (!promptId) return NextResponse.json({ error: 'Invalid prompt ID.' }, { status: 400 })
+  if (!promptId) return NextResponse.json({ error: 'Invalid ask ID.' }, { status: 400 })
 
   const user = await resolveUserFromRequest(request)
   if (!user) return NextResponse.json({ error: 'Sign in to export.' }, { status: 401 })
@@ -30,7 +30,7 @@ export async function POST(
   ])
 
   if (promptError || !prompt || prompt.creator_id !== user.id) {
-    return NextResponse.json({ error: 'Prompt not found.' }, { status: 404 })
+    return NextResponse.json({ error: 'Ask not found.' }, { status: 404 })
   }
 
   const isPremium = profile?.is_premium === true
