@@ -8,6 +8,7 @@ import type { PromptCategory, PromptDetail, PromptResponse } from '@/lib/prompts
 import type { ThreadCategory } from '@/types'
 import { promptApi } from '@/lib/prompts/api-client'
 import { PROMPT_THREAD_DRAFT_KEY, type PromptThreadDraft } from '@/lib/prompts/open-floor'
+import { buildIcebreakerResults } from '@/lib/prompts/icebreaker-results'
 import ResponsePicker from '@/components/features/prompts/ResponsePicker'
 import PromptShareCard from '@/components/features/prompts/PromptShareCard'
 import { useShareLink } from '@/lib/hooks/useShareLink'
@@ -23,6 +24,7 @@ const promptToThreadCategory: Record<PromptCategory, ThreadCategory> = {
   family: 'lifestyle',
   campus: 'education',
   general: 'general',
+  icebreakers: 'lifestyle',
 }
 
 export default function ManagePromptPage() {
@@ -36,6 +38,7 @@ export default function ManagePromptPage() {
   const [loading, setLoading] = useState(true)
   const [changingId, setChangingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [updatingCorrectOption, setUpdatingCorrectOption] = useState(false)
   const shareButtonRef = useRef<HTMLButtonElement>(null)
 
   const promptUrl =
@@ -71,7 +74,7 @@ export default function ManagePromptPage() {
       const result = await promptApi<{ prompt: PromptDetail }>(`/api/prompts/${promptId}`)
       setDetail(result.prompt)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to load this prompt.')
+      setError(cause instanceof Error ? cause.message : 'Unable to load this ask.')
     } finally { setLoading(false) }
   }, [promptId])
 
@@ -114,6 +117,17 @@ export default function ManagePromptPage() {
     } finally { setSaving(false) }
   }
 
+  const markCorrectOption = async (index: number) => {
+    if (!detail || updatingCorrectOption || detail.correct_option_index === index) return
+    setUpdatingCorrectOption(true)
+    try {
+      await promptApi(`/api/prompts/${promptId}`, { method: 'PATCH', body: JSON.stringify({ correctOptionIndex: index }) })
+      setDetail((current) => current ? { ...current, correct_option_index: index } : current)
+    } catch (cause) {
+      showToast({ type: 'error', title: 'Failed to update', message: cause instanceof Error ? cause.message : 'Could not update the true answer.' })
+    } finally { setUpdatingCorrectOption(false) }
+  }
+
   const openSharePicker = () => {
     if (!shareButtonRef.current) return
     openDropdown(shareButtonRef.current.getBoundingClientRect())
@@ -138,10 +152,56 @@ export default function ManagePromptPage() {
   }
 
   if (loading) return <div className="min-h-screen bg-[#0A0A10] text-center text-[#8F8FA3]"><Loader2 className="mx-auto mt-28 h-6 w-6 animate-spin" /></div>
-  if (!detail) return <div className="min-h-screen bg-[#0A0A10] p-8 text-center text-[#F2F2F6]"><p>{error || 'Prompt not found.'}</p><button onClick={() => router.push('/curiosity-ask')} className="mt-4 text-sm text-[#C4B5FD]">Back to Curiosity Ask</button></div>
+  if (!detail) return <div className="min-h-screen bg-[#0A0A10] p-8 text-center text-[#F2F2F6]"><p>{error || 'Ask not found.'}</p><button onClick={() => router.push('/curiosity-ask')} className="mt-4 text-sm text-[#C4B5FD]">Back to Curiosity Ask</button></div>
   const starred = detail.responses.filter((response) => response.is_starred)
+  const isChoice = detail.response_format === 'choice' && Array.isArray(detail.options)
+  const isLive = new Date(detail.expires_at).getTime() > Date.now()
+  const optionCounts = isChoice
+    ? detail.options!.map((_, index) => detail.responses.filter((response) => response.option_index === index).length)
+    : []
+  const results = isChoice ? buildIcebreakerResults(detail.options!, detail.correct_option_index, optionCounts) : null
+  const commentedChoiceResponses = isChoice ? detail.responses.filter((response) => response.content) : []
+  const highlightable = isChoice ? commentedChoiceResponses : detail.responses
+  const getOptionLabel = (response: PromptResponse) =>
+    isChoice && response.option_index !== null ? detail.options![response.option_index] ?? null : null
 
-  return <main className="min-h-screen bg-[#0A0A10] px-4 py-8 text-[#F2F2F6]"><div className="mx-auto max-w-2xl"><button type="button" onClick={() => router.back()} className="mb-6 inline-flex items-center gap-1 text-sm text-[#8F8FA3] hover:text-white"><ArrowLeft className="h-4 w-4" /> Back</button><div className="rounded-2xl border border-[#23232E] bg-[#12121A] p-5 md:p-7"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium uppercase tracking-[0.17em] text-[#C4B5FD]">Private ask</p><h1 className="mt-2 text-2xl font-medium leading-snug">{detail.question}</h1></div><span className="shrink-0 rounded-full bg-[#8B5CF6]/10 px-3 py-1 text-xs text-[#C4B5FD]">{detail.response_count} answers</span></div><p className="mt-4 text-sm text-[#8F8FA3]">{new Date(detail.expires_at).getTime() > Date.now() ? `Closes ${new Date(detail.expires_at).toLocaleString()}` : detail.is_saved ? 'Closed · Saved permanently' : 'Closed'}</p><div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-4"><button ref={shareButtonRef} onClick={openSharePicker} className="flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-[#2A2A38] px-4 py-2.5 text-xs hover:border-[#8B5CF6]/50 sm:text-sm"><Share2 className="h-4 w-4 shrink-0" />{copied ? 'Copied' : 'Share'}</button>{!detail.is_saved && <button onClick={save} disabled={saving} className={`flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-4 py-2.5 text-xs sm:text-sm ${session.user?.isPremium ? 'border-[#5DCAA5]/30 bg-[#5DCAA5]/10 text-[#5DCAA5] hover:bg-[#5DCAA5]/20' : 'border-[#2A2A38] text-[#5C5C6E]'}`}><Bookmark className="h-4 w-4 shrink-0" />{saving ? 'Saving…' : 'Save ask'}{!session.user?.isPremium && <span className="text-[10px] text-[#EF9F27]">Premium</span>}</button>}<button onClick={openFloor} disabled={!starred.length} className="flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-[#F97316]/40 bg-[#F97316]/[0.05] px-4 py-2.5 text-xs text-[#FCA46A] hover:border-[#F97316]/70 hover:bg-[#F97316]/[0.09] disabled:opacity-40 sm:text-sm"><MessageCircle className="h-4 w-4 shrink-0" />Open for discussion</button><Link href={`/curiosity-ask/${promptId}/export`} className={`flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-xs sm:text-sm ${starred.length ? 'bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-white' : 'pointer-events-none bg-white/[0.04] text-[#5C5C6E]'}`}><Download className="h-4 w-4 shrink-0" />Export {starred.length ? `(${starred.length})` : ''}</Link></div></div>{error && <p className="mt-4 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}<div className="mt-8 flex items-center justify-between"><div><h2 className="text-lg font-medium">Choose highlights</h2><p className="mt-1 text-sm text-[#8F8FA3]">Nothing is selected for you. Star the answers you want to keep, export, or open as a discussion.</p></div><Star className="h-5 w-5 text-[#FCA46A]" /></div><div className="mt-4 max-h-[60vh] overflow-y-auto pr-1"><ResponsePicker responses={detail.responses} changingId={changingId} onToggle={toggle} /></div></div>
+  return <main className="min-h-screen bg-[#0A0A10] px-4 py-8 text-[#F2F2F6]"><div className="mx-auto max-w-2xl"><button type="button" onClick={() => router.back()} className="mb-6 inline-flex items-center gap-1 text-sm text-[#8F8FA3] hover:text-white"><ArrowLeft className="h-4 w-4" /> Back</button><div className="rounded-2xl border border-[#23232E] bg-[#12121A] p-5 md:p-7"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-medium uppercase tracking-[0.17em] text-[#C4B5FD]">Private ask</p><h1 className="mt-2 text-2xl font-medium leading-snug">{detail.question}</h1></div><span className="shrink-0 rounded-full bg-[#8B5CF6]/10 px-3 py-1 text-xs text-[#C4B5FD]">{detail.response_count} answers</span></div><p className="mt-4 text-sm text-[#8F8FA3]">{new Date(detail.expires_at).getTime() > Date.now() ? `Closes ${new Date(detail.expires_at).toLocaleString()}` : detail.is_saved ? 'Closed · Saved permanently' : 'Closed'}</p><div className="mt-5 flex flex-wrap gap-2"><button ref={shareButtonRef} onClick={openSharePicker} className="flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-[#2A2A38] px-4 py-2.5 text-xs hover:border-[#8B5CF6]/50 sm:text-sm"><Share2 className="h-4 w-4 shrink-0" />{copied ? 'Copied' : 'Share'}</button>{!detail.is_saved && <button onClick={save} disabled={saving} className={`flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border px-4 py-2.5 text-xs sm:text-sm ${session.user?.isPremium ? 'border-[#5DCAA5]/30 bg-[#5DCAA5]/10 text-[#5DCAA5] hover:bg-[#5DCAA5]/20' : 'border-[#2A2A38] text-[#5C5C6E]'}`}><Bookmark className="h-4 w-4 shrink-0" />{saving ? 'Saving…' : 'Save ask'}{!session.user?.isPremium && <span className="text-[10px] text-[#EF9F27]">Premium</span>}</button>}{!isChoice && <button onClick={openFloor} disabled={!starred.length} className="flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-[#F97316]/40 bg-[#F97316]/[0.05] px-4 py-2.5 text-xs text-[#FCA46A] hover:border-[#F97316]/70 hover:bg-[#F97316]/[0.09] disabled:opacity-40 sm:text-sm"><MessageCircle className="h-4 w-4 shrink-0" />Open for discussion</button>}<Link href={`/curiosity-ask/${promptId}/export`} className={`flex min-h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 py-2.5 text-xs sm:text-sm ${starred.length || isChoice ? 'bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-white' : 'pointer-events-none bg-white/[0.04] text-[#5C5C6E]'}`}><Download className="h-4 w-4 shrink-0" />Export {starred.length ? `(${starred.length})` : ''}</Link></div></div>{error && <p className="mt-4 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}
+
+    {isChoice && results && (
+      <div className="mt-8">
+        <h2 className="text-lg font-medium">Results</h2>
+        <p className="mt-1 text-sm text-[#8F8FA3]">Only you can see this. The true answer is never shown to participants.{isLive && ' You can change which one is true while the ask is still live.'}</p>
+        <div className="mt-4 space-y-3">
+          {results.entries.map((entry, index) => (
+            <div key={index} className={`rounded-xl border p-4 ${entry.isCorrect ? 'border-[#5DCAA5]/45 bg-[#5DCAA5]/[0.06]' : 'border-[#23232E] bg-[#12121A]'}`}>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="min-w-0 flex-1 break-words text-[#E6E6EC]">{entry.option}{entry.isCorrect && <span className="ml-2 text-xs text-[#5DCAA5]">True answer</span>}</span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="text-xs text-[#8F8FA3]">{entry.count} · {entry.percent}%</span>
+                  {isLive && (
+                    <button
+                      type="button"
+                      onClick={() => markCorrectOption(index)}
+                      disabled={updatingCorrectOption || entry.isCorrect}
+                      aria-label={entry.isCorrect ? 'This is the true answer' : 'Mark as the true answer'}
+                      className={`flex h-8 w-8 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed ${entry.isCorrect ? 'border-[#5DCAA5]/50 bg-[#5DCAA5]/15 text-[#5DCAA5]' : 'border-[#2A2A38] text-[#5C5C6E] hover:border-[#5DCAA5]/40 hover:text-[#5DCAA5]'}`}
+                    >
+                      <Star className="h-3.5 w-3.5" fill={entry.isCorrect ? 'currentColor' : 'none'} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]"><div className={`h-full rounded-full ${entry.isCorrect ? 'bg-[#5DCAA5]' : 'bg-[#8B5CF6]'}`} style={{ width: `${entry.percent}%` }} /></div>
+            </div>
+          ))}
+        </div>
+        <p className="mt-4 rounded-xl border border-[#2A2A38] bg-white/[0.02] px-4 py-3 text-sm text-[#C4B5FD]">{results.headline}</p>
+      </div>
+    )}
+
+    <div className="mt-8 flex items-center justify-between"><div><h2 className="text-lg font-medium">Choose highlights</h2><p className="mt-1 text-sm text-[#8F8FA3]">{isChoice ? 'Answers with a comment can be starred to feature in your export.' : 'Nothing is selected for you. Star the answers you want to keep, export, or open as a discussion.'}</p></div><Star className="h-5 w-5 text-[#FCA46A]" /></div>
+    <div className="mt-4 max-h-[60vh] overflow-y-auto pr-1"><ResponsePicker responses={highlightable} changingId={changingId} onToggle={toggle} getOptionLabel={isChoice ? getOptionLabel : undefined} /></div>
+    </div>
 
     {showDropdown && (
       <ShareDropdown

@@ -42,7 +42,7 @@ export async function POST(
   try {
     const { id } = await context.params
     const promptId = sanitizeUuid(id)
-    if (!promptId) return NextResponse.json({ error: 'Invalid prompt ID.' }, { status: 400 })
+    if (!promptId) return NextResponse.json({ error: 'Invalid ask ID.' }, { status: 400 })
 
     const user = await resolveUserFromRequest(request)
     if (!user) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 })
@@ -70,6 +70,6 @@ export async function POST(
     return NextResponse.json({ success: true, imported: Number(data) || 0 })
   } catch (error) {
     console.error('[PromptOpenFloor] Unexpected failure:', error)
-    return NextResponse.json({ error: 'Unable to open this prompt as a discussion.' }, { status: 500 })
+    return NextResponse.json({ error: 'Unable to open this ask as a discussion.' }, { status: 500 })
   }
 }

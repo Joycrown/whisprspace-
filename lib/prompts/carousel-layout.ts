@@ -3,6 +3,7 @@ export type AspectRatio = 'square' | 'portrait' | 'story'
 export interface CarouselReply {
   id: string
   content: string
+  optionLabel?: string | null
 }
 
 export interface ReplySlide {

@@ -64,6 +64,34 @@ export const PROMPT_LIBRARY: PromptLibraryItem[] = [
   { key: 'general-would-say-drunk', question: 'What would you actually say if you knew there would be zero consequences?', category: 'general', personas: ['lifestyle', 'creator'] },
   { key: 'general-changed-by-a-stranger', question: 'What did a stranger once say to you that changed how you think, even briefly?', category: 'general', personas: ['lifestyle'] },
   { key: 'general-still-waiting', question: 'What is something you are still quietly waiting to happen?', category: 'general', personas: ['lifestyle', 'creator'] },
+
+  // Icebreakers: how well do people actually know you. The first two use the
+  // choice format (creator marks a hidden true answer, participants guess,
+  // creator sees a tally) — everything else in the library stays free-text.
+  {
+    key: 'icebreaker-three-truths',
+    question: 'Which one of these is the lie?',
+    category: 'icebreakers',
+    personas: ['lifestyle', 'creator'],
+    responseFormat: 'choice',
+    options: ['', '', ''],
+    correctOptionIndex: 0,
+  },
+  {
+    key: 'icebreaker-never-have-i-ever',
+    question: 'Which of these have I actually never done?',
+    category: 'icebreakers',
+    personas: ['lifestyle', 'creator'],
+    responseFormat: 'choice',
+    options: ['', '', '', ''],
+    correctOptionIndex: 0,
+  },
+  { key: 'icebreaker-best-memory', question: 'What is the best memory you have of me?', category: 'icebreakers', personas: ['lifestyle', 'creator'] },
+  { key: 'icebreaker-worst-memory', question: 'What is the worst memory you have of me — the honest one?', category: 'icebreakers', personas: ['lifestyle', 'creator'] },
+  { key: 'icebreaker-love-more', question: 'What do you think I love more than I let on?', category: 'icebreakers', personas: ['lifestyle', 'creator'] },
+  { key: 'icebreaker-guess-fear', question: 'What do you think I am actually afraid of?', category: 'icebreakers', personas: ['lifestyle', 'creator'] },
+  { key: 'icebreaker-guess-first-impression', question: 'What was your honest first impression of me?', category: 'icebreakers', personas: ['lifestyle', 'creator'] },
+  { key: 'icebreaker-guess-changed', question: 'What do you think has changed about me that I have not noticed myself?', category: 'icebreakers', personas: ['lifestyle', 'creator'] },
 ]
 
 export const getLibraryPrompt = (key: string | null | undefined) =>

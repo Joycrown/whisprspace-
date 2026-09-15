@@ -9,7 +9,7 @@ async function resolvePromptOwner(request: NextRequest, promptId: string) {
 
   const { data: prompt, error } = await supabaseAdmin
     .from('prompts')
-    .select('id, creator_id, question, mode, category, library_key, response_count, expires_at, is_saved, export_count, created_at')
+    .select('id, creator_id, question, mode, category, library_key, response_count, expires_at, is_saved, export_count, response_format, options, correct_option_index, created_at')
     .eq('id', promptId)
     .is('deleted_at', null)
     .maybeSingle()
@@ -24,15 +24,15 @@ export async function GET(
 ) {
   const { id } = await context.params
   const promptId = sanitizeUuid(id)
-  if (!promptId) return NextResponse.json({ error: 'Invalid prompt ID.' }, { status: 400 })
+  if (!promptId) return NextResponse.json({ error: 'Invalid ask ID.' }, { status: 400 })
 
   const owner = await resolvePromptOwner(request, promptId)
-  if (!owner) return NextResponse.json({ error: 'Prompt not found.' }, { status: 404 })
+  if (!owner) return NextResponse.json({ error: 'Ask not found.' }, { status: 404 })
 
   const [{ data: responses, error: responseError }, { data: profile }] = await Promise.all([
     supabaseAdmin
       .from('prompt_responses')
-      .select('id, prompt_id, content, is_starred, starred_at, created_at')
+      .select('id, prompt_id, content, is_starred, starred_at, option_index, created_at')
       .eq('prompt_id', promptId)
       .eq('moderation_status', 'passed')
       .order('is_starred', { ascending: false })
@@ -57,13 +57,19 @@ export async function PATCH(
 ) {
   const { id } = await context.params
   const promptId = sanitizeUuid(id)
-  if (!promptId) return NextResponse.json({ error: 'Invalid prompt ID.' }, { status: 400 })
+  if (!promptId) return NextResponse.json({ error: 'Invalid ask ID.' }, { status: 400 })
 
   const owner = await resolvePromptOwner(request, promptId)
-  if (!owner) return NextResponse.json({ error: 'Prompt not found.' }, { status: 404 })
+  if (!owner) return NextResponse.json({ error: 'Ask not found.' }, { status: 404 })
 
   const body = await request.json().catch(() => null)
-  if (!body || typeof body !== 'object' || (body as Record<string, unknown>).saved !== true) {
+  const raw = (body as Record<string, unknown> | null) ?? {}
+
+  if (raw.correctOptionIndex !== undefined) {
+    return updateCorrectOption(owner, promptId, raw.correctOptionIndex)
+  }
+
+  if (raw.saved !== true) {
     return NextResponse.json({ error: 'Invalid save request.' }, { status: 400 })
   }
 
@@ -92,6 +98,43 @@ export async function PATCH(
   if (error || !data) {
     console.error('[Prompts] Failed to save prompt:', error?.message)
     return NextResponse.json({ error: 'Unable to save this ask.' }, { status: 500 })
+  }
+
+  return NextResponse.json({ prompt: data })
+}
+
+async function updateCorrectOption(
+  owner: NonNullable<Awaited<ReturnType<typeof resolvePromptOwner>>>,
+  promptId: string,
+  rawIndex: unknown
+) {
+  const { prompt } = owner
+
+  if (prompt.response_format !== 'choice' || !Array.isArray(prompt.options)) {
+    return NextResponse.json({ error: 'This ask has no options to mark.' }, { status: 400 })
+  }
+
+  if (new Date(prompt.expires_at).getTime() <= Date.now()) {
+    return NextResponse.json({ error: 'This ask has already closed.' }, { status: 409 })
+  }
+
+  const options = prompt.options as string[]
+  const correctOptionIndex = Number(rawIndex)
+  if (!Number.isInteger(correctOptionIndex) || correctOptionIndex < 0 || correctOptionIndex >= options.length) {
+    return NextResponse.json({ error: 'Choose one of the existing options.' }, { status: 400 })
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from('prompts')
+    .update({ correct_option_index: correctOptionIndex })
+    .eq('id', promptId)
+    .eq('creator_id', owner.user.id)
+    .select('id, correct_option_index')
+    .single()
+
+  if (error || !data) {
+    console.error('[Prompts] Failed to update correct option:', error?.message)
+    return NextResponse.json({ error: 'Unable to update the true answer.' }, { status: 500 })
   }
 
   return NextResponse.json({ prompt: data })
