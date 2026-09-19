@@ -10,7 +10,7 @@ const WEB_DOMAIN = 'app.whisprspace.com'
 const SOCIAL_ICONS = [FaInstagram, FaTiktok, FaXTwitter, FaFacebook, FaThreads]
 
 export type ExportSlide =
-  | { kind: 'cover' }
+  | { kind: 'cover'; options?: string[] }
   | ReplySlide
   | { kind: 'results'; entries: IcebreakerTallyEntry[]; headline: string }
   | { kind: 'cta'; url: string; cta: string }
@@ -33,7 +33,9 @@ const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
   ({ slide, ratio, question, responseCount, sourceKind }, ref) => {
     const { width, height } = dimensions[ratio]
     const isStory = ratio === 'story'
-    const questionFontSize = question.length > 100 ? 46 : isStory ? 66 : 58
+    const coverOptions = slide.kind === 'cover' ? slide.options : undefined
+    const hasCoverOptions = Boolean(coverOptions?.length)
+    const questionFontSize = hasCoverOptions ? (isStory ? 46 : 40) : question.length > 100 ? 46 : isStory ? 66 : 58
     const isPrompt = sourceKind === 'prompt'
 
     return (
@@ -49,7 +51,19 @@ const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
           <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1 }}>
             <div style={{ color: '#F97316', fontSize: 20, letterSpacing: '0.14em', fontWeight: 700, textTransform: 'uppercase', marginBottom: 25 }}>{isPrompt ? 'The question' : 'The discussion'}</div>
             <div style={{ fontSize: questionFontSize, lineHeight: 1.1, fontWeight: 800, letterSpacing: '-1.8px' }}>{question}</div>
-            <div style={{ marginTop: 48, display: 'inline-flex', alignSelf: 'flex-start', alignItems: 'center', gap: 14, borderRadius: 999, padding: '16px 28px', background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)' }}>
+
+            {hasCoverOptions && (
+              <div style={{ marginTop: isStory ? 40 : 32, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {coverOptions!.map((option, index) => (
+                  <div key={index} style={{ display: 'flex', alignItems: 'center', gap: 16, borderRadius: 18, padding: isStory ? '20px 26px' : '18px 24px', background: 'rgba(255,255,255,0.035)', border: '1px solid #29283A' }}>
+                    <span style={{ color: '#8B5CF6', fontSize: isStory ? 24 : 21, fontWeight: 800 }}>{String.fromCharCode(65 + index)}</span>
+                    <span style={{ color: '#ECECF1', fontSize: isStory ? 27 : 23, fontWeight: 600 }}>{option}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ marginTop: hasCoverOptions ? 36 : 48, display: 'inline-flex', alignSelf: 'flex-start', alignItems: 'center', gap: 14, borderRadius: 999, padding: '16px 28px', background: 'rgba(139,92,246,0.12)', border: '1px solid rgba(139,92,246,0.3)' }}>
               {isPrompt ? (
                 <span style={{ color: '#C4B5FD', fontSize: isStory ? 24 : 21, fontWeight: 700 }}>Let&apos;s find out what people think 😁</span>
               ) : (

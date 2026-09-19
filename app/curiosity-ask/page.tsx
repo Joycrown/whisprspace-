@@ -8,11 +8,24 @@ import { useUserStore } from '@/store/userStore'
 import { promptApi } from '@/lib/prompts/api-client'
 import type { Prompt } from '@/lib/prompts/types'
 
+const PURGE_GRACE_DAYS = 3
+
 const getStatus = (prompt: Prompt) => {
   const remaining = new Date(prompt.expires_at).getTime() - Date.now()
-  if (remaining <= 0) return prompt.is_saved ? 'Closed · Saved' : 'Closed'
-  const hours = Math.ceil(remaining / (60 * 60 * 1000))
-  return `Closes in ${hours}h`
+  if (remaining > 0) {
+    const hours = Math.ceil(remaining / (60 * 60 * 1000))
+    return `Closes in ${hours}h`
+  }
+
+  if (prompt.is_saved) return 'Closed · Saved'
+
+  const purgeAt = new Date(prompt.expires_at).getTime() + PURGE_GRACE_DAYS * 24 * 60 * 60 * 1000
+  const untilPurge = purgeAt - Date.now()
+  if (untilPurge <= 0) return 'Closed'
+
+  const purgeHours = Math.ceil(untilPurge / (60 * 60 * 1000))
+  const purgeLabel = purgeHours >= 24 ? `${Math.ceil(purgeHours / 24)}d` : `${purgeHours}h`
+  return `Closed · Clears in ${purgeLabel}`
 }
 
 export default function CuriosityAskPage() {
@@ -52,10 +65,10 @@ export default function CuriosityAskPage() {
   return (
     <div className="min-h-screen bg-[#0A0A10] px-4 py-8 text-[#F2F2F6] md:py-12">
       <div className="mx-auto max-w-2xl">
-        <div className="mb-8 flex items-start justify-between gap-4">
-          <div>
+        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-[#FCA46A]" />
+              <Sparkles className="h-5 w-5 shrink-0 text-[#FCA46A]" />
               <h1 className="text-2xl font-semibold tracking-tight">Curiosity Ask</h1>
             </div>
             <p className="mt-2 text-sm text-[#8F8FA3]">Ask one good question. Curate the answers. Share the story.</p>
@@ -83,11 +96,11 @@ export default function CuriosityAskPage() {
               <Link
                 key={prompt.id}
                 href={`/curiosity-ask/${prompt.id}/manage`}
-                className="group flex items-center justify-between gap-4 rounded-xl border border-[#3B354E] bg-[#111019]/70 p-4 transition-colors hover:border-purple-500/60"
+                className="group flex min-w-0 items-center justify-between gap-4 rounded-xl border border-[#3B354E] bg-[#111019]/70 p-4 transition-colors hover:border-purple-500/60"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-[#F2F2F6]">{prompt.question}</p>
-                  <p className="mt-1 text-xs text-[#8F8FA3]">{prompt.response_count} answers · {getStatus(prompt)}</p>
+                  <p className="mt-1 truncate text-xs text-[#8F8FA3]">{prompt.response_count} answers · {getStatus(prompt)}</p>
                 </div>
                 <ArrowUpRight className="h-4 w-4 shrink-0 text-[#8F8FA3] transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
               </Link>
