@@ -3,7 +3,7 @@ import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { resolveUserFromRequest } from '@/lib/security/request-auth'
 import { sanitizeUuid } from '@/lib/security/input-sanitization'
 
-const EXPORT_LIMIT = { premium: 2, free: 1 } as const
+const FREE_EXPORT_LIMIT = 1
 
 // One export used per "Download carousel" click — checked and incremented here
 // before the client generates images, so the limit holds even though rendering
@@ -34,15 +34,11 @@ export async function POST(
   }
 
   const isPremium = profile?.is_premium === true
-  const limit = isPremium ? EXPORT_LIMIT.premium : EXPORT_LIMIT.free
+  const limit = isPremium ? null : FREE_EXPORT_LIMIT
 
-  if (prompt.export_count >= limit) {
+  if (limit !== null && prompt.export_count >= limit) {
     return NextResponse.json(
-      {
-        error: isPremium
-          ? `You've used both exports for this ask.`
-          : `You've used your export for this ask. Upgrade to Premium for a second export.`,
-      },
+      { error: `You've used your export for this ask. Upgrade to Premium for unlimited exports.` },
       { status: 429 }
     )
   }
