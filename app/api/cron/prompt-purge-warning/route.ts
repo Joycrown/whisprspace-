@@ -56,6 +56,8 @@ export async function POST(request: NextRequest) {
 
     let processed = 0
 
+    let failed = 0
+
     for (const prompt of prompts) {
       try {
         const { data: creator } = await supabaseAdmin
@@ -64,11 +66,13 @@ export async function POST(request: NextRequest) {
           .eq('id', prompt.creator_id)
           .single()
 
+        let delivered = true
+
         if (creator?.email && BREVO_API_KEY) {
           const displayName = creator.username || creator.anonymous_id
           const manageUrl = `${APP_URL}${buildPromptPath({ id: prompt.id })}/manage`
 
-          await fetch('https://api.brevo.com/v3/smtp/email', {
+          const emailResponse = await fetch('https://api.brevo.com/v3/smtp/email', {
             method: 'POST',
             headers: {
               'api-key': BREVO_API_KEY,
@@ -84,11 +88,24 @@ export async function POST(request: NextRequest) {
               htmlContent: buildPurgeWarningEmail(displayName, prompt.question, manageUrl),
             }),
           })
+
+          if (!emailResponse.ok) {
+            delivered = false
+            const body = await emailResponse.text().catch(() => '')
+            console.error(`[PromptPurgeWarning] Brevo rejected ask ${prompt.id}: ${emailResponse.status} ${body}`)
+          }
+        } else if (!BREVO_API_KEY) {
+          console.error(`[PromptPurgeWarning] BREVO_TRANSACTIONAL_API_KEY not configured — skipping ask ${prompt.id}`)
+          delivered = false
+        }
+        // No email on file is not a failure — there's nowhere to send it, so
+        // mark it warned and move on rather than retrying forever.
+
+        if (!delivered) {
+          failed++
+          continue
         }
 
-        // Mark warned regardless of whether an email was sent (no email on
-        // file, or Brevo not configured) — this flag only gates re-sending,
-        // not the actual purge, so it's safe to set even without delivery.
         await supabaseAdmin
           .from('prompts')
           .update({ purge_warning_sent_at: new Date().toISOString() })
@@ -96,11 +113,12 @@ export async function POST(request: NextRequest) {
 
         processed++
       } catch (err) {
+        failed++
         console.error(`[PromptPurgeWarning] Failed for ask ${prompt.id}:`, err)
       }
     }
 
-    return NextResponse.json({ processed })
+    return NextResponse.json({ processed, failed })
   } catch (err) {
     console.error('[PromptPurgeWarning] Unexpected error:', err)
     return NextResponse.json({ error: 'Internal error' }, { status: 500 })

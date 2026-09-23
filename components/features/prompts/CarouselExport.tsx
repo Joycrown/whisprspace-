@@ -78,6 +78,13 @@ export default function CarouselExport({ source }: CarouselExportProps) {
         link.href = dataUrl
         link.download = `whisprspace-${source.kind}-${source.id}-slide-${index + 1}.png`
         link.click()
+        // Browsers silently drop downloads fired back-to-back from a script
+        // (no error, no event) once more than a handful queue up in the same
+        // tick — spacing them out keeps every slide's download from being
+        // dropped once a carousel has several highlighted responses.
+        if (index < slides.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 350))
+        }
       }
       try { posthog.capture(`${source.kind}_export_generated`, { [`${source.kind}_id`]: source.id, ratio, slides: slides.length, tier: source.isPremium ? 'premium' : 'free' }) } catch { /* analytics is optional */ }
     } catch (cause) {
