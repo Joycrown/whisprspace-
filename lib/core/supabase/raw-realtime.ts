@@ -181,7 +181,7 @@ class RealtimeSocket {
   }
 
   async connect(): Promise<void> {
-    console.log('[RawRealtime][DEBUG] connect() called. ws readyState:', this.ws?.readyState, 'connectPromise exists:', Boolean(this.connectPromise));
+    console.log('[RawRealtime][DEBUG] connect() called. ws readyState:', this.ws?.readyState, 'ws url:', this.ws?.url?.split('?')[0], 'connectPromise exists:', Boolean(this.connectPromise));
     if (this.ws?.readyState === WebSocket.OPEN) {
       console.log('[RawRealtime][DEBUG] connect() early-return: already OPEN');
       return;
@@ -297,10 +297,13 @@ class RealtimeSocket {
   send(message: any) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
+    } else {
+      console.warn('[RawRealtime][DEBUG] send() dropped message, socket not OPEN. readyState:', this.ws?.readyState, 'message:', JSON.stringify(message));
     }
   }
 
   private dispatch(msg: any) {
+    console.log('[RawRealtime][DEBUG] dispatch received:', JSON.stringify(msg));
     // Handle joins
     if (msg.event === 'phx_reply') {
       const ref = Number(msg.ref);
@@ -424,6 +427,8 @@ class RealtimeSocket {
           ? [{ ...binding, event: 'INSERT' as const }, { ...binding, event: 'UPDATE' as const }]
           : [binding]
       );
+
+      console.log('[RawRealtime][DEBUG] Sending phx_join. topic:', channel.topic, 'ref:', ref, 'hasAccessToken:', Boolean(accessToken), 'ws readyState:', this.ws?.readyState, 'postgres_changes:', JSON.stringify(postgresChanges));
 
       this.send({
         topic: channel.topic,
