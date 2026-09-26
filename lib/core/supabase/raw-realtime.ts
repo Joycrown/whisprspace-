@@ -115,6 +115,7 @@ class RealtimeSocket {
 
     import('./raw-auth').then(({ onAuthStateChange }) => {
       onAuthStateChange((event, session) => {
+        console.log('[RawRealtime][DEBUG] auth event received:', event, 'hasSession:', Boolean(session), 'channels.size:', this.channels.size);
         if (event === 'TOKEN_REFRESHED' && session?.access_token) {
           if (this.ws?.readyState === WebSocket.OPEN) {
             this.updateAccessToken(session.access_token);
@@ -122,8 +123,10 @@ class RealtimeSocket {
           }
         }
 
+        console.log('[RawRealtime][DEBUG] auth event triggering disconnect()');
         this.disconnect();
         if (this.channels.size > 0) {
+          console.log('[RawRealtime][DEBUG] auth event triggering reconnect (channels exist)');
           this.shouldRejoinOnConnect = true;
           this.connect().catch(() => {});
         }
@@ -178,12 +181,21 @@ class RealtimeSocket {
   }
 
   async connect(): Promise<void> {
-    if (this.ws?.readyState === WebSocket.OPEN) return;
-    if (this.connectPromise) return this.connectPromise;
+    console.log('[RawRealtime][DEBUG] connect() called. ws readyState:', this.ws?.readyState, 'connectPromise exists:', Boolean(this.connectPromise));
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log('[RawRealtime][DEBUG] connect() early-return: already OPEN');
+      return;
+    }
+    if (this.connectPromise) {
+      console.log('[RawRealtime][DEBUG] connect() early-return: reusing existing connectPromise');
+      return this.connectPromise;
+    }
 
     this.isConnecting = true;
     this.connectPromise = (async () => {
+      console.log('[RawRealtime][DEBUG] Resolving getUrl()...');
       const finalUrl = await this.getUrl();
+      console.log('[RawRealtime][DEBUG] getUrl() resolved. Creating WebSocket to:', finalUrl.replace(/access_token=[^&]+/, 'access_token=REDACTED').replace(/apikey=[^&]+/, 'apikey=REDACTED'));
 
       return new Promise<void>((resolve, reject) => {
       try {
@@ -197,9 +209,12 @@ class RealtimeSocket {
           fn(value);
         };
 
+        console.log('[RawRealtime][DEBUG] Calling new WebSocket() now...');
         this.ws = new WebSocket(finalUrl);
+        console.log('[RawRealtime][DEBUG] WebSocket object created, readyState:', this.ws.readyState);
 
         this.ws.onopen = () => {
+          console.log('[RawRealtime][DEBUG] WebSocket onopen fired');
           this.reconnectAttempts = 0;
           this.startHeartbeat();
           settle(resolve);
@@ -221,11 +236,12 @@ class RealtimeSocket {
         };
 
         this.ws.onerror = (error) => {
-          console.error('[RawRealtime] Shared WebSocket error:', error);
+          console.error('[RawRealtime][DEBUG] WebSocket onerror fired:', error);
           settle(reject, error);
         };
 
-        this.ws.onclose = () => {
+        this.ws.onclose = (closeEvent) => {
+          console.log('[RawRealtime][DEBUG] WebSocket onclose fired. code:', closeEvent.code, 'reason:', closeEvent.reason, 'wasClean:', closeEvent.wasClean, 'settled:', settled);
           this.stopHeartbeat();
           if (!settled) {
             settle(reject, new Error('Realtime socket closed before connection was established'));
@@ -233,6 +249,7 @@ class RealtimeSocket {
           this.scheduleReconnect();
         };
       } catch (error) {
+        console.error('[RawRealtime][DEBUG] Synchronous exception constructing WebSocket:', error);
         this.isConnecting = false;
         this.connectPromise = null;
         reject(error);
