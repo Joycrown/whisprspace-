@@ -47,10 +47,10 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     shortcuts: [
       {
-        name: 'Threads',
-        short_name: 'Threads',
+        name: 'Discussions',
+        short_name: 'Discussions',
         description: 'Open the latest discussions',
-        url: '/threads',
+        url: '/discussions',
         icons: [{ src: `/icons/icon-192x192.png?v=${iconVersion}`, sizes: '192x192' }],
       },
       {

@@ -56,7 +56,7 @@ export function buildThreadRef(source: ThreadUrlSource): string {
 
 export function buildThreadPath(source: ThreadUrlSource): string {
   const threadRef = buildThreadRef(source)
-  return `/threads/${threadRef || source.id}`
+  return `/discussions/${threadRef || source.id}`
 }
 
 export function buildThreadManagePath(source: ThreadUrlSource): string {

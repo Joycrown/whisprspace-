@@ -12,9 +12,10 @@ import UserDetailsModal from './UserDetailsModal'
 import PayoutRequestsTable from './PayoutRequestsTable'
 import SeedDashboard from './SeedDashboard'
 import SeedAccountsDashboard from './SeedAccountsDashboard'
-import { BarChart3, Users, Flag, Shield, Lock, Banknote, DatabaseZap, UserCheck } from 'lucide-react'
+import StoriesModeration from './StoriesModeration'
+import { BarChart3, Users, Flag, Shield, Lock, Banknote, DatabaseZap, UserCheck, BookOpen } from 'lucide-react'
 
-type TabType = 'analytics' | 'users' | 'reports' | 'moderation' | 'payouts' | 'seeding' | 'seed-accounts'
+type TabType = 'analytics' | 'users' | 'reports' | 'stories' | 'moderation' | 'payouts' | 'seeding' | 'seed-accounts'
 
 export default function AdminDashboard() {
   const { isAdmin, role, isLoading } = useIsAdmin()
@@ -50,6 +51,7 @@ export default function AdminDashboard() {
     { id: 'analytics' as TabType, label: 'Analytics', icon: BarChart3 },
     { id: 'users' as TabType, label: 'Users', icon: Users },
     { id: 'reports' as TabType, label: 'Reports', icon: Flag },
+    { id: 'stories' as TabType, label: 'Stories', icon: BookOpen },
     { id: 'payouts' as TabType, label: 'Payouts', icon: Banknote },
     { id: 'moderation' as TabType, label: 'Moderation', icon: Shield },
     { id: 'seeding' as TabType, label: 'Seeding', icon: DatabaseZap },
@@ -107,6 +109,8 @@ export default function AdminDashboard() {
       {/* Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
         {activeTab === 'analytics' && <AnalyticsDashboard />}
+
+        {activeTab === 'stories' && <StoriesModeration />}
         
         {activeTab === 'users' && (
           <UsersTable

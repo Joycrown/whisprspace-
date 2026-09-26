@@ -54,7 +54,7 @@ const GUIDE_STEPS: GuideStep[] = [
       { text: 'Manage your settings in Profile.', icon: User },
     ],
     ctaLabel: 'Explore Discussions',
-    ctaHref: '/threads',
+    ctaHref: '/discussions',
   },
   {
     id: 'create',
@@ -68,7 +68,7 @@ const GUIDE_STEPS: GuideStep[] = [
       { text: 'Monetize with Premium access.', icon: Crown },
     ],
     ctaLabel: 'Create Discussion',
-    ctaHref: '/threads/create',
+    ctaHref: '/discussions/create',
   },
   {
     id: 'engage',
@@ -82,7 +82,7 @@ const GUIDE_STEPS: GuideStep[] = [
       { text: 'Powerful moderation tools.', icon: Settings2 },
     ],
     ctaLabel: 'Manage Discussions',
-    ctaHref: '/my-threads',
+    ctaHref: '/my-discussions',
   },
 ]
 

@@ -41,6 +41,7 @@ import PremiumPaymentForm from '@/components/features/premium/PremiumPaymentForm
 import SignupPromptModal from '@/components/auth/SignupPromptModal';
 import { getUserPollStats } from '@/lib/threads/thread-service';
 import { buildThreadPath } from '@/lib/threads/thread-url';
+import { POST_THREAD_NUDGE_EVENT, type PostThreadNudgeDetail } from '@/components/features/inbox/PostThreadNudge';
 
 interface ThreadComposerProps {
   isOpen: boolean;
@@ -279,9 +280,9 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
           memberLimit: undefined,
         });
 
-        // Signal MainLayout's PostThreadNudge to appear — fires before the router push
-        // so both components are still mounted and can receive the event.
-        window.dispatchEvent(new CustomEvent('whisprspace:inbox-nudge'))
+        window.dispatchEvent(new CustomEvent<PostThreadNudgeDetail>(POST_THREAD_NUDGE_EVENT, {
+          detail: { threadId, title: formData.title, privacy: formData.privacy },
+        }))
 
         // Navigate to the new thread or threads list
         setTimeout(() => {

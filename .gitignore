@@ -52,3 +52,8 @@ next-env.d.ts
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# volunteer applicant data / onboarding email tooling (contains PII, not for source control)
+/Job Application*.csv
+/scripts/send-onboarding-emails.js
+/scripts/_preview/

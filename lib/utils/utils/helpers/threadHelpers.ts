@@ -1,5 +1,6 @@
 // utils/threadHelpers.ts
 import { Thread, ThreadData, User } from '../types';
+import { THREAD_EXPIRATION } from '@/lib/core/config/thread-config';
 
 export function formatTimestamp(timestamp: string): string {
   const date = new Date(timestamp);
@@ -68,14 +69,9 @@ export function isValidVoiceMessage(duration: number, isPremium: boolean): boole
 // PREMIUM THREAD FEATURES
 // ============================================
 
-/**
- * Calculate thread expiration date based on thread premium status
- * - Free threads: 48 hours (2 days)
- * - Premium threads: 7 days
- */
-export function calculateThreadExpiration(isThreadPremium: boolean, createdAt?: string): string {
+export function calculateThreadExpiration(_isThreadPremium: boolean, createdAt?: string): string {
   const baseDate = createdAt ? new Date(createdAt) : new Date();
-  const expirationHours = isThreadPremium ? 7 * 24 : 48; // 7 days for premium, 48 hours for free
+  const expirationHours = THREAD_EXPIRATION.FREE_HOURS;
   const expirationDate = new Date(baseDate.getTime() + expirationHours * 60 * 60 * 1000);
   return expirationDate.toISOString();
 }

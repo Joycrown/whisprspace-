@@ -7,6 +7,9 @@ import { getValidAccessToken } from './raw-auth';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const HIDDEN_PAUSE_MS = 60_000;
+const IDLE_CLOSE_MS = 15_000;
+export const REALTIME_RESUMED_EVENT = 'whisprspace:realtime-resumed';
 
 interface PostgresChange {
   type: 'INSERT' | 'UPDATE' | 'DELETE';
@@ -53,9 +56,58 @@ class RealtimeSocket {
   private isConnecting: boolean = false;
   private connectPromise: Promise<void> | null = null;
   private shouldRejoinOnConnect: boolean = false;
+  private idleTimer: NodeJS.Timeout | null = null;
+  private hiddenTimer: NodeJS.Timeout | null = null;
+  private pausedWhileHidden: boolean = false;
 
   constructor() {
     this.setupAuthListener();
+    this.setupVisibilityListener();
+  }
+
+  private setupVisibilityListener() {
+    if (typeof document === 'undefined') return;
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        if (this.hiddenTimer) return;
+        this.hiddenTimer = setTimeout(() => {
+          this.hiddenTimer = null;
+          if (document.visibilityState !== 'hidden' || !this.ws) return;
+          this.pausedWhileHidden = true;
+          this.clearReconnectTimer();
+          this.disconnect();
+        }, HIDDEN_PAUSE_MS);
+        return;
+      }
+
+      if (this.hiddenTimer) {
+        clearTimeout(this.hiddenTimer);
+        this.hiddenTimer = null;
+      }
+      if (!this.pausedWhileHidden) return;
+      this.pausedWhileHidden = false;
+      if (this.channels.size === 0) return;
+      this.shouldRejoinOnConnect = true;
+      this.reconnectAttempts = 0;
+      this.connect()
+        .then(() => window.dispatchEvent(new Event(REALTIME_RESUMED_EVENT)))
+        .catch(() => this.scheduleReconnect());
+    });
+  }
+
+  private clearReconnectTimer() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private clearIdleTimer() {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
   }
 
   private setupAuthListener() {
@@ -197,6 +249,7 @@ class RealtimeSocket {
 
   private scheduleReconnect() {
     if (this.reconnectTimer) return;
+    if (this.pausedWhileHidden || this.channels.size === 0) return;
     if (this.reconnectAttempts >= this.maxReconnectAttempts) return;
 
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
@@ -260,6 +313,7 @@ class RealtimeSocket {
   }
 
   registerChannel(channel: RealtimeChannel) {
+    this.clearIdleTimer();
     this.clearChannelRejoin(channel.topic);
     this.channels.set(channel.topic, channel);
   }
@@ -267,6 +321,13 @@ class RealtimeSocket {
   unregisterChannel(topic: string) {
     this.clearChannelRejoin(topic);
     this.channels.delete(topic);
+    if (this.channels.size > 0 || this.idleTimer) return;
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = null;
+      if (this.channels.size > 0) return;
+      this.clearReconnectTimer();
+      this.disconnect();
+    }, IDLE_CLOSE_MS);
   }
 
   private clearChannelRejoin(topic: string) {
@@ -340,11 +401,23 @@ class RealtimeSocket {
         topic: channel.topic
       });
       
+      const channelConfig = channel.getConfig();
+      const postgresChanges = (channelConfig.postgres_changes || []).flatMap((binding) =>
+        binding.event === '*'
+          ? [{ ...binding, event: 'INSERT' as const }, { ...binding, event: 'UPDATE' as const }]
+          : [binding]
+      );
+
       this.send({
         topic: channel.topic,
         event: 'phx_join',
         payload: {
-          ...channel.getConfig(),
+          config: {
+            broadcast: { self: false, ack: false },
+            presence: { key: channelConfig.presence?.key ?? '' },
+            postgres_changes: postgresChanges,
+            private: false,
+          },
           access_token: accessToken
         },
         ref
@@ -373,7 +446,7 @@ class RealtimeChannel {
   private onBroadcastCb?: (payload: any) => void;
 
   constructor(options: ChannelOptions) {
-    this.topic = options.channelName;
+    this.topic = options.channelName.startsWith('realtime:') ? options.channelName : `realtime:${options.channelName}`;
     this.config = options.config || {};
     this.onPostgresChangeCb = options.onPostgresChange;
     this.onPresenceSyncCb = options.onPresenceSync;

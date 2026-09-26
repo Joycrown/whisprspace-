@@ -3,6 +3,7 @@
 import { Notification, getNotificationIcon, formatNotificationTime } from '@/lib/notifications'
 import { useRouter } from 'next/navigation'
 import { buildThreadPath } from '@/lib/threads/thread-url'
+import { buildStoryPath } from '@/lib/stories/story-url'
 
 interface NotificationItemProps {
   notification: Notification
@@ -36,7 +37,12 @@ export default function NotificationItem({
       undefined
     const groupId = typeof data.group_id === 'string' ? data.group_id : null
 
-    if (threadId) {
+    const storyId = typeof data.story_id === 'string' ? data.story_id : null
+
+    if (storyId) {
+      const storyPath = buildStoryPath({ id: storyId, title: typeof data.story_title === 'string' ? data.story_title : null })
+      router.push(typeof data.message_id === 'string' ? `${storyPath}#comments` : storyPath)
+    } else if (threadId) {
       router.push(buildThreadPath({ id: threadId, title: threadTitle }))
     } else if (conversationId) {
       router.push(`/inbox?conversationId=${encodeURIComponent(conversationId)}`)

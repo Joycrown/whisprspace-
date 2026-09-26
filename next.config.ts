@@ -14,8 +14,12 @@ const withPWA = withPWAFactory({
 });
 
 const isAppDeployment = process.env.DEPLOYMENT_TARGET?.trim().toLowerCase() === "app";
+const storiesFrontDoor = process.env.NEXT_PUBLIC_STORIES_FRONT_DOOR?.trim().toLowerCase() !== "off";
 
 const nextConfig: NextConfig = {
+  env: {
+    NEXT_PUBLIC_DEPLOYMENT_TARGET: isAppDeployment ? "app" : "site",
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -23,11 +27,18 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   async redirects() {
-    if (!isAppDeployment) {
-      return [];
+    const discussionRedirects = [
+      { source: '/threads', destination: '/discussions', permanent: true },
+      { source: '/threads/:path*', destination: '/discussions/:path*', permanent: true },
+      { source: '/my-threads', destination: '/my-discussions', permanent: true },
+    ];
+
+    if (!isAppDeployment || storiesFrontDoor) {
+      return discussionRedirects;
     }
 
     return [
+      ...discussionRedirects,
       {
         source: '/',
         destination: '/auth',
@@ -48,7 +59,7 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: '/api/:path*',
+        source: '/api/:path((?!public/).*)',
         headers: [
           { key: 'Cache-Control', value: 'no-store, max-age=0' },
         ],

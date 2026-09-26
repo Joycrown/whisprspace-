@@ -16,6 +16,7 @@ import {
 import { generatePseudonym } from '@/lib/utils/pseudonym-generator';
 import { checkUsernameAvailability, updateUsername } from '@/lib/services/username-service';
 import { validateUsername } from '@/lib/utils/username-validation';
+import { STORIES_FEED_PATH } from '@/lib/stories/config';
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
@@ -87,7 +88,7 @@ const AuthPage = () => {
 
   const redirectTo = (() => {
     const raw = searchParams?.get('redirect');
-    if (!raw || !raw.startsWith('/')) return '/threads';
+    if (!raw || !raw.startsWith('/')) return STORIES_FEED_PATH;
     return raw;
   })();
   const forceAuth = searchParams?.get('force') === '1';
@@ -114,12 +115,12 @@ const AuthPage = () => {
   }, [redirectTo, forceAuth]);
 
   useEffect(() => {
-    if (forceAuth) return;
+    if (forceAuth && reasonParam !== 'story') return;
     if ((session.isAuthenticated || sessionInfo) && view === 'welcome') {
       const timer = setTimeout(() => { router.push(redirectTo); }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [session.isAuthenticated, sessionInfo?.anonymousId, view, router, redirectTo, forceAuth]);
+  }, [session.isAuthenticated, sessionInfo?.anonymousId, view, router, redirectTo, forceAuth, reasonParam]);
 
   const handleAnonymousJoin = async () => {
     clearError();
@@ -175,14 +176,15 @@ const AuthPage = () => {
 
   const hasRedirected = useRef(false);
   useEffect(() => {
-    if (forceAuth) return;
+    const storyAuthComplete = reasonParam === 'story' && session.isAuthenticated && !session.user?.isAnonymous;
+    if (forceAuth && !storyAuthComplete) return;
     if (!sessionValidated) return;
     if (hasRedirected.current) return;
     if (sessionInfo !== null || session.isAuthenticated) {
       hasRedirected.current = true;
       window.location.replace(redirectTo);
     }
-  }, [sessionValidated, sessionInfo?.anonymousId, session.isAuthenticated, redirectTo, forceAuth]);
+  }, [sessionValidated, sessionInfo?.anonymousId, session.isAuthenticated, session.user?.isAnonymous, redirectTo, forceAuth, reasonParam]);
 
   useEffect(() => {
     if (error) {

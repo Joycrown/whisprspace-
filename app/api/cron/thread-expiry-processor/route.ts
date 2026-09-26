@@ -42,7 +42,9 @@ export async function POST(request: NextRequest) {
       .is('deleted_at', null)
       .or('is_saved.is.null,is_saved.eq.false')
       .lte('expires_at', now.toISOString())
-      .not('expires_at', 'is', null)
+      .gte('expires_at', new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString())
+      .order('expires_at', { ascending: true })
+      .limit(50)
 
     if (error) {
       console.error('[ExpiryProcessor] DB error fetching expired threads:', error)
@@ -179,7 +181,7 @@ function humanizeImpact(
 ) {
   const voices =
     participants === 0
-      ? "Your thread waited in silence. That's still honest."
+      ? "Your discussion waited in silence. That's still honest."
       : participants === 1
         ? 'One person found their voice in your discussion.'
         : participants < 5
@@ -193,7 +195,7 @@ function humanizeImpact(
         ? 'One perspective was shared.'
         : perspectives < 10
           ? `${perspectives} different perspectives collided here.`
-          : `${perspectives} perspectives. That's a real conversation.`
+          : `${perspectives} perspectives. That's a real discussion.`
 
   const resonance =
     reactions === 0
@@ -231,7 +233,7 @@ async function sendSummaryEmail(
       <p style="font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #999; margin-bottom: 40px; font-family: monospace;">WhisprSpace</p>
 
       <p style="font-size: 20px; font-weight: 400; line-height: 1.6; margin-bottom: 8px; color: #555;">
-        @${displayName}, your thread just closed.
+        @${displayName}, your discussion just closed.
       </p>
       <p style="font-size: 28px; font-weight: 400; line-height: 1.4; margin-bottom: 40px; color: #1a1a1a;">
         Here's its story.
@@ -248,7 +250,7 @@ async function sendSummaryEmail(
       </div>
 
       <p style="font-size: 14px; color: #888; line-height: 1.8; margin-bottom: 40px;">
-        This conversation lived for ${humanized.duration}.<br/>
+        This discussion lived for ${humanized.duration}.<br/>
         Then it closed — the way honest things should.
       </p>
 
@@ -261,7 +263,7 @@ async function sendSummaryEmail(
       <div style="margin-bottom: 40px;">
         <a href="${APP_URL}/threads/create"
            style="display: inline-block; padding: 14px 28px; border: 1px solid #ccc; color: #444; text-decoration: none; font-size: 14px; letter-spacing: 0.05em;">
-          Start a New Thread
+          Start a New Discussion
         </a>
       </div>
 
@@ -281,7 +283,7 @@ async function sendSummaryEmail(
         email: process.env.EMAIL_SENDER || 'admin@whisprspace.com',
       },
       to: [{ email: creator.email }],
-      subject: "Your thread just closed. Here's its story.",
+      subject: "Your discussion just closed. Here's its story.",
       htmlContent: html,
     }),
   })

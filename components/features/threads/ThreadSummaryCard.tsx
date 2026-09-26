@@ -25,7 +25,7 @@ function humanizeImpact(summary: ThreadSummary) {
   const { participant_count: p, perspective_count: persp, reaction_count: r, duration_hours: h } = summary
 
   const voices =
-    p === 0 ? "Your thread waited in silence. That's still honest."
+    p === 0 ? "Your discussion waited in silence. That's still honest."
     : p === 1 ? 'One person found their voice in your discussion.'
     : p < 5 ? `${p} people found their voice here.`
     : `${p} people showed up for your discussion.`
@@ -34,7 +34,7 @@ function humanizeImpact(summary: ThreadSummary) {
     persp === 0 ? null
     : persp === 1 ? 'One perspective was shared.'
     : persp < 10 ? `${persp} different perspectives collided here.`
-    : `${persp} perspectives. That's a real conversation.`
+    : `${persp} perspectives. That's a real discussion.`
 
   const resonance =
     r === 0 ? "Some things don't need a reaction — they just need to be said."
@@ -267,7 +267,7 @@ export function ThreadSummaryCard({ summary }: Props) {
         )}
 
         <Link
-          href="/threads/create"
+          href="/discussions/create"
           onClick={() => {
             try {
               posthog.capture('thread_created_from_summary', { previous_summary_id: summary.id })
@@ -276,7 +276,7 @@ export function ThreadSummaryCard({ summary }: Props) {
           className="flex items-center gap-1.5 text-gray-600 text-sm hover:text-white transition-colors duration-200"
         >
           <Sparkles className="w-3 h-3" />
-          Start a new thread
+          Start a new discussion
           <ArrowRight className="w-3 h-3" />
         </Link>
       </motion.div>

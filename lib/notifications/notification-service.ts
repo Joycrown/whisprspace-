@@ -18,6 +18,8 @@ export type NotificationType =
   | 'poll_ending_soon'
   | 'thread_expiring_soon'
   | 'prompt_response'
+  | 'story_episode'
+  | 'story_reply'
 
 export type NotificationCategory = 'all' | 'interactions' | 'system' | 'social'
 
@@ -77,45 +79,25 @@ export const fetchNotifications = async (
       queryFilters['is_read'] = rawDb.filter.eq(filters.isRead);
     }
 
-    const { data: notificationsData, error: fetchError } = await rawDb.select<any[]>('notifications', {
-      filters: queryFilters,
-      order: { column: 'created_at', ascending: false },
-      limit: filters?.limit,
-      offset: filters?.offset
-    });
+    const [{ data: notificationsData, error: fetchError }, unread] = await Promise.all([
+      rawDb.select<any[]>('notifications', {
+        select: 'id,user_id,type,category,title,message,data,is_read,created_at',
+        filters: queryFilters,
+        order: { column: 'created_at', ascending: false },
+        limit: filters?.limit ?? 50,
+        offset: filters?.offset
+      }),
+      rawDb.count('notifications', {
+        'user_id': rawDb.filter.eq(user.id),
+        'is_read': rawDb.filter.eq(false)
+      }),
+    ]);
 
     if (fetchError) {
       throw fetchError;
     }
 
-    // Get unread count
-    const { count: unreadCount } = await rawDb.select<any[]>('notifications', {
-        select: 'id', // Just select ID to minimize data
-        filters: {
-            'user_id': rawDb.filter.eq(user.id),
-            'is_read': rawDb.filter.eq(false)
-        },
-        // TODO: rawDb needs a count generic options? 
-        // For now, selecting all IDs and counting locally is okay for small scale, 
-        // but rawDb should support COUNT. 
-        // Standard select returns DbResponse with count property if requested?
-        // rawDb implementation returns DbResponse { count?: number }.
-        // But select function implementation doesn't seem to set count unless header applied?
-        // rawDb 'select' sets 'Prefer: return=representation'.
-        // To get count, we need 'Prefer: count=exact'.
-        // raw-db.ts doesn't expose this yet.
-        // We will just fetching IDs and counting length for now.
-    });
-    // Actually, rawDb.select returns data array.
-    // If we select('id'), data is array of objects {id: ...}.
-    // unreadCount is data.length.
-    const actualUnreadCount = unreadCount ? 0 : (await rawDb.select<any[]>('notifications', {
-        select: 'id',
-        filters: {
-            'user_id': rawDb.filter.eq(user.id),
-            'is_read': rawDb.filter.eq(false)
-        }
-    })).data?.length || 0;
+    const actualUnreadCount = unread.count;
 
     // Transform data to Notification type (camelCase)
     const notifications: Notification[] = (notificationsData || []).map((n: any) => ({
@@ -149,19 +131,16 @@ export const getUnreadCount = async (): Promise<{ count: number; error: string |
       return { count: 0, error: 'User not authenticated' }
     }
 
-    const { data: unreadData, error } = await rawDb.select<any[]>('notifications', {
-        select: 'id',
-        filters: {
-            'user_id': rawDb.filter.eq(user.id),
-            'is_read': rawDb.filter.eq(false)
-        }
+    const { count, error } = await rawDb.count('notifications', {
+      'user_id': rawDb.filter.eq(user.id),
+      'is_read': rawDb.filter.eq(false)
     });
 
     if (error) {
       throw error
     }
 
-    return { count: unreadData?.length || 0, error: null }
+    return { count, error: null }
   } catch (error: any) {
     console.error('Get unread count error:', error)
     return { count: 0, error: error.message || 'Failed to get unread count' }
@@ -384,7 +363,7 @@ export const subscribeToNotifications = (
   callback: (notification: Notification) => void
 ) => {
   const channel = rawRealtime.createChannel({
-      channelName: `notifications:${userId}`,
+      channelName: `notifications:${userId}:${Math.random().toString(36).slice(2, 10)}`,
       config: {
           postgres_changes: [{
               event: 'INSERT',
@@ -449,6 +428,10 @@ export const getNotificationIcon = (type: NotificationType): string => {
       return '\u{231B}'
     case 'prompt_response':
       return '\u{2728}'
+    case 'story_episode':
+      return '\u{1F4D6}'
+    case 'story_reply':
+      return '\u{1F4AC}'
     default:
       return '\u{1F514}'
   }
@@ -479,6 +462,10 @@ export const getNotificationColor = (type: NotificationType): string => {
       return 'text-orange-500'
     case 'prompt_response':
       return 'text-purple-500'
+    case 'story_episode':
+      return 'text-orange-500'
+    case 'story_reply':
+      return 'text-blue-500'
     default:
       return 'text-gray-500'
   }

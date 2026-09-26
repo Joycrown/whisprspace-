@@ -148,7 +148,7 @@ export default function ManagePromptPage() {
       },
     }
     localStorage.setItem(PROMPT_THREAD_DRAFT_KEY, JSON.stringify(draft))
-    router.push('/threads/create?from=prompt')
+    router.push('/discussions/create?from=prompt')
   }
 
   if (loading) return <div className="min-h-screen bg-[#0A0A10] text-center text-[#8F8FA3]"><Loader2 className="mx-auto mt-28 h-6 w-6 animate-spin" /></div>
