@@ -112,7 +112,7 @@ export default async function StoryPage({ params }: PageProps) {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema).replace(/</g, '\\u003c') }} />
       <div className="mx-auto w-full max-w-2xl md:border-x md:border-[#1C1C26] lg:flex lg:min-h-0 lg:max-w-6xl lg:flex-1 lg:flex-col">
         <StoriesTopBar />
-        <StoryViewerProvider storyId={story.id} initialReactionCounts={story.reaction_counts}>
+        <StoryViewerProvider storyId={story.id} initialReactionCounts={story.reaction_counts} replyCount={story.reply_count}>
           <div className="lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
           <div className="px-4 pb-28 pt-5 md:px-5 scrollbar-hide lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:px-8 lg:pb-12">
             <Link href={STORIES_FEED_PATH} prefetch={false} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]">
@@ -157,6 +157,7 @@ export default async function StoryPage({ params }: PageProps) {
           </div>
           <StoryComments
             storyId={story.id}
+            threadId={story.thread_id}
             replyCount={story.reply_count}
             isEpisodic={story.is_episodic}
             episodes={story.episodes.map(({ number, published_at }) => ({ number, published_at }))}

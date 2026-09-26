@@ -15,6 +15,8 @@ import {
   type StorySort,
 } from '@/lib/stories/types'
 import StoryCard from './StoryCard'
+import { useUserStore } from '@/store/userStore'
+import { useStoriesFeedRealtime } from '@/lib/core/realtime/hooks/useStoriesFeedRealtime'
 
 interface FeedState {
   items: StoryFeedItem[]
@@ -50,6 +52,58 @@ export default function StoryFeed({ initial }: { initial: StoryFeedPage }) {
   const sentinelRef = useRef<HTMLDivElement | null>(null)
   const requestRef = useRef(0)
   const activeKey = keyOf(family, category, sort)
+
+  const session = useUserStore((state) => state.session)
+  const sessionValidated = useUserStore((state) => state.sessionValidated)
+  const isRegistered = Boolean(sessionValidated && session.isAuthenticated && session.user && !session.user.isAnonymous)
+
+  const familyRef = useRef(family)
+  familyRef.current = family
+  const categoryRef = useRef(category)
+  categoryRef.current = category
+  const sortRef = useRef(sort)
+  sortRef.current = sort
+  const activeKeyRef = useRef(activeKey)
+  activeKeyRef.current = activeKey
+
+  const patchCachedStory = useCallback((storyId: string, patch: Partial<StoryFeedItem>) => {
+    cache.current.forEach((entry, key) => {
+      if (!entry.items.some((item) => item.id === storyId)) return
+      cache.current.set(key, { ...entry, items: entry.items.map((item) => (item.id === storyId ? { ...item, ...patch } : item)) })
+    })
+  }, [])
+
+  useStoriesFeedRealtime({
+    enabled: isRegistered,
+    onNewStory: (story: StoryFeedItem) => {
+      if (sortRef.current !== 'fresh') return
+      const wantsFamily = familyRef.current
+      const wantsCategory = categoryRef.current
+      if (wantsCategory && story.category !== wantsCategory) return
+      if (!wantsCategory && wantsFamily && story.family !== wantsFamily) return
+
+      const key = activeKeyRef.current
+      const existing = cache.current.get(key)
+      if (existing?.items.some((item) => item.id === story.id)) return
+      const merged: FeedState = existing
+        ? { ...existing, items: [story, ...existing.items] }
+        : { items: [story], nextCursor: null }
+      cache.current.set(key, merged)
+      setState((current) => (current.items.some((item) => item.id === story.id) ? current : { ...current, items: [story, ...current.items] }))
+    },
+    onStoryUpdate: (story: StoryFeedItem) => {
+      const patch = {
+        reply_count: story.reply_count,
+        reaction_counts: story.reaction_counts,
+        follower_count: story.follower_count,
+      }
+      patchCachedStory(story.id, patch)
+      setState((current) => ({
+        ...current,
+        items: current.items.map((item) => (item.id === story.id ? { ...item, ...patch } : item)),
+      }))
+    },
+  })
 
   const select = useCallback(async (nextFamily: StoryFamily | null, nextCategory: StoryCategory | null, nextSort: StorySort) => {
     setFamily(nextFamily)

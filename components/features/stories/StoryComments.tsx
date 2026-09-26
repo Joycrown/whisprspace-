@@ -7,6 +7,9 @@ import { STORY_LIMITS, type ReactionCounts, type StoryRepliesPage, type StoryRea
 import { COMMENTS_HASH, useStoryViewer } from './StoryViewerContext'
 import { CommentReactions } from './StoryReactions'
 import RelativeTime from './RelativeTime'
+import { useStoryCommentsRealtime } from '@/lib/core/realtime/hooks/useStoryCommentsRealtime'
+import { REALTIME_RESUMED_EVENT } from '@/lib/core/supabase/raw-realtime'
+import { useUserStore } from '@/store/userStore'
 
 interface EpisodeMarker {
   number: number
@@ -15,6 +18,7 @@ interface EpisodeMarker {
 
 interface StoryCommentsProps {
   storyId: string
+  threadId: string
   replyCount: number
   episodes: EpisodeMarker[]
   isEpisodic: boolean
@@ -257,8 +261,9 @@ const CommentRow = memo(function CommentRow({ comment, mine, myReaction, highlig
   )
 })
 
-export default function StoryComments({ storyId, replyCount, episodes, isEpisodic }: StoryCommentsProps) {
-  const { isRegistered, requireAccount, commentsOpen, setCommentsOpen } = useStoryViewer()
+export default function StoryComments({ storyId, threadId, replyCount, episodes, isEpisodic }: StoryCommentsProps) {
+  const { isRegistered, requireAccount, commentsOpen, setCommentsOpen, liveReplyCount } = useStoryViewer()
+  const userId = useUserStore((state) => state.session.user?.id ?? null)
   const listRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const stickToBottomRef = useRef(true)
@@ -382,6 +387,61 @@ export default function StoryComments({ storyId, replyCount, episodes, isEpisodi
       .catch(() => {})
     return () => { cancelled = true }
   }, [loaded, isRegistered, replyCount, storyId])
+
+  useStoryCommentsRealtime({
+    storyId,
+    threadId,
+    enabled: active && loaded,
+    onCommentInsert: (message) => {
+      const mapped: StoryReply = {
+        id: message.id,
+        content: message.content,
+        created_at: message.created_at,
+        avatar_seed: `${threadId}:${message.sender_id}`,
+        is_edited: false,
+        parent_id: message.parent_message_id ?? null,
+        parent_content: null,
+        parent_avatar_seed: null,
+        reaction_counts: {},
+      }
+      setComments((current) => (current.some((item) => item.id === mapped.id) ? current : [mapped, ...current]))
+    },
+    onCommentUpdate: (message) => {
+      setComments((current) => current.map((item) => (item.id === message.id ? { ...item, content: message.content, is_edited: true } : item)))
+    },
+    onCommentDelete: (messageId) => {
+      setComments((current) => current.filter((item) => item.id !== messageId))
+    },
+    onCommentReactionInsert: (reaction) => {
+      if (reaction?.user_id === userId) return
+      setComments((current) => current.map((item) => {
+        if (item.id !== reaction.message_id) return item
+        const counts = { ...(item.reaction_counts ?? {}) }
+        counts[reaction.reaction_type as StoryReaction] = (counts[reaction.reaction_type as StoryReaction] ?? 0) + 1
+        return { ...item, reaction_counts: counts }
+      }))
+    },
+    onCommentReactionDelete: (reaction) => {
+      if (reaction?.user_id === userId) return
+      setComments((current) => current.map((item) => {
+        if (item.id !== reaction.message_id) return item
+        const counts = { ...(item.reaction_counts ?? {}) }
+        counts[reaction.reaction_type as StoryReaction] = Math.max((counts[reaction.reaction_type as StoryReaction] ?? 1) - 1, 0)
+        return { ...item, reaction_counts: counts }
+      }))
+    },
+  })
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !active) return
+    const handleResume = () => {
+      setCursor(null)
+      setComments([])
+      setLoaded(false)
+    }
+    window.addEventListener(REALTIME_RESUMED_EVENT, handleResume)
+    return () => window.removeEventListener(REALTIME_RESUMED_EVENT, handleResume)
+  }, [active])
 
   const rows = useMemo<Row[]>(() => {
     const chronological = [...comments].reverse()
@@ -565,7 +625,7 @@ export default function StoryComments({ storyId, replyCount, episodes, isEpisodi
     }
   }
 
-  const total = Math.max(replyCount, comments.length)
+  const total = Math.max(liveReplyCount || replyCount, comments.length)
   const chrome = 'md:left-20'
 
   return (

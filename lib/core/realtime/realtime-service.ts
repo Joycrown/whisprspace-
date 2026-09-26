@@ -429,3 +429,158 @@ export const subscribeToPollVotes = (
   });
   return () => channel.unsubscribe();
 };
+
+// ─────────────────────────────────────────────
+//  Stories
+// ─────────────────────────────────────────────
+
+function subscribeWithBackoff(channel: any, label: string, maxRetryAttempts = 8): () => void {
+  let isActive = true;
+  let retryAttempt = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const subscribeWithRetry = () => {
+    if (!isActive) return;
+
+    channel.subscribe().catch((err: unknown) => {
+      if (!isActive) return;
+      if (retryAttempt >= maxRetryAttempts) {
+        console.warn(`[Realtime] ${label} subscription disabled after ${maxRetryAttempts} retries`);
+        return;
+      }
+      console.error(`[Realtime] Failed to subscribe to ${label}:`, err);
+      const retryDelayMs = Math.min(1000 * Math.pow(2, retryAttempt), 15000);
+      retryAttempt++;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        subscribeWithRetry();
+      }, retryDelayMs);
+    });
+  };
+
+  subscribeWithRetry();
+
+  return () => {
+    isActive = false;
+    if (retryTimer) clearTimeout(retryTimer);
+    channel.unsubscribe();
+  };
+}
+
+export interface StoryReactionsConfig {
+  storyId: string;
+  onStoryUpdate?: (payload: RealtimePostgresChangesPayload<any>) => void;
+  onStoryReactionInsert?: (payload: RealtimePostgresChangesPayload<any>) => void;
+  onStoryReactionUpdate?: (payload: RealtimePostgresChangesPayload<any>) => void;
+  onStoryReactionDelete?: (payload: RealtimePostgresChangesPayload<any>) => void;
+}
+
+/**
+ * Subscribe to a story's own row changes (reply_count/reaction_counts) and
+ * story-level reaction inserts/updates/deletes. One channel per open story page.
+ */
+export const subscribeToStoryReactions = (config: StoryReactionsConfig): (() => void) => {
+  const { storyId } = config;
+
+  const postgres_changes: any[] = [];
+
+  if (config.onStoryUpdate) {
+    postgres_changes!.push({ event: 'UPDATE', schema: 'public', table: 'stories', filter: `id=eq.${storyId}` });
+  }
+  if (config.onStoryReactionInsert) {
+    postgres_changes!.push({ event: 'INSERT', schema: 'public', table: 'story_reactions', filter: `story_id=eq.${storyId}` });
+  }
+  if (config.onStoryReactionUpdate) {
+    postgres_changes!.push({ event: 'UPDATE', schema: 'public', table: 'story_reactions', filter: `story_id=eq.${storyId}` });
+  }
+  if (config.onStoryReactionDelete) {
+    postgres_changes!.push({ event: 'DELETE', schema: 'public', table: 'story_reactions', filter: `story_id=eq.${storyId}` });
+  }
+
+  const channel = rawRealtime.createChannel({
+    channelName: `realtime:story:${storyId}:reactions`,
+    config: { postgres_changes },
+    onPostgresChange: (change) => {
+      const payload = transformChange(change);
+      if (change.table === 'stories' && change.type === 'UPDATE') config.onStoryUpdate?.(payload);
+      else if (change.table === 'story_reactions') {
+        if (change.type === 'INSERT') config.onStoryReactionInsert?.(payload);
+        if (change.type === 'UPDATE') config.onStoryReactionUpdate?.(payload);
+        if (change.type === 'DELETE') config.onStoryReactionDelete?.(payload);
+      }
+    },
+  });
+
+  return subscribeWithBackoff(channel, `story ${storyId} reactions`);
+};
+
+export interface StoryCommentsConfig {
+  storyId: string;
+  threadId: string;
+  onCommentInsert?: (payload: RealtimePostgresChangesPayload<any>) => void;
+  onCommentUpdate?: (payload: RealtimePostgresChangesPayload<any>) => void;
+  onCommentDelete?: (payload: RealtimePostgresChangesPayload<any>) => void;
+  onCommentReactionInsert?: (payload: RealtimePostgresChangesPayload<any>) => void;
+  onCommentReactionDelete?: (payload: RealtimePostgresChangesPayload<any>) => void;
+}
+
+/**
+ * Subscribe to new/edited/deleted comments and comment reactions on a story's
+ * discussion thread. Opened lazily only once the comments panel is active.
+ */
+export const subscribeToStoryComments = (config: StoryCommentsConfig): (() => void) => {
+  const { storyId, threadId } = config;
+
+  const postgres_changes: any[] = [];
+
+  if (config.onCommentInsert) postgres_changes!.push({ event: 'INSERT', schema: 'public', table: 'messages', filter: `thread_id=eq.${threadId}` });
+  if (config.onCommentUpdate) postgres_changes!.push({ event: 'UPDATE', schema: 'public', table: 'messages', filter: `thread_id=eq.${threadId}` });
+  if (config.onCommentDelete) postgres_changes!.push({ event: 'DELETE', schema: 'public', table: 'messages', filter: `thread_id=eq.${threadId}` });
+  if (config.onCommentReactionInsert) postgres_changes!.push({ event: 'INSERT', schema: 'public', table: 'message_reactions', filter: `thread_id=eq.${threadId}` });
+  if (config.onCommentReactionDelete) postgres_changes!.push({ event: 'DELETE', schema: 'public', table: 'message_reactions', filter: `thread_id=eq.${threadId}` });
+
+  const channel = rawRealtime.createChannel({
+    channelName: `realtime:story:${storyId}:comments`,
+    config: { postgres_changes },
+    onPostgresChange: (change) => {
+      const payload = transformChange(change);
+      if (change.table === 'messages') {
+        if (change.type === 'INSERT') config.onCommentInsert?.(payload);
+        if (change.type === 'UPDATE') config.onCommentUpdate?.(payload);
+        if (change.type === 'DELETE') config.onCommentDelete?.(payload);
+      } else if (change.table === 'message_reactions') {
+        if (change.type === 'INSERT') config.onCommentReactionInsert?.(payload);
+        if (change.type === 'DELETE') config.onCommentReactionDelete?.(payload);
+      }
+    },
+  });
+
+  return subscribeWithBackoff(channel, `story ${storyId} comments`);
+};
+
+/**
+ * Subscribe to newly published stories and story updates feed-wide (one
+ * channel regardless of how many stories are visible; the client discards
+ * events for stories it isn't currently displaying).
+ */
+export const subscribeToStoriesFeed = (
+  onNewStory: (payload: RealtimePostgresChangesPayload<any>) => void,
+  onStoryUpdate?: (payload: RealtimePostgresChangesPayload<any>) => void
+): (() => void) => {
+  const channel = rawRealtime.createChannel({
+    channelName: 'realtime:stories:feed',
+    config: {
+      postgres_changes: [
+        { event: 'INSERT', schema: 'public', table: 'stories', filter: 'moderation_status=eq.visible' },
+        ...(onStoryUpdate ? [{ event: 'UPDATE' as const, schema: 'public', table: 'stories', filter: 'moderation_status=eq.visible' }] : []),
+      ],
+    },
+    onPostgresChange: (change) => {
+      const payload = transformChange(change);
+      if (change.type === 'INSERT') onNewStory(payload);
+      if (change.type === 'UPDATE') onStoryUpdate?.(payload);
+    },
+  });
+
+  return subscribeWithBackoff(channel, 'stories feed');
+};

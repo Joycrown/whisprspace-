@@ -4,6 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePathname } from 'next/navigation'
 import { useUserStore } from '@/store/userStore'
 import { StoriesApiError, storiesApi } from '@/lib/stories/api-client'
+import { useStoryReactionsRealtime } from '@/lib/core/realtime/hooks/useStoryReactionsRealtime'
+import { REALTIME_RESUMED_EVENT } from '@/lib/core/supabase/raw-realtime'
 import type { ReactionCounts, StoryReaction, StoryViewerState } from '@/lib/stories/types'
 import AccountRequiredSheet, { type AccountReason } from './AccountRequiredSheet'
 
@@ -21,6 +23,7 @@ interface StoryViewerContextValue {
   react: (reaction: StoryReaction) => void
   commentsOpen: boolean
   setCommentsOpen: (open: boolean) => void
+  liveReplyCount: number
 }
 
 const DEFAULT_VIEWER: StoryViewerState = { isAuthor: false, isFollowing: false, canParticipate: false, featureConsent: null }
@@ -30,10 +33,11 @@ const StoryViewerContext = createContext<StoryViewerContextValue | null>(null)
 interface StoryViewerProviderProps {
   storyId: string
   initialReactionCounts?: ReactionCounts
+  replyCount?: number
   children: React.ReactNode
 }
 
-export function StoryViewerProvider({ storyId, initialReactionCounts, children }: StoryViewerProviderProps) {
+export function StoryViewerProvider({ storyId, initialReactionCounts, replyCount, children }: StoryViewerProviderProps) {
   const pathname = usePathname()
   const session = useUserStore((state) => state.session)
   const sessionValidated = useUserStore((state) => state.sessionValidated)
@@ -44,25 +48,73 @@ export function StoryViewerProvider({ storyId, initialReactionCounts, children }
   const [reactionCounts, setReactionCounts] = useState<ReactionCounts>(initialReactionCounts ?? {})
   const [myReaction, setMyReaction] = useState<StoryReaction | null>(null)
   const [commentsOpen, setCommentsOpen] = useState(false)
+  const [liveReplyCount, setLiveReplyCount] = useState(replyCount ?? 0)
+  const [viewerLoaded, setViewerLoaded] = useState(false)
   const reactingRef = useRef(false)
 
-  useEffect(() => {
+  const fetchViewer = useCallback((onSettled?: () => void) => {
     if (!sessionValidated || !userId) {
       setViewer(DEFAULT_VIEWER)
       setMyReaction(null)
+      onSettled?.()
       return
     }
-    let cancelled = false
     storiesApi<StoryViewerState>(`/api/stories/${storyId}/viewer`)
       .then((state) => {
-        if (cancelled) return
         setViewer(state)
         setMyReaction(state.myReaction ?? null)
         if (state.reactionCounts) setReactionCounts(state.reactionCounts)
       })
       .catch(() => {})
-    return () => { cancelled = true }
+      .finally(() => onSettled?.())
   }, [storyId, userId, sessionValidated])
+
+  useEffect(() => {
+    let cancelled = false
+    fetchViewer(() => {
+      if (!cancelled) setViewerLoaded(true)
+    })
+    return () => { cancelled = true }
+  }, [fetchViewer])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleResume = () => fetchViewer()
+    window.addEventListener(REALTIME_RESUMED_EVENT, handleResume)
+    return () => window.removeEventListener(REALTIME_RESUMED_EVENT, handleResume)
+  }, [fetchViewer])
+
+  useStoryReactionsRealtime({
+    storyId,
+    enabled: isRegistered && viewerLoaded,
+    onStoryUpdate: (story) => {
+      if (typeof story?.reply_count === 'number') setLiveReplyCount(story.reply_count)
+      if (story?.reaction_counts) setReactionCounts(story.reaction_counts)
+    },
+    onStoryReactionInsert: (reaction) => {
+      if (reaction?.user_id === userId) return
+      setReactionCounts((current) => ({
+        ...current,
+        [reaction.reaction_type]: (current[reaction.reaction_type as StoryReaction] ?? 0) + 1,
+      }))
+    },
+    onStoryReactionUpdate: (reaction, old) => {
+      if (reaction?.user_id === userId) return
+      setReactionCounts((current) => {
+        const next = { ...current }
+        if (old?.reaction_type) next[old.reaction_type as StoryReaction] = Math.max((next[old.reaction_type as StoryReaction] ?? 1) - 1, 0)
+        if (reaction?.reaction_type) next[reaction.reaction_type as StoryReaction] = (next[reaction.reaction_type as StoryReaction] ?? 0) + 1
+        return next
+      })
+    },
+    onStoryReactionDelete: (reaction) => {
+      if (reaction?.user_id === userId) return
+      setReactionCounts((current) => ({
+        ...current,
+        [reaction.reaction_type]: Math.max((current[reaction.reaction_type as StoryReaction] ?? 1) - 1, 0),
+      }))
+    },
+  })
 
   useEffect(() => {
     if (window.location.hash === COMMENTS_HASH) setCommentsOpen(true)
@@ -116,8 +168,9 @@ export function StoryViewerProvider({ storyId, initialReactionCounts, children }
       react,
       commentsOpen,
       setCommentsOpen,
+      liveReplyCount,
     }),
-    [storyId, viewer, isRegistered, sessionValidated, setFollowing, requireAccount, reactionCounts, myReaction, react, commentsOpen]
+    [storyId, viewer, isRegistered, sessionValidated, setFollowing, requireAccount, reactionCounts, myReaction, react, commentsOpen, liveReplyCount]
   )
 
   const returnTo = `${pathname || '/'}${account && (account.reason === 'comment' || account.reason === 'report') ? COMMENTS_HASH : ''}`
