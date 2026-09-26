@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useUserStore } from '@/store/userStore'
 import * as realtimeService from './realtime-service'
 import { useQueryClient } from '@tanstack/react-query'
@@ -208,6 +208,8 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
 
   const applyThreadLikeCache = (payload: any, action: 'insert' | 'delete') => {
     if (!threadId) return
+    const likeThreadId = payload?.new?.thread_id || payload?.old?.thread_id
+    if (likeThreadId !== threadId) return
     const actorId = payload?.new?.user_id || payload?.old?.user_id
     const currentUserId = session.user?.id
 
@@ -316,6 +318,120 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
     })
   }
 
+  const hydratedSendersRef = useRef<Set<string>>(new Set())
+
+  const hydrateSender = (senderId: string | null | undefined) => {
+    if (!threadId || !senderId || hydratedSendersRef.current.has(senderId)) return
+    const cached: any = queryClient.getQueryData(queryKeys.threads.detail(threadId))
+    const known = (cached?.participants || []).some((p: any) => p.id === senderId && p.anonymousId && !String(p.anonymousId).startsWith('ANON_' + senderId.substring(0, 8)))
+    if (known) return
+    hydratedSendersRef.current.add(senderId)
+    import('@/lib/core/supabase/raw-db')
+      .then(({ select }) => select<any[]>('users', {
+        select: 'id,anonymous_id,avatar_url,is_premium',
+        filters: { id: `eq.${senderId}` },
+        limit: 1,
+      }))
+      .then(({ data }) => {
+        const user = Array.isArray(data) ? data[0] : null
+        if (!user) return
+        queryClient.setQueryData(queryKeys.threads.detail(threadId), (oldData: any) => {
+          if (!oldData) return oldData
+          const participant = {
+            id: user.id,
+            anonymousId: user.anonymous_id,
+            name: user.anonymous_id,
+            avatar: user.avatar_url || '#cccccc',
+            status: 'online' as const,
+            isPremium: Boolean(user.is_premium),
+            messageCount: 0,
+          }
+          const participants = Array.isArray(oldData.participants) ? oldData.participants : []
+          const nextParticipants = participants.some((p: any) => p.id === user.id)
+            ? participants.map((p: any) => (p.id === user.id ? { ...p, ...participant, messageCount: p.messageCount } : p))
+            : participants
+          const messages = Array.isArray(oldData.messages) ? oldData.messages : []
+          return {
+            ...oldData,
+            participants: nextParticipants,
+            messages: messages.map((message: any) =>
+              message.authorId === user.id
+                ? {
+                    ...message,
+                    authorName: user.anonymous_id,
+                    sender: { ...message.sender, anonymousId: user.anonymous_id, name: user.anonymous_id, avatar: user.avatar_url || message.sender?.avatar, isPremium: Boolean(user.is_premium) },
+                  }
+                : message
+            ),
+          }
+        })
+      })
+      .catch(() => {
+        hydratedSendersRef.current.delete(senderId)
+      })
+  }
+
+  const patchListThread = (patch: (thread: any) => any) => {
+    if (!threadId) return
+    queryClient.setQueriesData({ queryKey: queryKeys.threads.lists() }, (old: any) => {
+      if (!old || !old.pages) return old
+      return {
+        ...old,
+        pages: old.pages.map((page: any) => ({
+          ...page,
+          threads: page.threads.map((thread: any) => (thread.id === threadId ? patch(thread) : thread)),
+        })),
+      }
+    })
+  }
+
+  const applyThreadRowUpdate = (payload: any) => {
+    if (!threadId) return
+    const row = payload?.new
+    if (!row || row.id !== threadId) return
+    if (row.deleted_at || (row.moderation_status && row.moderation_status !== 'visible')) {
+      scheduleThreadDetailRefresh(0)
+      return
+    }
+    queryClient.setQueryData(queryKeys.threads.detail(threadId), (oldData: any) => {
+      if (!oldData) return oldData
+      return {
+        ...oldData,
+        title: row.title ?? oldData.title,
+        content: row.content ?? oldData.content,
+        likes: typeof row.likes_count === 'number' ? row.likes_count : oldData.likes,
+        messageCount: typeof row.message_count === 'number' ? row.message_count : oldData.messageCount,
+        isLocked: typeof row.is_locked === 'boolean' ? row.is_locked : oldData.isLocked,
+        privacy: row.privacy ?? oldData.privacy,
+        isSaved: typeof row.is_saved === 'boolean' ? row.is_saved : oldData.isSaved,
+        expiresAt: row.expires_at !== undefined ? row.expires_at : oldData.expiresAt,
+        lastMessageAt: row.last_message_at ?? oldData.lastMessageAt,
+        reportCount: typeof row.report_count === 'number' ? row.report_count : oldData.reportCount,
+      }
+    })
+  }
+
+  const applyPollVote = (payload: any) => {
+    if (!threadId) return
+    const optionId = payload?.new?.option_id
+    const voterId = payload?.new?.user_id
+    if (!optionId) return
+    queryClient.setQueryData(queryKeys.threads.detail(threadId), (oldData: any) => {
+      if (!oldData || !Array.isArray(oldData.pollOptions)) return oldData
+      if (!oldData.pollOptions.some((option: any) => option.id === optionId)) return oldData
+      const options = oldData.pollOptions.map((option: any) => ({
+        ...option,
+        votes: option.id === optionId ? (option.votes || 0) + 1 : option.votes || 0,
+        hasVoted: option.hasVoted || (option.id === optionId && voterId === session.user?.id),
+      }))
+      const total = options.reduce((sum: number, option: any) => sum + option.votes, 0)
+      return {
+        ...oldData,
+        pollOptions: options.map((option: any) => ({ ...option, percentage: total > 0 ? Math.round((option.votes / total) * 100) : 0 })),
+      }
+    })
+  }
+
   const scheduleThreadDetailRefresh = (delayMs = 300) => {
     if (!threadId || detailInvalidateTimerRef.current) return
     detailInvalidateTimerRef.current = setTimeout(() => {
@@ -342,12 +458,16 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
     const unsubscribers: Array<() => void> = [];
 
     // Handle visibility changes to ensure connection is alive
+    let hiddenAt: number | null = null
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-
-        // The underlying supabase client handles auto-reconnects, but invalidating queries helps sync state
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now()
+        return
+      }
+      if (hiddenAt !== null && Date.now() - hiddenAt > 60_000) {
         scheduleThreadDetailRefresh(0)
       }
+      hiddenAt = null
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -359,62 +479,39 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
       const unsubThreadEvents = realtimeService.subscribeToThreadEvents({
         threadId,
         onMessageInsert: (payload) => {
-          // Apply message immediately, then hydrate richer fields from backend.
+          if (payload?.new?.thread_id && payload.new.thread_id !== threadId) return
           upsertRealtimeMessage(payload)
-          scheduleThreadDetailRefresh(350)
-          scheduleThreadListRefresh(250)
+          hydrateSender(payload?.new?.sender_id)
+          patchListThread((thread) => ({ ...thread, messageCount: (thread.messageCount || 0) + 1, lastMessageAt: payload?.new?.created_at ?? thread.lastMessageAt }))
         },
         onMessageUpdate: (payload) => {
+          if (payload?.new?.thread_id && payload.new.thread_id !== threadId) return
           patchRealtimeMessage(payload)
         },
-        onMessageDelete: (payload) => {
-          removeRealtimeMessage(payload)
-          scheduleThreadDetailRefresh(250)
-          scheduleThreadListRefresh(200)
-        },
-        
-        onThreadUpdate: () => {
-          scheduleThreadDetailRefresh(120)
+
+        onThreadUpdate: (payload) => {
+          applyThreadRowUpdate(payload)
         },
 
         onMessageLikeInsert: (payload) => {
           applyMessageLikeCache(payload, 'insert')
         },
-        onMessageLikeDelete: (payload) => {
-          applyMessageLikeCache(payload, 'delete')
-        },
 
         onMessageReactionInsert: (payload) => {
           applyMessageReactionCache(payload, 'insert')
-        },
-        onMessageReactionDelete: (payload) => {
-          applyMessageReactionCache(payload, 'delete')
         },
 
         onLikeInsert: (payload) => {
           applyThreadLikeCache(payload, 'insert')
         },
-        onLikeDelete: (payload) => {
-          applyThreadLikeCache(payload, 'delete')
-        },
 
         onParticipantInsert: (payload) => {
-
+          if (payload?.new?.thread_id !== threadId) return
           const participantId = payload?.new?.user_id;
           if (participantId) {
             updateParticipantCache(participantId, 'add');
+            hydrateSender(participantId);
           }
-          scheduleThreadDetailRefresh(180)
-          scheduleThreadListRefresh(180)
-        },
-        onParticipantDelete: (payload) => {
-
-          const participantId = payload?.old?.user_id || payload?.new?.user_id;
-          if (participantId) {
-            updateParticipantCache(participantId, 'remove');
-          }
-          scheduleThreadDetailRefresh(180)
-          scheduleThreadListRefresh(180)
         },
 
         onTyping: (payload) => {
@@ -452,8 +549,8 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
         } : undefined,
 
         pollId: pollId || undefined,
-        onPollVote: () => {
-          scheduleThreadDetailRefresh(120)
+        onPollVote: (payload: any) => {
+          applyPollVote(payload)
         }
       });
       unsubscribers.push(unsubThreadEvents);
@@ -476,9 +573,11 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId, pollId, session.user?.id])
 
+  const typingUsersList = useMemo(() => Array.from(typingUsers), [typingUsers])
+
   return {
     onlineUsers,
-    typingUsers: Array.from(typingUsers),
+    typingUsers: typingUsersList,
     onlineCount: onlineUsers.length,
   }
 }
@@ -488,35 +587,33 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
  */
 export const useRealtimeFeed = (enabled = true) => {
   const queryClient = useQueryClient()
-  const invalidateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [newThreadCount, setNewThreadCount] = useState(0)
 
   useEffect(() => {
     if (!enabled) return
 
-    const scheduleListRefresh = () => {
-      if (invalidateTimerRef.current) return
-
-      invalidateTimerRef.current = setTimeout(() => {
-        invalidateTimerRef.current = null
-        queryClient.invalidateQueries({ queryKey: queryKeys.threads.lists(), refetchType: 'active' })
-      }, 300)
-    }
-
-    // Subscribe to new threads
-    const unsubThreads = realtimeService.subscribeToAllThreads(
-      () => {
-        scheduleListRefresh()
-      }
-    )
+    const unsubThreads = realtimeService.subscribeToAllThreads((payload) => {
+      const row = (payload as { new?: { story_id?: string | null; moderation_status?: string } }).new
+      if (row?.story_id || (row?.moderation_status && row.moderation_status !== 'visible')) return
+      setNewThreadCount((count) => count + 1)
+    })
 
     return () => {
-      if (invalidateTimerRef.current) {
-        clearTimeout(invalidateTimerRef.current)
-        invalidateTimerRef.current = null
-      }
       unsubThreads()
     }
-  }, [queryClient, enabled])
+  }, [enabled])
+
+  const showNewThreads = useCallback(() => {
+    setNewThreadCount(0)
+    const lists = queryClient.getQueriesData<{ pages: unknown[]; pageParams: unknown[] }>({ queryKey: queryKeys.threads.lists() })
+    for (const [key, data] of lists) {
+      if (!data?.pages) continue
+      queryClient.setQueryData(key, { pages: data.pages.slice(0, 1), pageParams: data.pageParams.slice(0, 1) })
+    }
+    queryClient.invalidateQueries({ queryKey: queryKeys.threads.lists(), refetchType: 'active' })
+  }, [queryClient])
+
+  return { newThreadCount, showNewThreads }
 }
 
 /**

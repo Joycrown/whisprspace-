@@ -259,9 +259,9 @@ export const subscribeToAllThreads = (
     channelName: 'realtime:threads:all',
     config: {
       postgres_changes: [
-        { event: 'INSERT', schema: 'public', table: 'threads' },
-        { event: 'UPDATE', schema: 'public', table: 'threads' },
-        { event: 'DELETE', schema: 'public', table: 'threads' }
+        { event: 'INSERT', schema: 'public', table: 'threads', filter: 'privacy=eq.public' },
+        ...(onUpdate ? [{ event: 'UPDATE' as const, schema: 'public', table: 'threads', filter: 'privacy=eq.public' }] : []),
+        ...(onDelete ? [{ event: 'DELETE' as const, schema: 'public', table: 'threads' }] : [])
       ]
     },
     onPostgresChange: (change) => {
@@ -276,32 +276,6 @@ export const subscribeToAllThreads = (
     console.error('[Realtime] Failed to subscribe to all threads:', err);
   });
   return () => channel.unsubscribe();
-};
-
-/**
- * Subscribe to ALL participant changes (to update counts in lists)
- */
-export const subscribeToAllParticipantChanges = (
-  onChange: () => void
-): (() => void) => {
-  const unsubInsert = rawRealtime.subscribeToTable('thread_participants', {
-    event: 'INSERT',
-    onChange: () => {
-      onChange();
-    }
-  });
-
-  const unsubDelete = rawRealtime.subscribeToTable('thread_participants', {
-    event: 'DELETE',
-    onChange: () => {
-      onChange();
-    }
-  });
-
-  return () => {
-    unsubInsert();
-    unsubDelete();
-  };
 };
 
 export const subscribeToUserNotifications = (

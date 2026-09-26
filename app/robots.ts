@@ -8,22 +8,22 @@ export default function robots(): MetadataRoute.Robots {
         // Allow social media crawlers to fetch OG images for share cards
         {
           userAgent: 'facebookexternalhit',
-          allow: '/message/',
+          allow: ['/message/', '/stories/'],
           disallow: '/',
         },
         {
           userAgent: 'Twitterbot',
-          allow: '/message/',
+          allow: ['/message/', '/stories/'],
           disallow: '/',
         },
         {
           userAgent: 'WhatsApp',
-          allow: '/message/',
+          allow: ['/message/', '/stories/'],
           disallow: '/',
         },
         {
           userAgent: 'LinkedInBot',
-          allow: '/message/',
+          allow: ['/message/', '/stories/'],
           disallow: '/',
         },
         {
@@ -46,10 +46,12 @@ export default function robots(): MetadataRoute.Robots {
           '/auth',
           '/inbox',
           '/dm/',
+          '/my-discussions',
           '/my-threads',
           '/notifications',
           '/profile',
           '/groups',
+          '/discussions',
           '/threads',
           '/invite/',
         ],

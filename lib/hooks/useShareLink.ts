@@ -11,7 +11,7 @@ interface UseShareLinkOptions {
 export function useShareLink({ link, shareText, downloadName = 'whisprspace-card' }: UseShareLinkOptions) {
   const [copied, setCopied] = useState(false)
   const [showDropdown, setShowDropdown] = useState(false)
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number; anchorTop?: number }>({ top: 0, right: 0 })
   const [isGeneratingCard, setIsGeneratingCard] = useState(false)
   const shareCardRef = useRef<HTMLDivElement>(null)
 
@@ -27,6 +27,7 @@ export function useShareLink({ link, shareText, downloadName = 'whisprspace-card
     setDropdownPos({
       top: rect.bottom + 8,
       right: window.innerWidth - rect.right,
+      anchorTop: rect.top,
     })
     setShowDropdown(true)
   }, [])

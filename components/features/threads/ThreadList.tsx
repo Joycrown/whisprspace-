@@ -4,7 +4,7 @@
 import { ArrowRight, Heart, MessageCircle, Crown, X } from "lucide-react";
 import { Thread } from "@/types";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { FaLock } from 'react-icons/fa';
 import PaymentModal from "@/components/modals/PaymentModal";
 import { useUserStore } from "@/store/userStore";
@@ -59,9 +59,9 @@ function Identicon({ seed, size = 36 }: { seed: string; size?: number }) {
   );
 }
 
-export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
+const ThreadListItem: React.FC<{ thread: Thread }> = ({ thread }) => {
   const router = useRouter();
-  const { session } = useUserStore();
+  const sessionUserId = useUserStore((state) => state.session.user?.id);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [hasAccess, setHasAccess] = useState(!!thread.hasJoined || !!thread.hasAccess);
   const [isJoining, setIsJoining] = useState(false);
@@ -72,7 +72,7 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
   const joinMutation = useJoinThreadMutation();
   const threadPath = buildThreadPath({ id: thread.id, title: thread.title });
 
-  const isCreator = session?.user?.id === thread.author.id;
+  const isCreator = sessionUserId === thread.author.id;
   const isThreadBlocked = thread.isLocked === true;
   const canAccessPremium = !thread.isPremium || hasAccess || isCreator;
 
@@ -119,18 +119,18 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
   };
 
   const handleValidateCode = async (code: string): Promise<boolean> => {
-    if (!session?.user?.id) { router.push('/auth'); return false; }
+    if (!sessionUserId) { router.push('/auth'); return false; }
     const result = await redeemThreadAccessCode(thread.id, code);
     return result.success;
   };
 
   const joinThreadNow = async () => {
     if (isThreadBlocked) return;
-    if (!session?.user?.id) { router.push('/auth'); return; }
+    if (!sessionUserId) { router.push('/auth'); return; }
     if (isCreator) { router.push(threadPath); return; }
     try {
       setIsJoining(true);
-      await joinMutation.mutateAsync({ threadId: thread.id, userId: session.user.id });
+      await joinMutation.mutateAsync({ threadId: thread.id, userId: sessionUserId });
       router.push(threadPath);
     } catch {
       router.push(threadPath);
@@ -184,7 +184,7 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
     <>
       {/* ── Card ── */}
       <div
-        className={`px-3 md:px-4 py-3 md:py-4 transition-colors w-full cursor-pointer ${
+        className={`px-3 md:px-4 py-3 md:py-4 transition-colors w-full cursor-pointer [content-visibility:auto] [contain-intrinsic-size:auto_132px] ${
           thread.isPremium
             ? 'bg-[#15101E] hover:bg-[#1A1228] border-l-2 border-[#8B5CF6]/40'
             : 'hover:bg-white/[0.025]'
@@ -389,3 +389,5 @@ export const ThreadList: React.FC<{ thread: Thread }> = ({ thread }) => {
     </>
   );
 };
+
+export const ThreadList = memo(ThreadListItem);

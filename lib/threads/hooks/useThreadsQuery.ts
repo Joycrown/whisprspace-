@@ -1,9 +1,12 @@
 'use client'
 
-import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
+import { useCallback, useState } from 'react'
+import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/react-query/queryKeys'
-import { ThreadFilters } from '@/types'
-import { fetchThreads } from '../thread-service'
+import { ThreadData, ThreadFilters } from '@/types'
+import { fetchOlderThreadMessages, fetchThreads } from '../thread-service'
+
+const FEED_PAGE_SIZE = 20
 
 /**
  * Hook for fetching threads list with infinite scroll support
@@ -19,38 +22,18 @@ export function useThreadsQuery(filters?: ThreadFilters, searchQuery?: string, u
       searchQuery: searchQuery || '',
       userId: userId || '',
     }),
-    queryFn: async ({ pageParam = 1 }) => {
-      const result = await fetchThreads(
+    queryFn: async ({ pageParam }) => {
+      return fetchThreads(
         filters || {},
         searchQuery || '',
-        pageParam,
-        10, // limit per page
-        userId
+        1,
+        FEED_PAGE_SIZE,
+        userId,
+        { cursor: pageParam }
       )
-      
-      return result
     },
-    getNextPageParam: (lastPage, pages) => {
-      if (!lastPage.hasMore || lastPage.threads.length === 0) {
-        return undefined
-      }
-
-      // Defensive guard: stop pagination if backend returns duplicate page rows.
-      // This prevents an infinite fetch loop when the sentinel stays visible.
-      const previousThreadIds = new Set(
-        pages
-          .slice(0, -1)
-          .flatMap((page) => page.threads.map((thread) => thread.id))
-      )
-
-      const hasNewThread = lastPage.threads.some((thread) => !previousThreadIds.has(thread.id))
-      if (!hasNewThread) {
-        return undefined
-      }
-
-      return pages.length + 1
-    },
-    initialPageParam: 1,
+    getNextPageParam: (lastPage) => (lastPage.hasMore && lastPage.nextCursor ? lastPage.nextCursor : undefined),
+    initialPageParam: null as string | null,
     staleTime: 2 * 60 * 1000,
     retry: 1,
     refetchOnWindowFocus: false,
@@ -68,6 +51,7 @@ export function useThreadsQuery(filters?: ThreadFilters, searchQuery?: string, u
  */
 export function useThreadQuery(threadId: string | undefined, enabled = true) {
   const detailEnabled = enabled && !!threadId
+  const queryClient = useQueryClient()
 
   const query = useQuery({
     queryKey: queryKeys.threads.detail(threadId || ''),
@@ -106,14 +90,26 @@ export function useThreadQuery(threadId: string | undefined, enabled = true) {
         throw fallbackError
       }
       
+      const previous = queryClient.getQueryData<ThreadData>(queryKeys.threads.detail(threadId))
+      const fresh = threadData.messages || []
+      if (previous?.messages?.length && fresh.length) {
+        const oldestFresh = fresh[0].timestamp
+        const freshIds = new Set(fresh.map((message) => message.id))
+        const olderLoaded = previous.messages.filter(
+          (message) => !freshIds.has(message.id) && !message.id.startsWith('optimistic-') && message.timestamp < oldestFresh
+        )
+        if (olderLoaded.length) {
+          return { ...threadData, messages: [...olderLoaded, ...fresh] }
+        }
+      }
+
       return threadData
     },
     enabled: detailEnabled,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
-    // Lightweight reliability fallback for intermittent realtime dropouts.
-    refetchInterval: detailEnabled ? 30000 : false,
+    refetchInterval: detailEnabled ? 5 * 60 * 1000 : false,
     refetchIntervalInBackground: false,
     placeholderData: (previousData) => previousData,
   })
@@ -146,4 +142,43 @@ export function useThreadMessagesQuery(threadId: string | undefined) {
     error,
     refetch,
   }
+}
+
+export function useOlderThreadMessages(threadId: string | undefined, userId?: string) {
+  const queryClient = useQueryClient()
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false)
+  const [exhaustedFor, setExhaustedFor] = useState<string | null>(null)
+
+  const thread = threadId ? queryClient.getQueryData<ThreadData>(queryKeys.threads.detail(threadId)) : undefined
+  const loadedCount = thread?.messages?.length ?? 0
+  const hasOlder = Boolean(
+    threadId &&
+    exhaustedFor !== threadId &&
+    loadedCount >= 50 &&
+    (thread?.messageCount ?? 0) > loadedCount
+  )
+
+  const loadOlder = useCallback(async () => {
+    if (!threadId || isLoadingOlder) return
+    const key = queryKeys.threads.detail(threadId)
+    const current = queryClient.getQueryData<ThreadData>(key)
+    const oldest = current?.messages?.find((message) => !message.id.startsWith('optimistic-'))
+    if (!oldest) return
+
+    setIsLoadingOlder(true)
+    try {
+      const { messages, hasMore } = await fetchOlderThreadMessages(threadId, { createdAt: oldest.timestamp, id: oldest.id }, userId)
+      if (!hasMore) setExhaustedFor(threadId)
+      if (!messages.length) return
+      queryClient.setQueryData<ThreadData>(key, (old) => {
+        if (!old) return old
+        const existing = new Set((old.messages || []).map((message) => message.id))
+        return { ...old, messages: [...messages.filter((message) => !existing.has(message.id)), ...(old.messages || [])] }
+      })
+    } finally {
+      setIsLoadingOlder(false)
+    }
+  }, [threadId, userId, isLoadingOlder, queryClient])
+
+  return { hasOlder, isLoadingOlder, loadOlder }
 }

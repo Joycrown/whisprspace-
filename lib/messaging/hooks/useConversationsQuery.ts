@@ -89,18 +89,6 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
   }, [])
 
   useRealtimeSync({
-    table: 'direct_messages',
-    event: '*',
-    queryKey: queryKeys.conversations.lists(),
-    schema: 'public',
-    invalidateQuery: false,
-    enabled: enableRealtime && queryEnabled,
-    onPayload: () => {
-      scheduleRealtimeRefresh()
-    },
-  })
-
-  useRealtimeSync({
     table: 'conversation_participants',
     event: '*',
     queryKey: queryKeys.conversations.lists(),
@@ -129,11 +117,11 @@ export function useConversationsQuery(options: UseConversationsQueryOptions = {}
 export function useUnreadCountQuery(options: UseUnreadCountQueryOptions = {}) {
   const { session } = useUserStore()
   const userId = session.user?.id
-  const isAuthed = Boolean(session.user)
+  const isAuthed = Boolean(session.user && !session.user.isAnonymous)
   const queryEnabled = Boolean(options.enabled ?? true) && isAuthed
   const enableRealtime = options.enableRealtime ?? false
   const enableDirectMessagesRealtime = options.enableDirectMessagesRealtime ?? false
-  const refetchInterval = options.refetchInterval ?? 30000
+  const refetchInterval = options.refetchInterval ?? 120000
 
   const query = useQuery({
     queryKey: queryKeys.conversations.unreadCount(),

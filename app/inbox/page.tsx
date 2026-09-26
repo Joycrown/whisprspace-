@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { MessageCircle, Mail, MailOpen, Lock, Zap, Trash2 } from 'lucide-react';
+import { MessageCircle, Lock, Zap, Trash2 } from 'lucide-react';
 import { FaShareAlt, FaCheck } from 'react-icons/fa';
 import { useConversationsQuery, Conversation, DirectMessage, markConversationReadWithReceipts } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
@@ -256,55 +256,63 @@ function InboxPageContent() {
     return <AppLoadingState title="Taking you to sign in..." />;
   }
 
-  if (!isGuest && isLoading && conversations.length === 0) {
+  if (isGuest) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4 py-16 pb-28">
+        <div className="w-full max-w-md bg-gray-900/70 border border-purple-500/30 rounded-3xl p-8 text-center">
+          <div className="text-5xl mb-4">👀</div>
+          <h1 className="text-2xl font-semibold text-white mb-2">Find out what people really think</h1>
+          <p className="text-sm text-gray-400 mb-6">
+            Create an account to get your own anonymous link. Share it, and friends send you honest messages. They never find out it&apos;s you reading.
+          </p>
+          <Link
+            href={`/auth?force=1&view=signup&reason=inbox&redirect=${encodeURIComponent('/inbox')}`}
+            className="inline-flex w-full items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-orange-500 hover:opacity-90 rounded-xl text-white font-semibold transition-opacity shadow-lg"
+          >
+            Get my anonymous link
+          </Link>
+          <Link
+            href={`/auth?force=1&view=login&redirect=${encodeURIComponent('/inbox')}`}
+            className="mt-2 inline-flex w-full items-center justify-center px-6 py-3 border border-gray-700 rounded-xl text-gray-200 text-sm hover:bg-white/5"
+          >
+            I already have an account
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading && conversations.length === 0) {
     return <AppLoadingState title="Syncing your conversations..." />;
   }
 
   return (
-    <div className="min-h-screen py-4 pb-28 md:py-8">
+    <div className="min-h-screen py-3 pb-28 md:py-6">
       <div className="max-w-6xl mx-auto px-4">
-        {/* Header */}
-        <div className="mb-6 md:mb-8">
-          <h1 className="text-2xl md:text-4xl font-bold text-white mb-1 md:mb-2">Messages</h1>
-          <p className="text-sm md:text-base text-gray-400">Your anonymous messages and conversations</p>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h1 className="text-xl md:text-3xl font-bold text-white">Messages</h1>
+          {unreadCount > 0 && (
+            <span className="rounded-full bg-orange-500/15 px-2.5 py-1 text-xs font-semibold text-orange-300">{unreadCount} new</span>
+          )}
         </div>
 
-        {/* Profile Link Section */}
-        <div className="bg-gradient-to-r from-purple-900/20 to-orange-900/20 border border-purple-500/30 rounded-xl p-4 md:p-6 mb-6 md:mb-8">
-          <div className="flex items-start gap-3 md:gap-4 mb-3 md:mb-4">
-            <Lock className="w-5 h-5 md:w-6 md:h-6 text-purple-400 flex-shrink-0 mt-1" />
-            <div>
-              <h2 className="text-lg md:text-xl font-semibold text-white mb-1 md:mb-2">Your Message Link</h2>
-              <p className="text-gray-300 text-xs md:text-sm">
-                ✨ Dare them to be honest. Share your link and let the anonymous messages roll in — one-off confessions or full-blown convos. No names. No filters. Just vibes.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="text"
-              value={myProfileLink}
-              readOnly
-              className="flex-1 px-3 md:px-4 py-2.5 md:py-3 bg-gray-900/50 border border-gray-700 rounded-lg text-gray-300 text-xs md:text-sm font-mono"
-            />
-            <button
-              ref={shareButtonRef}
-              onClick={handleShareButtonClick}
-              className="px-4 md:px-6 py-2.5 md:py-3 bg-purple-600 hover:bg-purple-700 active:scale-95 rounded-lg text-white font-semibold transition-all flex items-center justify-center gap-2 min-h-[44px]"
-            >
-              {copiedLink ? (
-                <>
-                  <FaCheck className="w-4 h-4" />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <FaShareAlt className="w-4 h-4" />
-                  Share
-                </>
-              )}
-            </button>
-          </div>
+        <p className="mb-1.5 truncate text-xs text-gray-400">
+          Share your link. Anyone can send you a message, and you&apos;ll never know who.
+        </p>
+        <div className="mb-4 flex items-center gap-2 rounded-2xl border border-purple-500/30 bg-gradient-to-r from-purple-900/20 to-orange-900/20 p-1.5 pl-3">
+          <Lock className="w-4 h-4 shrink-0 text-purple-400" aria-hidden />
+          <span className="min-w-0 flex-1 truncate font-mono text-xs text-gray-300 md:text-sm" title={myProfileLink}>
+            {myProfileLink.replace(/^https?:\/\//, '')}
+          </span>
+          <button
+            ref={shareButtonRef}
+            onClick={handleShareButtonClick}
+            aria-label="Share your message link"
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 text-sm font-semibold text-white transition-all hover:bg-purple-700 active:scale-95"
+          >
+            {copiedLink ? <FaCheck className="w-3.5 h-3.5" /> : <FaShareAlt className="w-3.5 h-3.5" />}
+            {copiedLink ? 'Copied' : 'Share'}
+          </button>
         </div>
 
         {/* Shared share dropdown — includes Download card + correct production link */}
@@ -331,70 +339,8 @@ function InboxPageContent() {
           </div>
         )}
 
-        {/* Guest wall — link is shareable above, but reading messages requires sign-up.
-            This is the conversion moment: they've already shared and messages may await. */}
-        {isGuest ? (
-          <div className="bg-gray-800/60 border border-purple-500/30 rounded-2xl p-8 md:p-12 text-center">
-            <div className="text-4xl md:text-5xl mb-4">👀</div>
-            <h3 className="text-lg md:text-2xl font-semibold text-white mb-2">
-              Someone might already be talking about you.
-            </h3>
-            <p className="text-sm md:text-base text-gray-400 max-w-md mx-auto mb-2">
-              Your link is already live. Claim your account to unlock your inbox and see what people really think — no names, all honesty.
-            </p>
-            <p className="text-xs md:text-sm text-purple-300/80 max-w-md mx-auto mb-6">
-              It&apos;s still you — your same link and every message waiting for you carry right over. ✨
-            </p>
-            <Link
-              href={`/auth?view=signup&reason=inbox&redirect=${encodeURIComponent('/inbox')}`}
-              className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-orange-500 hover:opacity-90 rounded-lg text-white font-semibold transition-opacity shadow-lg"
-            >
-              Claim my inbox →
-            </Link>
-          </div>
-        ) : (
         <>
-        {/* Stats */}
-        <div className="grid grid-cols-3 md:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-3 md:p-6">
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-3">
-              <div className="p-1.5 md:p-2 bg-purple-500/20 rounded-lg">
-                <Mail className="w-4 h-4 md:w-5 md:h-5 text-purple-400" />
-              </div>
-              <div>
-                <p className="text-gray-400 text-[10px] md:text-sm">Total</p>
-                <p className="text-lg md:text-2xl font-bold text-white">{conversations.length}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-3 md:p-6">
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-3">
-              <div className="p-1.5 md:p-2 bg-orange-500/20 rounded-lg">
-                <MailOpen className="w-4 h-4 md:w-5 md:h-5 text-orange-400" />
-              </div>
-              <div>
-                <p className="text-gray-400 text-[10px] md:text-sm">Unread</p>
-                <p className="text-lg md:text-2xl font-bold text-white">{unreadCount}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gray-800 border border-gray-700 rounded-xl p-3 md:p-6">
-            <div className="flex flex-col md:flex-row items-start md:items-center gap-2 md:gap-3">
-              <div className="p-1.5 md:p-2 bg-green-500/20 rounded-lg">
-                <MessageCircle className="w-4 h-4 md:w-5 md:h-5 text-green-400" />
-              </div>
-              <div>
-                <p className="text-gray-400 text-[10px] md:text-sm">Active</p>
-                <p className="text-lg md:text-2xl font-bold text-white">{conversations.filter(c => (c.unreadCount || 0) > 0).length}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Tabs - Horizontal scroll on mobile */}
-        <div className="flex gap-1 md:gap-2 mb-6 border-b border-gray-800 overflow-x-auto scrollbar-hide">
+        <div className="flex gap-1 md:gap-2 mb-3 border-b border-gray-800 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => setActiveTab('all')}
             className={`px-3 md:px-6 py-2 md:py-3 font-semibold text-xs md:text-base transition-colors relative whitespace-nowrap flex-shrink-0 ${activeTab === 'all' ? 'text-white' : 'text-gray-500 hover:text-gray-300'
@@ -434,9 +380,9 @@ function InboxPageContent() {
               </p>
             </div>
           ) : (
-            <div className="grid gap-6 lg:grid-cols-2">
-              <div className="rounded-2xl border border-gray-800 bg-gray-900/40 p-4 max-h-[65vh] overflow-y-auto">
-                <div className="flex items-center justify-between text-xs md:text-sm uppercase tracking-[0.2em] text-gray-500 mb-4">
+            <div className="grid gap-5 lg:gap-6 lg:grid-cols-2">
+              <div className="lg:rounded-2xl lg:border lg:border-gray-800 lg:bg-gray-900/40 lg:p-4 lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto scrollbar-hide">
+                <div className="flex items-center justify-between text-[11px] md:text-sm uppercase tracking-[0.2em] text-gray-500 mb-2 md:mb-4">
                   <span>Conversations</span>
                   <span>{directConversations.length}</span>
                 </div>
@@ -518,8 +464,8 @@ function InboxPageContent() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-gray-800 bg-gray-900/40 p-4 max-h-[65vh] overflow-y-auto">
-                <div className="flex items-center justify-between text-xs md:text-sm uppercase tracking-[0.2em] text-gray-500 mb-4">
+              <div className="lg:rounded-2xl lg:border lg:border-gray-800 lg:bg-gray-900/40 lg:p-4 lg:max-h-[calc(100vh-13rem)] lg:overflow-y-auto scrollbar-hide">
+                <div className="flex items-center justify-between text-[11px] md:text-sm uppercase tracking-[0.2em] text-gray-500 mb-2 md:mb-4">
                   <span>One-off Messages</span>
                   <span>{oneOffConversations.length}</span>
                 </div>
@@ -603,7 +549,6 @@ function InboxPageContent() {
           )}
         </div>
         </>
-        )}
 
       </div>
 

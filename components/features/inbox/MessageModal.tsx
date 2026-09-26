@@ -40,7 +40,7 @@ const MessageModal: React.FC<MessageModalProps> = ({
 
   const conversationId = conversation?.id;
 
-  // Go straight to the thread form (/threads/create) with the data prefilled.
+  // Go straight to the thread form (/discussions/create) with the data prefilled.
   // Content = first 3 messages; title stays empty for the user to write. The
   // conversationId is carried so the create page imports the messages on publish.
   const handleTurnIntoThread = async () => {
@@ -67,7 +67,7 @@ const MessageModal: React.FC<MessageModalProps> = ({
       localStorage.setItem(INBOX_THREAD_DRAFT_KEY, JSON.stringify(draft));
 
       onClose();
-      router.push('/threads/create?from=inbox');
+      router.push('/discussions/create?from=inbox');
     } finally {
       setPreparing(false);
     }

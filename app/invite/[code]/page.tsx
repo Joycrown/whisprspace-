@@ -61,7 +61,7 @@ const InvitePage = () => {
       return;
     }
 
-    router.replace(`/threads/${result.threadId}`);
+    router.replace(`/discussions/${result.threadId}`);
   };
 
   useEffect(() => {
@@ -129,7 +129,7 @@ const InvitePage = () => {
 
         {(status === 'error') && (
           <button
-            onClick={() => router.push('/threads')}
+            onClick={() => router.push('/discussions')}
             className="mt-4 w-full rounded-lg border border-gray-700 bg-gray-800 px-4 py-2 text-gray-200 font-semibold hover:bg-gray-700 transition-colors"
           >
             Back to Threads
