@@ -147,6 +147,7 @@ export interface StoryPageData extends StoryFeedItem {
   cadence_label: string | null
   updated_at: string
   reaction_counts?: ReactionCounts
+  thread_id: string
   episodes: StoryEpisode[]
 }
 
