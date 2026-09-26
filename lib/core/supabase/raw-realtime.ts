@@ -446,7 +446,7 @@ class RealtimeChannel {
   private onBroadcastCb?: (payload: any) => void;
 
   constructor(options: ChannelOptions) {
-    this.topic = options.channelName.startsWith('realtime:') ? options.channelName : `realtime:${options.channelName}`;
+    this.topic = options.channelName;
     this.config = options.config || {};
     this.onPostgresChangeCb = options.onPostgresChange;
     this.onPresenceSyncCb = options.onPresenceSync;
