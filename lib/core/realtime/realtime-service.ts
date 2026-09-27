@@ -467,95 +467,52 @@ function subscribeWithBackoff(channel: any, label: string, maxRetryAttempts = 8)
   };
 }
 
-export interface StoryReactionsConfig {
-  storyId: string;
-  onStoryUpdate?: (payload: RealtimePostgresChangesPayload<any>) => void;
-  onStoryReactionInsert?: (payload: RealtimePostgresChangesPayload<any>) => void;
-  onStoryReactionUpdate?: (payload: RealtimePostgresChangesPayload<any>) => void;
-  onStoryReactionDelete?: (payload: RealtimePostgresChangesPayload<any>) => void;
-}
-
 /**
- * Subscribe to a story's own row changes (reply_count/reaction_counts) and
- * story-level reaction inserts/updates/deletes. One channel per open story page.
+ * Live counters for one story (reply_count, reaction_counts, episodes) from
+ * the `story_live` projection. One channel per open story page.
  */
-export const subscribeToStoryReactions = (config: StoryReactionsConfig): (() => void) => {
-  const { storyId } = config;
-
-  const postgres_changes: any[] = [];
-
-  if (config.onStoryUpdate) {
-    postgres_changes!.push({ event: 'UPDATE', schema: 'public', table: 'stories', filter: `id=eq.${storyId}` });
-  }
-  if (config.onStoryReactionInsert) {
-    postgres_changes!.push({ event: 'INSERT', schema: 'public', table: 'story_reactions', filter: `story_id=eq.${storyId}` });
-  }
-  if (config.onStoryReactionUpdate) {
-    postgres_changes!.push({ event: 'UPDATE', schema: 'public', table: 'story_reactions', filter: `story_id=eq.${storyId}` });
-  }
-  if (config.onStoryReactionDelete) {
-    postgres_changes!.push({ event: 'DELETE', schema: 'public', table: 'story_reactions', filter: `story_id=eq.${storyId}` });
-  }
-
+export const subscribeToStoryLive = (
+  storyId: string,
+  onUpdate: (payload: RealtimePostgresChangesPayload<any>) => void
+): (() => void) => {
   const channel = rawRealtime.createChannel({
-    channelName: `realtime:story:${storyId}:reactions`,
-    config: { postgres_changes },
+    channelName: `realtime:story:${storyId}:live`,
+    config: {
+      postgres_changes: [
+        { event: 'UPDATE', schema: 'public', table: 'story_live', filter: `story_id=eq.${storyId}` },
+      ],
+    },
     onPostgresChange: (change) => {
-      const payload = transformChange(change);
-      if (change.table === 'stories' && change.type === 'UPDATE') config.onStoryUpdate?.(payload);
-      else if (change.table === 'story_reactions') {
-        if (change.type === 'INSERT') config.onStoryReactionInsert?.(payload);
-        if (change.type === 'UPDATE') config.onStoryReactionUpdate?.(payload);
-        if (change.type === 'DELETE') config.onStoryReactionDelete?.(payload);
-      }
+      if (change.type === 'UPDATE') onUpdate(transformChange(change));
     },
   });
 
-  return subscribeWithBackoff(channel, `story ${storyId} reactions`);
+  return subscribeWithBackoff(channel, `story ${storyId} live`);
 };
 
-export interface StoryCommentsConfig {
-  storyId: string;
-  threadId: string;
-  onCommentInsert?: (payload: RealtimePostgresChangesPayload<any>) => void;
-  onCommentUpdate?: (payload: RealtimePostgresChangesPayload<any>) => void;
-  onCommentDelete?: (payload: RealtimePostgresChangesPayload<any>) => void;
-  onCommentReactionInsert?: (payload: RealtimePostgresChangesPayload<any>) => void;
-  onCommentReactionDelete?: (payload: RealtimePostgresChangesPayload<any>) => void;
-}
-
 /**
- * Subscribe to new/edited/deleted comments and comment reactions on a story's
- * discussion thread. Opened lazily only once the comments panel is active.
+ * Comment reactions on a story's thread. Only INSERT is subscribed: Supabase
+ * can't filter DELETE events, so a DELETE subscription would receive every
+ * reaction removal app-wide.
  */
-export const subscribeToStoryComments = (config: StoryCommentsConfig): (() => void) => {
-  const { storyId, threadId } = config;
-
-  const postgres_changes: any[] = [];
-
-  if (config.onCommentInsert) postgres_changes!.push({ event: 'INSERT', schema: 'public', table: 'messages', filter: `thread_id=eq.${threadId}` });
-  if (config.onCommentUpdate) postgres_changes!.push({ event: 'UPDATE', schema: 'public', table: 'messages', filter: `thread_id=eq.${threadId}` });
-  if (config.onCommentDelete) postgres_changes!.push({ event: 'DELETE', schema: 'public', table: 'messages', filter: `thread_id=eq.${threadId}` });
-  if (config.onCommentReactionInsert) postgres_changes!.push({ event: 'INSERT', schema: 'public', table: 'message_reactions', filter: `thread_id=eq.${threadId}` });
-  if (config.onCommentReactionDelete) postgres_changes!.push({ event: 'DELETE', schema: 'public', table: 'message_reactions', filter: `thread_id=eq.${threadId}` });
-
+export const subscribeToStoryCommentReactions = (
+  storyId: string,
+  threadId: string,
+  onInsert: (payload: RealtimePostgresChangesPayload<any>) => void
+): (() => void) => {
   const channel = rawRealtime.createChannel({
-    channelName: `realtime:story:${storyId}:comments`,
-    config: { postgres_changes },
+    channelName: `realtime:story:${storyId}:comment-reactions`,
+    config: {
+      postgres_changes: [
+        { event: 'INSERT', schema: 'public', table: 'message_reactions', filter: `thread_id=eq.${threadId}` },
+      ],
+    },
     onPostgresChange: (change) => {
-      const payload = transformChange(change);
-      if (change.table === 'messages') {
-        if (change.type === 'INSERT') config.onCommentInsert?.(payload);
-        if (change.type === 'UPDATE') config.onCommentUpdate?.(payload);
-        if (change.type === 'DELETE') config.onCommentDelete?.(payload);
-      } else if (change.table === 'message_reactions') {
-        if (change.type === 'INSERT') config.onCommentReactionInsert?.(payload);
-        if (change.type === 'DELETE') config.onCommentReactionDelete?.(payload);
-      }
+      if (change.type === 'INSERT') onInsert(transformChange(change));
     },
   });
 
-  return subscribeWithBackoff(channel, `story ${storyId} comments`);
+  return subscribeWithBackoff(channel, `story ${storyId} comment reactions`);
 };
 
 /**
@@ -571,8 +528,8 @@ export const subscribeToStoriesFeed = (
     channelName: 'realtime:stories:feed',
     config: {
       postgres_changes: [
-        { event: 'INSERT', schema: 'public', table: 'stories', filter: 'moderation_status=eq.visible' },
-        ...(onStoryUpdate ? [{ event: 'UPDATE' as const, schema: 'public', table: 'stories', filter: 'moderation_status=eq.visible' }] : []),
+        { event: 'INSERT', schema: 'public', table: 'story_live', filter: 'visible=eq.true' },
+        ...(onStoryUpdate ? [{ event: 'UPDATE' as const, schema: 'public', table: 'story_live', filter: 'visible=eq.true' }] : []),
       ],
     },
     onPostgresChange: (change) => {

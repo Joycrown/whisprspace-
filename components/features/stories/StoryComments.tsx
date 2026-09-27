@@ -365,9 +365,9 @@ export default function StoryComments({ storyId, threadId, replyCount, episodes,
 
   useEffect(() => {
     if (!active || loaded) return
-    if (replyCount > 0) void loadPage(null)
+    if (Math.max(liveReplyCount, replyCount) > 0) void loadPage(null)
     else setLoaded(true)
-  }, [active, loaded, loadPage, replyCount])
+  }, [active, loaded, loadPage, liveReplyCount, replyCount])
 
   useEffect(() => {
     if (!loaded || !isRegistered || replyCount === 0) return
@@ -388,60 +388,61 @@ export default function StoryComments({ storyId, threadId, replyCount, episodes,
     return () => { cancelled = true }
   }, [loaded, isRegistered, replyCount, storyId])
 
+  const refreshLatest = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/public/stories/${storyId}/replies`, { cache: 'no-store' })
+      if (!response.ok) return
+      const page = (await response.json()) as StoryRepliesPage
+      setComments((current) => {
+        const fresh = new Map(page.items.map((item) => [item.id, item]))
+        const known = new Set(current.map((item) => item.id))
+        const added = page.items.filter((item) => !known.has(item.id))
+        const updated = current.map((item) => fresh.get(item.id) ?? item)
+        return added.length ? [...added, ...updated] : updated
+      })
+    } catch {}
+  }, [storyId])
+
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null
+      void refreshLatest()
+    }, 300)
+  }, [refreshLatest])
+
+  useEffect(() => () => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current)
+  }, [])
+
+  const syncedReplyCountRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!active || !loaded) return
+    if (syncedReplyCountRef.current === null) {
+      syncedReplyCountRef.current = liveReplyCount
+      return
+    }
+    if (syncedReplyCountRef.current === liveReplyCount) return
+    syncedReplyCountRef.current = liveReplyCount
+    scheduleRefresh()
+  }, [active, loaded, liveReplyCount, scheduleRefresh])
+
   useStoryCommentsRealtime({
     storyId,
     threadId,
-    enabled: active && loaded,
-    onCommentInsert: (message) => {
-      const mapped: StoryReply = {
-        id: message.id,
-        content: message.content,
-        created_at: message.created_at,
-        avatar_seed: `${threadId}:${message.sender_id}`,
-        is_edited: false,
-        parent_id: message.parent_message_id ?? null,
-        parent_content: null,
-        parent_avatar_seed: null,
-        reaction_counts: {},
-      }
-      setComments((current) => (current.some((item) => item.id === mapped.id) ? current : [mapped, ...current]))
-    },
-    onCommentUpdate: (message) => {
-      setComments((current) => current.map((item) => (item.id === message.id ? { ...item, content: message.content, is_edited: true } : item)))
-    },
-    onCommentDelete: (messageId) => {
-      setComments((current) => current.filter((item) => item.id !== messageId))
-    },
-    onCommentReactionInsert: (reaction) => {
-      if (reaction?.user_id === userId) return
-      setComments((current) => current.map((item) => {
-        if (item.id !== reaction.message_id) return item
-        const counts = { ...(item.reaction_counts ?? {}) }
-        counts[reaction.reaction_type as StoryReaction] = (counts[reaction.reaction_type as StoryReaction] ?? 0) + 1
-        return { ...item, reaction_counts: counts }
-      }))
-    },
-    onCommentReactionDelete: (reaction) => {
-      if (reaction?.user_id === userId) return
-      setComments((current) => current.map((item) => {
-        if (item.id !== reaction.message_id) return item
-        const counts = { ...(item.reaction_counts ?? {}) }
-        counts[reaction.reaction_type as StoryReaction] = Math.max((counts[reaction.reaction_type as StoryReaction] ?? 1) - 1, 0)
-        return { ...item, reaction_counts: counts }
-      }))
+    enabled: isRegistered && active && loaded,
+    onReaction: (reaction) => {
+      if (reaction.user_id === userId) return
+      scheduleRefresh()
     },
   })
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !active) return
-    const handleResume = () => {
-      setCursor(null)
-      setComments([])
-      setLoaded(false)
-    }
-    window.addEventListener(REALTIME_RESUMED_EVENT, handleResume)
-    return () => window.removeEventListener(REALTIME_RESUMED_EVENT, handleResume)
-  }, [active])
+    if (typeof window === 'undefined' || !active || !loaded) return
+    window.addEventListener(REALTIME_RESUMED_EVENT, scheduleRefresh)
+    return () => window.removeEventListener(REALTIME_RESUMED_EVENT, scheduleRefresh)
+  }, [active, loaded, scheduleRefresh])
 
   const rows = useMemo<Row[]>(() => {
     const chronological = [...comments].reverse()

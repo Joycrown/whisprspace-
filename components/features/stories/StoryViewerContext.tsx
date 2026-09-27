@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePathname } from 'next/navigation'
 import { useUserStore } from '@/store/userStore'
 import { StoriesApiError, storiesApi } from '@/lib/stories/api-client'
-import { useStoryReactionsRealtime } from '@/lib/core/realtime/hooks/useStoryReactionsRealtime'
+import { useStoryLiveRealtime } from '@/lib/core/realtime/hooks/useStoryLiveRealtime'
 import { REALTIME_RESUMED_EVENT } from '@/lib/core/supabase/raw-realtime'
 import type { ReactionCounts, StoryReaction, StoryViewerState } from '@/lib/stories/types'
 import AccountRequiredSheet, { type AccountReason } from './AccountRequiredSheet'
@@ -64,6 +64,7 @@ export function StoryViewerProvider({ storyId, initialReactionCounts, replyCount
         setViewer(state)
         setMyReaction(state.myReaction ?? null)
         if (state.reactionCounts) setReactionCounts(state.reactionCounts)
+        if (typeof state.replyCount === 'number') setLiveReplyCount(state.replyCount)
       })
       .catch(() => {})
       .finally(() => onSettled?.())
@@ -84,35 +85,12 @@ export function StoryViewerProvider({ storyId, initialReactionCounts, replyCount
     return () => window.removeEventListener(REALTIME_RESUMED_EVENT, handleResume)
   }, [fetchViewer])
 
-  useStoryReactionsRealtime({
+  useStoryLiveRealtime({
     storyId,
     enabled: isRegistered && viewerLoaded,
-    onStoryUpdate: (story) => {
-      if (typeof story?.reply_count === 'number') setLiveReplyCount(story.reply_count)
-      if (story?.reaction_counts) setReactionCounts(story.reaction_counts)
-    },
-    onStoryReactionInsert: (reaction) => {
-      if (reaction?.user_id === userId) return
-      setReactionCounts((current) => ({
-        ...current,
-        [reaction.reaction_type]: (current[reaction.reaction_type as StoryReaction] ?? 0) + 1,
-      }))
-    },
-    onStoryReactionUpdate: (reaction, old) => {
-      if (reaction?.user_id === userId) return
-      setReactionCounts((current) => {
-        const next = { ...current }
-        if (old?.reaction_type) next[old.reaction_type as StoryReaction] = Math.max((next[old.reaction_type as StoryReaction] ?? 1) - 1, 0)
-        if (reaction?.reaction_type) next[reaction.reaction_type as StoryReaction] = (next[reaction.reaction_type as StoryReaction] ?? 0) + 1
-        return next
-      })
-    },
-    onStoryReactionDelete: (reaction) => {
-      if (reaction?.user_id === userId) return
-      setReactionCounts((current) => ({
-        ...current,
-        [reaction.reaction_type]: Math.max((current[reaction.reaction_type as StoryReaction] ?? 1) - 1, 0),
-      }))
+    onUpdate: (row) => {
+      if (typeof row.reply_count === 'number') setLiveReplyCount(row.reply_count)
+      if (row.reaction_counts && !reactingRef.current) setReactionCounts(row.reaction_counts)
     },
   })
 

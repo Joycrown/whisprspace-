@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
   const [{ data: profile }, { data: story }, { data: follow }, { data: reaction }] = await Promise.all([
     supabaseAdmin.from('users').select('is_anonymous').eq('id', user.id).maybeSingle(),
-    supabaseAdmin.from('stories').select('author_user_id, feature_consent, reaction_counts').eq('id', storyId).maybeSingle(),
+    supabaseAdmin.from('stories').select('author_user_id, feature_consent, reaction_counts, reply_count').eq('id', storyId).maybeSingle(),
     supabaseAdmin.from('story_follows').select('story_id').eq('story_id', storyId).eq('user_id', user.id).maybeSingle(),
     supabaseAdmin.from('story_reactions').select('reaction_type').eq('story_id', storyId).eq('user_id', user.id).maybeSingle(),
   ])
@@ -29,6 +29,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     featureConsent: isAuthor ? Boolean(story?.feature_consent) : null,
     myReaction: isStoryReaction(reaction?.reaction_type) ? reaction.reaction_type : null,
     reactionCounts: (story?.reaction_counts as ReactionCounts | undefined) ?? {},
+    replyCount: typeof story?.reply_count === 'number' ? story.reply_count : undefined,
   }
   return NextResponse.json(state)
 }

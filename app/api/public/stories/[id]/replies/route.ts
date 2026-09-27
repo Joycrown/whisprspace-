@@ -16,7 +16,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const page = await getStoryReplies(storyId, cursor)
     return NextResponse.json(page, {
       headers: {
-        'Cache-Control': `public, s-maxage=${REPLIES_REVALIDATE_SECONDS}, stale-while-revalidate=120`,
+        'Cache-Control': cursor
+          ? `public, s-maxage=${REPLIES_REVALIDATE_SECONDS}, stale-while-revalidate=120`
+          : 'no-store',
       },
     })
   } catch {
