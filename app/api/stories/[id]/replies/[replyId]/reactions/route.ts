@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { resolveUserFromRequest } from '@/lib/security/request-auth'
 import { sanitizeUuid } from '@/lib/security/input-sanitization'
-import { resolveRegisteredUser } from '@/lib/stories/server'
+import { resolveRegisteredUser, revalidateStoryReplies } from '@/lib/stories/server'
 import { isStoryReaction } from '@/lib/stories/types'
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string; replyId: string }> }) {
@@ -34,5 +34,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return NextResponse.json({ error: 'Unable to save your reaction.' }, { status: 500 })
   }
 
+  revalidateStoryReplies(storyId)
   return NextResponse.json(data)
 }

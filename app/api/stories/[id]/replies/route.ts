@@ -4,7 +4,7 @@ import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { containsBlockedContent } from '@/lib/moderation/blocklist'
 import { resolveUserFromRequest } from '@/lib/security/request-auth'
 import { sanitizeMultilineInput, sanitizeUuid } from '@/lib/security/input-sanitization'
-import { resolveRegisteredUser, revalidateStoryReplies } from '@/lib/stories/server'
+import { resolveRegisteredUser, revalidateStory, revalidateStoryReplies } from '@/lib/stories/server'
 import { STORY_LIMITS } from '@/lib/stories/types'
 
 const REPLY_WINDOW_MS = 60 * 1000
@@ -80,6 +80,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
 
     revalidateStoryReplies(storyId)
+    revalidateStory(storyId)
     const avatarFor = (senderId: string) => createHash('md5').update(`${story.thread_id}:${senderId}`).digest('hex')
     return NextResponse.json(
       {

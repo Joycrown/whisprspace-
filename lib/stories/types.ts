@@ -175,6 +175,44 @@ export interface StoryViewerState {
   featureConsent: boolean | null
   myReaction?: StoryReaction | null
   reactionCounts?: ReactionCounts
+  replyCount?: number
+}
+
+export interface StoryLiveRow {
+  story_id: string
+  title: string
+  category: StoryCategory
+  family: StoryFamily
+  excerpt: string
+  is_episodic: boolean
+  status: StoryStatus
+  is_sensitive: boolean
+  episode_count: number
+  reply_count: number
+  follower_count: number
+  reaction_counts: ReactionCounts
+  last_episode_at: string
+  created_at: string
+  visible: boolean
+}
+
+export function storyLiveToFeedItem(row: StoryLiveRow): StoryFeedItem {
+  return {
+    id: row.story_id,
+    title: row.title,
+    category: row.category,
+    family: row.family,
+    excerpt: row.excerpt,
+    is_episodic: row.is_episodic,
+    status: row.status,
+    is_sensitive: row.is_sensitive,
+    episode_count: row.episode_count,
+    reply_count: row.reply_count,
+    follower_count: row.follower_count,
+    last_episode_at: row.last_episode_at,
+    created_at: row.created_at,
+    reaction_counts: row.reaction_counts,
+  }
 }
 
 export const LIVE_WINDOW_DAYS = 14
