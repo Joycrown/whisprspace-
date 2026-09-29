@@ -27,18 +27,22 @@ function recordRead(storyId: string) {
   const today = new Date().toISOString().slice(0, 10)
   try {
     if (localStorage.getItem(readKey(storyId)) === today) return false
-    localStorage.setItem(readKey(storyId), today)
   } catch {}
   const key = readerKey()
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-  if (!key || !url || !anon) return true
+  if (!key || !url || !anon) return false
   fetch(`${url.replace(/\/$/, '')}/rest/v1/rpc/record_story_read`, {
     method: 'POST',
     keepalive: true,
     headers: { apikey: anon, Authorization: `Bearer ${anon}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ p_story_id: storyId, p_reader_key: key }),
-  }).catch(() => {})
+  })
+    .then((response) => {
+      if (!response.ok) return
+      try { localStorage.setItem(readKey(storyId), today) } catch {}
+    })
+    .catch(() => {})
   return true
 }
 
