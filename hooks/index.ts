@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 // Custom React hooks for state management and API operations
-// This file provides easy-to-use hooks for all application functionality
 
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -23,7 +22,6 @@ import {
 } from '@/types';
 import { api } from '../lib/api';
 
-// Authentication hooks
 export const useAuth = () => {
   const {
     session,

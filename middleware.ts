@@ -6,7 +6,6 @@ const LAUNCH_TIME = new Date('2026-03-20T11:00:00.000Z').getTime()
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Always pass through static assets, API routes, and Next.js internals
   if (
     pathname.startsWith('/_next') ||
     pathname.startsWith('/api') ||
