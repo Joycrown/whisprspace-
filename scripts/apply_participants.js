@@ -11,6 +11,7 @@ if (!supabaseUrl || !supabaseServiceKey) {
   process.exit(1);
 }
 
+
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 async function runSQL() {
