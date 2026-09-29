@@ -25,6 +25,7 @@ import { useThreadStore } from '@/store/threadStore';
 import { useUserStore } from '@/store/userStore';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from 'next/navigation';
+import { track } from '@/lib/analytics/track';
 import {
   ThreadType,
   ThreadCategory,
@@ -240,7 +241,15 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
       const threadId = await createThread(formData);
 
       if (threadId) {
-        // Clear draft
+        track('discussion_created', {
+          feature: formData.isPremium ? 'exclusive_discussions' : 'discussions',
+          thread_id: threadId,
+          type: formData.type,
+          privacy: formData.privacy,
+          is_paid: Boolean(formData.isPremium),
+          price: formData.isPremium ? formData.price : undefined,
+          origin: onCreated ? 'converted' : 'composer',
+        });
         localStorage.removeItem('thread_draft');
 
         // Post-create hook (e.g. import inbox messages into the new thread).

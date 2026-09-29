@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { usePremiumThread } from '@/lib/stripe/usePremiumThread'
 import { getUserCountry } from '@/lib/payments/geo'
+import { track } from '@/lib/analytics/track'
 import { getCurrencyForCountry, formatCurrency, SupportedCurrency } from '@/lib/payments/currency'
 
 interface DualGatewayPremiumGateProps {
@@ -87,8 +88,14 @@ export function DualGatewayPremiumGate({
     }
   }, [hasAccess])
 
+  useEffect(() => {
+    if (isChecking || hasAccess) return
+    track('paid_discussion_preview_viewed', { feature: 'exclusive_discussions', thread_id: threadId, price })
+  }, [isChecking, hasAccess, threadId, price])
+
   const handlePurchase = async () => {
     const currency = getCurrencyForCountry(userCountry)
+    track('paid_discussion_purchase_started', { feature: 'exclusive_discussions', thread_id: threadId, price, currency, country: userCountry })
     await purchaseAccess(userCountry, currency)
   }
 

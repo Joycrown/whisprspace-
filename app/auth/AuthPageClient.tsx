@@ -17,6 +17,7 @@ import { generatePseudonym } from '@/lib/utils/pseudonym-generator';
 import { checkUsernameAvailability, updateUsername } from '@/lib/services/username-service';
 import { validateUsername } from '@/lib/utils/username-validation';
 import { STORIES_FEED_PATH } from '@/lib/stories/config';
+import { track } from '@/lib/analytics/track';
 
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
@@ -146,6 +147,7 @@ const AuthPage = () => {
           duration: 4000,
         });
       } else if (view === 'signup') {
+        track('signup_completed', { feature: 'growth', reason: reasonParam || 'none', redirect_to: redirectTo });
         if (reasonParam === 'prompt') {
           import('posthog-js').then(({ default: posthog }) => {
             posthog.capture('prompt_signup_completed')

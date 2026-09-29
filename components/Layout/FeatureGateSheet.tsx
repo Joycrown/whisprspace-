@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import Link from 'next/link'
 import { BookOpen, Check, MessageCircle, MessagesSquare, Sparkles, User, X } from 'lucide-react'
 import { FEATURE_GATES, type GatedFeature } from '@/lib/navigation/feature-gates'
+import { track } from '@/lib/analytics/track'
 
 const ICONS: Record<GatedFeature, typeof BookOpen> = {
   inbox: MessageCircle,
@@ -16,6 +17,11 @@ const ICONS: Record<GatedFeature, typeof BookOpen> = {
 export default function FeatureGateSheet({ feature, onClose }: { feature: GatedFeature; onClose: () => void }) {
   const gate = FEATURE_GATES[feature]
   const Icon = ICONS[feature]
+
+  const choose = (action: 'signup' | 'login' | 'guest') => {
+    track('feature_gate_cta_clicked', { feature: 'growth', gate: feature, action })
+    onClose()
+  }
 
   useEffect(() => {
     import('posthog-js').then(({ default: posthog }) => posthog.capture('feature_gate_shown', { feature })).catch(() => {})
@@ -57,7 +63,7 @@ export default function FeatureGateSheet({ feature, onClose }: { feature: GatedF
         <Link
           href={gate.signupHref}
           prefetch={false}
-          onClick={onClose}
+          onClick={() => choose('signup')}
           className="mt-6 flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white active:scale-[0.98]"
         >
           {gate.primaryLabel}
@@ -65,13 +71,13 @@ export default function FeatureGateSheet({ feature, onClose }: { feature: GatedF
         <Link
           href={gate.loginHref}
           prefetch={false}
-          onClick={onClose}
+          onClick={() => choose('login')}
           className="mt-2 flex h-11 w-full items-center justify-center rounded-xl border border-[#2A2A38] text-sm text-[#DFDFE7] hover:bg-white/[0.03]"
         >
           I already have an account
         </Link>
         {gate.guestHref && (
-          <Link href={gate.guestHref} prefetch={false} onClick={onClose} className="mt-3 block text-center text-xs text-[#8F8FA3] underline-offset-4 hover:text-[#F2F2F6] hover:underline">
+          <Link href={gate.guestHref} prefetch={false} onClick={() => choose('guest')} className="mt-3 block text-center text-xs text-[#8F8FA3] underline-offset-4 hover:text-[#F2F2F6] hover:underline">
             {gate.guestLabel}
           </Link>
         )}

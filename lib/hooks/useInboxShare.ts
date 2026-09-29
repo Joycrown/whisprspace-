@@ -2,6 +2,7 @@
 
 import { useUserStore } from '@/store/userStore'
 import { useShareLink } from './useShareLink'
+import { track } from '@/lib/analytics/track'
 
 const FALLBACK_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://whisprspace.com'
 
@@ -23,13 +24,23 @@ export function useInboxShare() {
 
   const shared = useShareLink({ link, shareText: SHARE_TEXT, downloadName: `whisprspace-${handle || 'card'}` })
 
-  const shareViaEmail = () => shared.shareViaEmail('Send me an anonymous message')
+  const withTracking = <A extends unknown[], R>(channel: string, action: (...args: A) => R) => (...args: A): R => {
+    track('inbox_link_shared', { feature: 'inbox', channel })
+    return action(...args)
+  }
 
   return {
     ...shared,
     link,
     cardLink,
     handle,
-    shareViaEmail,
+    copyLink: withTracking('copy', shared.copyLink),
+    shareOnTwitter: withTracking('x', shared.shareOnTwitter),
+    shareOnFacebook: withTracking('facebook', shared.shareOnFacebook),
+    shareOnWhatsApp: withTracking('whatsapp', shared.shareOnWhatsApp),
+    shareOnLinkedIn: withTracking('linkedin', shared.shareOnLinkedIn),
+    shareOnInstagram: withTracking('instagram', shared.shareOnInstagram),
+    downloadShareCard: withTracking('download_card', shared.downloadShareCard),
+    shareViaEmail: withTracking('email', () => shared.shareViaEmail('Send me an anonymous message')),
   }
 }

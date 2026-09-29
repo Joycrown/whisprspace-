@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronRight, MessagesSquare, PenLine, Sparkles, X } from 'lucide-react'
 import type { GatedFeature } from '@/lib/navigation/feature-gates'
+import { track } from '@/lib/analytics/track'
 
 interface CreateOption {
   key: string
@@ -56,7 +57,12 @@ export default function CreateSheet({ onClose, onGate, gateFor }: CreateSheetPro
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
+  useEffect(() => {
+    track('create_menu_opened', { feature: 'growth' })
+  }, [])
+
   const choose = (option: CreateOption) => {
+    track('create_option_chosen', { feature: 'growth', option: option.key, gated: Boolean(option.gate) })
     onClose()
     if (option.gate) onGate(option.gate)
     else router.push(option.href)

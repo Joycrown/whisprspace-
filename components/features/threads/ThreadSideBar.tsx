@@ -12,6 +12,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useToast } from '@/components/ui/Toast';
 import { createThreadInvite } from '@/lib/threads';
 import { buildThreadPath } from '@/lib/threads/thread-url';
+import { track } from '@/lib/analytics/track';
 
 interface ThreadSidebarProps {
   thread: Thread & { reportCount: number; participants: Participant[] };
@@ -467,7 +468,8 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
                         saveThread(thread.id, userId).then(result => {
                           if (result.success) {
                             showToast({ type: 'success', title: 'Discussion saved', message: 'Your discussion will never expire.' });
-                            window.location.reload();
+                            track('discussion_saved', { feature: thread.isPremium ? 'exclusive_discussions' : 'discussions', thread_id: thread.id });
+                            window.setTimeout(() => window.location.reload(), 400);
                           } else {
                             showToast({ type: 'error', title: 'Failed to save', message: result.error || 'Could not save discussion' });
                           }
@@ -498,7 +500,8 @@ const ThreadSidebar: React.FC<ThreadSidebarProps> = ({
                         extendThreadExpiration(thread.id, userId).then(result => {
                           if (result.success) {
                             showToast({ type: 'success', title: 'Extended', message: `New expiration: ${result.newExpiresAt ? new Date(result.newExpiresAt).toLocaleString() : ''}` });
-                            window.location.reload();
+                            track('discussion_extended', { feature: thread.isPremium ? 'exclusive_discussions' : 'discussions', thread_id: thread.id });
+                            window.setTimeout(() => window.location.reload(), 400);
                           } else {
                             showToast({ type: 'error', title: 'Failed', message: result.error || 'Could not extend discussion' });
                           }

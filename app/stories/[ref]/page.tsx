@@ -1,19 +1,20 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, permanentRedirect } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Eye } from 'lucide-react'
 import RelativeTime from '@/components/features/stories/RelativeTime'
 import SensitiveGate from '@/components/features/stories/SensitiveGate'
 import StoriesTopBar from '@/components/features/stories/StoriesTopBar'
 import StoryActions from '@/components/features/stories/StoryActions'
 import StoryComments from '@/components/features/stories/StoryComments'
+import StoryReadTracker from '@/components/features/stories/StoryReadTracker'
 import { StoryReactionBar } from '@/components/features/stories/StoryReactions'
 import StoryTags from '@/components/features/stories/StoryTags'
 import { StoryViewerProvider } from '@/components/features/stories/StoryViewerContext'
 import { STORIES_FEED_PATH } from '@/lib/stories/config'
 import { getStoryPage } from '@/lib/stories/server'
 import { buildStoryPath, extractStoryIdFromRef, isCanonicalStoryRef } from '@/lib/stories/story-url'
-import { CATEGORY_META, FAMILY_LABELS, type StoryPageData } from '@/lib/stories/types'
+import { CATEGORY_META, FAMILY_LABELS, formatCount, type StoryPageData } from '@/lib/stories/types'
 import { siteConfig } from '@/lib/seo'
 
 export const revalidate = 600
@@ -104,6 +105,7 @@ export default async function StoryPage({ params }: PageProps) {
           {episode.edited_at && <p className="mt-2 text-[11px] text-[#5C5C6E]">Edited</p>}
         </article>
       ))}
+      <StoryReadTracker storyId={story.id} category={story.category} episodeCount={story.episode_count} />
     </div>
   )
 
@@ -130,6 +132,15 @@ export default async function StoryPage({ params }: PageProps) {
                 <RelativeTime iso={story.last_episode_at} prefix="Last episode " />
               ) : (
                 <RelativeTime iso={story.created_at} />
+              )}
+              {(story.read_count ?? 0) > 0 && (
+                <>
+                  <span>·</span>
+                  <span className="inline-flex items-center gap-1" title={`Read ${story.read_count} times`}>
+                    <Eye className="h-3.5 w-3.5" />
+                    {formatCount(story.read_count ?? 0)}
+                  </span>
+                </>
               )}
               {story.is_episodic && story.cadence_label && story.status === 'ongoing' && (
                 <>

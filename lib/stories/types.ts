@@ -113,6 +113,17 @@ export interface StoryFeedItem {
   last_episode_at: string
   created_at: string
   reaction_counts?: Partial<Record<'like' | 'love' | 'laugh' | 'sad' | 'angry', number>>
+  read_count?: number
+}
+
+export function formatCount(value: number): string {
+  if (value < 1000) return String(value)
+  if (value < 1_000_000) {
+    const thousands = value / 1000
+    return `${thousands < 10 ? Math.floor(thousands * 10) / 10 : Math.floor(thousands)}k`
+  }
+  const millions = value / 1_000_000
+  return `${millions < 10 ? Math.floor(millions * 10) / 10 : Math.floor(millions)}M`
 }
 
 export interface StoryFeedPage {

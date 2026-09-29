@@ -19,6 +19,7 @@ import {
   type SeriesLimitState,
   type StoryCategory,
 } from '@/lib/stories/types'
+import { track } from '@/lib/analytics/track'
 import AccountRequiredSheet from './AccountRequiredSheet'
 import StoryExport from './StoryExport'
 import StoryShareButton from './StoryShareButton'
@@ -151,6 +152,7 @@ export default function StoryComposer() {
 
   const chooseCategory = (category: StoryCategory) => {
     const isEpisodic = resolveIsEpisodic(category, false)
+    track('story_composer_started', { feature: 'stories', category, is_registered: isRegistered })
     update({ category, isEpisodic, step: 'write' })
     if (sessionValidated && !isRegistered && storyRequiresAccount(category, isEpisodic)) setNeedsAccount(true)
   }

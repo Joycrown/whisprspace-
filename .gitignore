@@ -50,6 +50,12 @@ next-env.d.ts
 /artifacts/
 *_PLAYBOOK.md
 
+# local docs, exports and seed batches
+/*.md
+!/README.md
+/*.pdf
+/whs_new_batch*.json
+
 # Claude Code local settings
 .claude/settings.local.json
 
@@ -57,3 +63,4 @@ next-env.d.ts
 /Job Application*.csv
 /scripts/send-onboarding-emails.js
 /scripts/_preview/
+/WhisprSpace-*Agreement*.pdf

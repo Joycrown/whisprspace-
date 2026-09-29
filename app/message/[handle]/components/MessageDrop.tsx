@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { detectSource, track } from '@/lib/analytics/track';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Send, ShieldCheck, Zap, AlertCircle } from 'lucide-react';
 import * as rawAuth from '@/lib/core/supabase/raw-auth';
@@ -49,6 +50,10 @@ const MessageDrop = ({ recipientId, recipientName }: MessageDropProps) => {
   const [error, setError] = useState<string | null>(null);
   const [showThanks, setShowThanks] = useState(false);
 
+  useEffect(() => {
+    track('message_page_viewed', { feature: 'inbox', source: detectSource() });
+  }, []);
+
   const handleSend = async () => {
     const trimmed = message.trim();
     if (!trimmed) return;
@@ -70,6 +75,7 @@ const MessageDrop = ({ recipientId, recipientName }: MessageDropProps) => {
         if (convError || !conversationData) throw new Error(convError || 'Failed to start conversation');
         const { error: sendError } = await sendMessage(conversationData.id, trimmed);
         if (sendError) throw new Error(sendError);
+        track('message_sent', { feature: 'inbox', mode: 'conversation', sender_tier: 'registered' });
         router.push(`/inbox/${conversationData.id}`);
         return;
       }
@@ -89,6 +95,7 @@ const MessageDrop = ({ recipientId, recipientName }: MessageDropProps) => {
         throw new Error(data?.error || 'Failed to send message');
       }
 
+      track('message_sent', { feature: 'inbox', mode: 'one_off', sender_tier: user ? (user.is_anonymous ? 'guest' : 'registered') : 'visitor' });
       setMessage('');
       setShowThanks(true);
     } catch (err: unknown) {

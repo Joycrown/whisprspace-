@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, SlidersHorizontal, X } from 'lucide-react'
+import { track } from '@/lib/analytics/track'
 import {
   CATEGORY_META,
   FAMILY_LABELS,
@@ -82,6 +83,7 @@ export default function StoryFeed({ initial }: { initial: StoryFeedPage }) {
   })
 
   const select = useCallback(async (nextFamily: StoryFamily | null, nextCategory: StoryCategory | null, nextSort: StorySort) => {
+    track('story_feed_filtered', { feature: 'stories', family: nextFamily ?? 'all', category: nextCategory ?? 'all', sort: nextSort })
     setFamily(nextFamily)
     setCategory(nextCategory)
     setSort(nextSort)
