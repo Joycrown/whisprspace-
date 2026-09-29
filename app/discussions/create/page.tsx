@@ -7,6 +7,7 @@ import { ThreadDraft, CreateThreadForm } from '@/types';
 import { INBOX_THREAD_DRAFT_KEY } from '@/components/features/inbox/MessageModal';
 import { PROMPT_THREAD_DRAFT_KEY, type PromptThreadDraft } from '@/lib/prompts/open-floor';
 import * as rawAuth from '@/lib/core/supabase/raw-auth';
+import { track } from '@/lib/analytics/track';
 
 interface InboxThreadDraft {
   conversationId: string;
@@ -115,6 +116,7 @@ function CreateThreadContent() {
       }
       throw new Error(detail ? `Failed to import messages: ${detail}` : 'Failed to import messages');
     }
+    if (res.ok) track('message_converted_to_discussion', { feature: 'inbox', thread_id: threadId });
   };
 
   // The thread is deliberately created by the normal composer first. This

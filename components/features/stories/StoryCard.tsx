@@ -1,8 +1,8 @@
 import { memo } from 'react'
 import Link from 'next/link'
-import { Bell, BookOpen, MessageCircle } from 'lucide-react'
+import { Bell, BookOpen, Eye, MessageCircle } from 'lucide-react'
 import { buildStoryPath } from '@/lib/stories/story-url'
-import type { StoryFeedItem } from '@/lib/stories/types'
+import { formatCount, type StoryFeedItem } from '@/lib/stories/types'
 import RelativeTime from './RelativeTime'
 import StoryShareButton from './StoryShareButton'
 import StoryTags from './StoryTags'
@@ -23,6 +23,12 @@ function StoryCard({ story }: { story: StoryFeedItem }) {
           {story.excerpt}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[#5C5C6E]">
+          {(story.read_count ?? 0) > 0 && (
+            <span className="flex items-center gap-1" title={`Read ${story.read_count} times`}>
+              <Eye className="h-3.5 w-3.5" />
+              {formatCount(story.read_count ?? 0)}
+            </span>
+          )}
           <span className="flex items-center gap-1">
             <MessageCircle className="h-3.5 w-3.5" />
             {story.reply_count}

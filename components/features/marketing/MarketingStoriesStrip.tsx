@@ -1,6 +1,6 @@
-import { ArrowRight, MessageCircle } from 'lucide-react'
+import { ArrowRight, Eye, MessageCircle } from 'lucide-react'
 import { buildStoryPath } from '@/lib/stories/story-url'
-import { CATEGORY_META, REACTION_EMOJI, STORY_REACTIONS, type ReactionCounts, type StoryCategory, type StoryFeedItem } from '@/lib/stories/types'
+import { CATEGORY_META, formatCount, REACTION_EMOJI, STORY_REACTIONS, type ReactionCounts, type StoryCategory, type StoryFeedItem } from '@/lib/stories/types'
 
 interface MarketingStoriesStripProps {
   stories: StoryFeedItem[]
@@ -15,6 +15,7 @@ interface StripCard {
   title: string
   excerpt: string
   comments: number
+  reads: number
   reactions: ReactionCounts
   episode?: number
   blurred?: boolean
@@ -27,6 +28,7 @@ const SHOWCASE: Omit<StripCard, 'href'>[] = [
     title: 'My landlord gave us 7 days to leave. Day 3.',
     excerpt: 'We found a place this morning. Then the agent said something that made my mum sit down on the floor…',
     comments: 184,
+    reads: 12400,
     reactions: { sad: 312, love: 140, angry: 96 },
     episode: 3,
   },
@@ -36,6 +38,7 @@ const SHOWCASE: Omit<StripCard, 'href'>[] = [
     title: 'I never told my dad I didn’t finish uni',
     excerpt: 'He framed a photo from a graduation that never happened. It’s still in the living room, and he shows every visitor.',
     comments: 263,
+    reads: 18900,
     reactions: { sad: 540, love: 221, like: 48 },
   },
   {
@@ -44,6 +47,7 @@ const SHOWCASE: Omit<StripCard, 'href'>[] = [
     title: 'The person spreading the rumour was my best friend',
     excerpt: 'For two years I defended her to everyone. Then I saw her phone screen light up with my name on it.',
     comments: 317,
+    reads: 21300,
     reactions: { angry: 402, sad: 188, love: 63 },
   },
   {
@@ -52,6 +56,7 @@ const SHOWCASE: Omit<StripCard, 'href'>[] = [
     title: 'The last voice note on her phone',
     excerpt: 'Police said she’d been gone for three days. The voice note was sent this morning.',
     comments: 96,
+    reads: 6800,
     reactions: { love: 205, sad: 77, laugh: 12 },
     episode: 5,
   },
@@ -61,6 +66,7 @@ const SHOWCASE: Omit<StripCard, 'href'>[] = [
     title: 'I turned down a job at a startup that’s now worth millions',
     excerpt: 'They offered shares instead of a bigger salary. I laughed and took the bank job. I still check their news every week.',
     comments: 141,
+    reads: 9700,
     reactions: { sad: 260, laugh: 150, like: 74 },
   },
   {
@@ -69,6 +75,7 @@ const SHOWCASE: Omit<StripCard, 'href'>[] = [
     title: 'Letters I will never send',
     excerpt: 'To the version of me who waited by the gate: he wasn’t coming, and you were never the reason…',
     comments: 72,
+    reads: 4200,
     reactions: { love: 388, sad: 190 },
   },
 ]
@@ -88,6 +95,7 @@ export default function MarketingStoriesStrip({ stories, appUrl, storiesHref }: 
     title: story.title,
     excerpt: story.excerpt,
     comments: story.reply_count,
+    reads: story.read_count ?? 0,
     reactions: story.reaction_counts ?? {},
     episode: story.is_episodic && story.episode_count > 1 ? story.episode_count : undefined,
     blurred: story.is_sensitive,
@@ -144,9 +152,17 @@ export default function MarketingStoriesStrip({ stories, appUrl, storiesHref }: 
                           Be the first to react
                         </span>
                       )}
-                  <span className="ml-auto inline-flex items-center gap-1 text-gray-500">
-                    <MessageCircle className="h-3.5 w-3.5" />
-                    {card.comments} {card.comments === 1 ? 'comment' : 'comments'}
+                  <span className="ml-auto flex items-center gap-3 text-gray-500">
+                    {card.reads > 0 && (
+                      <span className="inline-flex items-center gap-1" title={`Read ${card.reads} times`}>
+                        <Eye className="h-3.5 w-3.5" />
+                        {formatCount(card.reads)}
+                      </span>
+                    )}
+                    <span className="inline-flex items-center gap-1" title={`${card.comments} comments`}>
+                      <MessageCircle className="h-3.5 w-3.5" />
+                      {formatCount(card.comments)}
+                    </span>
                   </span>
                 </div>
               </a>

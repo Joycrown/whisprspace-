@@ -19,6 +19,7 @@ import { findDirectConversationWithUser } from '@/lib/messaging';
 import { confirmThreadPurchase } from '@/lib/flutterwave/flutterwave-service';
 import { DualGatewayPremiumGate } from '@/components/features/premium/DualGatewayPremiumGate';
 import { buildThreadPath, extractThreadIdFromRef } from '@/lib/threads/thread-url';
+import { detectSource, track } from '@/lib/analytics/track';
 import { Loader2, X } from 'lucide-react';
 
 type ThreadPreviewMessage = {
@@ -175,7 +176,19 @@ const ThreadPage = () => {
     setShowPreviewModal(false);
   };
 
-  // Prevent body scroll when drawer is open
+  const openedTrackedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!currentThread?.id || openedTrackedRef.current === currentThread.id) return;
+    openedTrackedRef.current = currentThread.id;
+    track('discussion_opened', {
+      feature: currentThread.isPremium ? 'exclusive_discussions' : 'discussions',
+      thread_id: currentThread.id,
+      type: currentThread.type,
+      privacy: currentThread.privacy,
+      source: detectSource(),
+    });
+  }, [currentThread?.id, currentThread?.isPremium, currentThread?.type, currentThread?.privacy]);
+
   useEffect(() => {
     if (isSidebarOpen) {
       document.body.style.overflow = 'hidden';
@@ -626,11 +639,16 @@ const ThreadPage = () => {
       return;
     }
 
-    // Clear reply state immediately for better UX
     setReplyingTo(undefined);
 
+    track('discussion_reply_sent', {
+      feature: currentThread.isPremium ? 'exclusive_discussions' : 'discussions',
+      thread_id: threadId,
+      is_quote: Boolean(replyingTo?.id),
+      has_attachment: Boolean(attachments?.length),
+      is_creator: currentThread.creatorId === currentUserId,
+    });
 
-    // Send message using React Query mutation
     createMessageMutation.mutate({
       threadId,
       content,
@@ -901,6 +919,7 @@ const ThreadPage = () => {
     }
     if (!currentThread || currentThread.type !== 'poll' || !currentThread.pollId || !threadId || hasAlreadyVoted) return;
 
+    track('poll_voted', { feature: 'discussions', thread_id: threadId });
     voteOnPollMutation.mutate({
       pollId: currentThread.pollId,
       optionId,

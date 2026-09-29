@@ -13,6 +13,7 @@ import MessageModal from '@/components/features/inbox/MessageModal';
 import { ShareDropdown } from '@/components/features/inbox/ShareDropdown';
 import UserShareCard from '@/components/features/inbox/UserShareCard';
 import { useInboxShare } from '@/lib/hooks/useInboxShare';
+import { track } from '@/lib/analytics/track';
 import DeleteConfirmModal from '@/components/ui/DeleteConfirmModal';
 import { SYSTEM_USER_ID } from '@/lib/welcome/templates';
 
@@ -167,7 +168,7 @@ function InboxPageContent() {
   }, [refetchConversations]);
 
   const handleConversationClick = (conversation: Conversation) => {
-    // If one-time message, open modal
+    track('message_opened', { feature: 'inbox', kind: conversation.type === 'one_time' ? 'one_off' : 'conversation', unread: (conversation.unreadCount || 0) > 0 });
     if (conversation.type === 'one_time') {
       openOneOffConversation(conversation);
       return;

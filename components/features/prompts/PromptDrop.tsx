@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { detectSource, track } from '@/lib/analytics/track'
 import { AlertCircle, CheckCircle2, Send } from 'lucide-react'
 import posthog from 'posthog-js'
 import type { PromptResponseFormat } from '@/lib/prompts/types'
@@ -26,6 +27,10 @@ export default function PromptDrop({ promptId, question, expiresAt, responseForm
   const [dismissed, setDismissed] = useState(false)
 
   const isChoice = responseFormat === 'choice' && Array.isArray(options) && options.length >= 2
+
+  useEffect(() => {
+    track('ask_page_viewed', { feature: 'curiosity_ask', prompt_id: promptId, format: isChoice ? 'icebreaker' : 'open', source: detectSource() })
+  }, [promptId, isChoice])
 
   const sendText = async () => {
     const content = answer.trim()
