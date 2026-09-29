@@ -89,6 +89,8 @@ export default async function StoryPage({ params }: PageProps) {
     commentCount: story.reply_count,
   }
 
+  const wordCount = story.episodes.reduce((total, episode) => total + (episode.body.match(/\S+/g)?.length ?? 0), 0)
+
   const body = (
     <div className="space-y-8">
       {story.episodes.map((episode) => (
@@ -105,7 +107,7 @@ export default async function StoryPage({ params }: PageProps) {
           {episode.edited_at && <p className="mt-2 text-[11px] text-[#5C5C6E]">Edited</p>}
         </article>
       ))}
-      <StoryReadTracker storyId={story.id} category={story.category} episodeCount={story.episode_count} />
+      <StoryReadTracker storyId={story.id} category={story.category} episodeCount={story.episode_count} wordCount={wordCount} />
     </div>
   )
 

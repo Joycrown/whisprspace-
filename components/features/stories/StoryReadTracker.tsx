@@ -4,8 +4,15 @@ import { useEffect, useRef } from 'react'
 import { detectSource, track } from '@/lib/analytics/track'
 import type { StoryCategory } from '@/lib/stories/types'
 
-const READ_AFTER_MS = 15_000
-const FINISH_MIN_MS = 4_000
+const WORDS_PER_MINUTE = 230
+const READ_SHARE = 0.3
+const MIN_READ_MS = 3_000
+const MAX_READ_MS = 15_000
+
+function readThresholdMs(wordCount: number) {
+  const fullReadMs = (Math.max(wordCount, 1) / WORDS_PER_MINUTE) * 60_000
+  return Math.min(MAX_READ_MS, Math.max(MIN_READ_MS, fullReadMs * READ_SHARE))
+}
 const READER_KEY = 'whs_reader_key'
 const readKey = (storyId: string) => `whs_story_read:${storyId}`
 
@@ -50,13 +57,16 @@ interface StoryReadTrackerProps {
   storyId: string
   category: StoryCategory
   episodeCount: number
+  wordCount: number
 }
 
-export default function StoryReadTracker({ storyId, category, episodeCount }: StoryReadTrackerProps) {
+export default function StoryReadTracker({ storyId, category, episodeCount, wordCount }: StoryReadTrackerProps) {
   const endRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    const base = { feature: 'stories' as const, story_id: storyId, category, episode_count: episodeCount }
+    const readAfterMs = readThresholdMs(wordCount)
+    const finishMinMs = Math.min(readAfterMs, MIN_READ_MS)
+    const base = { feature: 'stories' as const, story_id: storyId, category, episode_count: episodeCount, word_count: wordCount }
     const source = detectSource()
     track('story_opened', { ...base, source })
 
@@ -83,10 +93,10 @@ export default function StoryReadTracker({ storyId, category, episodeCount }: St
 
     const check = () => {
       const ms = elapsed()
-      if (reachedEnd && ms >= FINISH_MIN_MS) {
+      if (reachedEnd && ms >= finishMinMs) {
         markRead('end')
         markFinished()
-      } else if (ms >= READ_AFTER_MS) {
+      } else if (ms >= readAfterMs) {
         markRead('time')
       }
       if (read && finished) window.clearInterval(interval)
@@ -120,7 +130,7 @@ export default function StoryReadTracker({ storyId, category, episodeCount }: St
       document.removeEventListener('visibilitychange', onVisibility)
       observer?.disconnect()
     }
-  }, [storyId, category, episodeCount])
+  }, [storyId, category, episodeCount, wordCount])
 
   return <div ref={endRef} aria-hidden className="h-px w-full" />
 }
