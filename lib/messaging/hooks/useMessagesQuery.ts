@@ -276,8 +276,7 @@ export function useMessagesQuery(
     staleTime: 20 * 1000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: true,
-    // Realtime is primary source; keep a lightweight fallback poll.
-    refetchInterval: realtimeEnabled ? 30000 : 15000,
+    refetchInterval: realtimeEnabled ? 5 * 60 * 1000 : 30000,
     refetchIntervalInBackground: false,
     placeholderData: (previousData) => previousData,
     initialPageParam: 0,
@@ -326,44 +325,6 @@ export function useMessagesQuery(
     }
   }, [belongsToConversation, messagesQueryKey, queryClient])
 
-  const handleDeliveryReceiptPayload = useCallback((payload: unknown) => {
-    const realtimePayload = payload as RealtimePayload
-    const eventType = realtimePayload.eventType
-    if (eventType !== 'INSERT' && eventType !== 'UPDATE') return
-
-    const record = realtimePayload.new || realtimePayload.record
-    const messageId = readStringField(record, ['message_id', 'messageId'])
-    const userId = readStringField(record, ['user_id', 'userId'])
-    if (!messageId || !userId) return
-
-    queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
-      addDeliveryReceiptToCache(old, {
-        messageId,
-        userId,
-        deliveredAt: readStringField(record, ['delivered_at', 'deliveredAt']) || new Date().toISOString(),
-      })
-    )
-  }, [messagesQueryKey, queryClient])
-
-  const handleReadReceiptPayload = useCallback((payload: unknown) => {
-    const realtimePayload = payload as RealtimePayload
-    const eventType = realtimePayload.eventType
-    if (eventType !== 'INSERT' && eventType !== 'UPDATE') return
-
-    const record = realtimePayload.new || realtimePayload.record
-    const messageId = readStringField(record, ['message_id', 'messageId'])
-    const userId = readStringField(record, ['user_id', 'userId'])
-    if (!messageId || !userId) return
-
-    queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) =>
-      addReadReceiptToCache(old, {
-        messageId,
-        userId,
-        readAt: readStringField(record, ['read_at', 'readAt']) || new Date().toISOString(),
-      })
-    )
-  }, [messagesQueryKey, queryClient])
-
   useRealtimeSync({
     table: 'direct_messages',
     event: '*',
@@ -375,24 +336,37 @@ export function useMessagesQuery(
     onPayload: handleMessageRealtimePayload,
   })
 
-  useRealtimeSync({
-    table: 'message_delivery_receipts',
-    event: '*',
-    queryKey: messagesQueryKey,
-    schema: 'public',
-    invalidateQuery: false,
-    enabled: realtimeEnabled,
-    onPayload: handleDeliveryReceiptPayload,
-  })
+  const handleParticipantReadPayload = useCallback((payload: unknown) => {
+    const realtimePayload = payload as RealtimePayload
+    const record = realtimePayload.new || realtimePayload.record
+    if (!belongsToConversation(record)) return
+    const readerId = readStringField(record, ['user_id', 'userId'])
+    const lastReadAt = readStringField(record, ['last_read_at', 'lastReadAt'])
+    if (!readerId || !lastReadAt) return
+
+    queryClient.setQueryData(messagesQueryKey, (old: InfiniteMessagesCache | undefined) => {
+      if (!old?.pages) return old
+      let next: InfiniteMessagesCache = old
+      for (const page of old.pages) {
+        for (const message of page.messages || []) {
+          if (message.senderId === readerId || message.createdAt > lastReadAt) continue
+          if (message.readReceipts?.some((receipt) => receipt.userId === readerId)) continue
+          next = addReadReceiptToCache(next, { messageId: message.id, userId: readerId, readAt: lastReadAt }) ?? next
+        }
+      }
+      return next
+    })
+  }, [belongsToConversation, messagesQueryKey, queryClient])
 
   useRealtimeSync({
-    table: 'message_read_receipts',
-    event: '*',
+    table: 'conversation_participants',
+    event: 'UPDATE',
     queryKey: messagesQueryKey,
     schema: 'public',
+    filter: conversationId ? `conversation_id=eq.${conversationId}` : undefined,
     invalidateQuery: false,
-    enabled: realtimeEnabled,
-    onPayload: handleReadReceiptPayload,
+    enabled: realtimeEnabled && Boolean(conversationId),
+    onPayload: handleParticipantReadPayload,
   })
 
   // Flatten all pages into single array

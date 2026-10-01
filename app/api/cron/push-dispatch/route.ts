@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
-import { dispatchPushForNotification } from '@/lib/notifications/push-service'
+import { dispatchPushBatch, isWebPushReady } from '@/lib/notifications/push-service'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-const CONCURRENCY = 10
+const BATCH_SIZE = 100
+const MAX_BATCHES = 5
 const TIME_BUDGET_MS = 50_000
 
 const supabaseAdmin = createSupabaseAdminClient(
@@ -14,7 +15,7 @@ const supabaseAdmin = createSupabaseAdminClient(
   { auth: { persistSession: false, autoRefreshToken: false } }
 )
 
-type PendingNotification = {
+type ClaimedNotification = {
   id: string
   user_id: string
   title: string
@@ -32,97 +33,35 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const batchSize = 100
-
-  const { data: pendingNotifications, error: pendingError } = await supabaseAdmin
-    .from('notifications')
-    .select('id,user_id,title,message,data,created_at')
-    .is('push_sent_at', null)
-    .order('created_at', { ascending: true })
-    .limit(batchSize)
-
-  if (pendingError) {
-    console.error('Failed to load pending push notifications:', pendingError)
-    return NextResponse.json(
-      { error: 'Failed to load pending notifications' },
-      { status: 500 }
-    )
+  if (!isWebPushReady()) {
+    return NextResponse.json({ skipped: true, reason: 'VAPID keys are not configured' })
   }
 
-  const notifications = (pendingNotifications || []) as PendingNotification[]
+  const deadline = Date.now() + TIME_BUDGET_MS
+  const totals = { claimed: 0, processed: 0, delivered: 0, removedSubscriptions: 0, skipped: 0, timedOut: false }
 
-  let processed = 0
-  let delivered = 0
-  let removedSubscriptions = 0
-  let deferred = 0
-  let attempted = 0
-  let timedOut = false
+  for (let batch = 0; batch < MAX_BATCHES && Date.now() < deadline; batch += 1) {
+    const { data, error } = await supabaseAdmin.rpc('claim_pending_push_notifications', { p_limit: BATCH_SIZE })
+    if (error) {
+      console.error('Failed to claim pending push notifications:', error)
+      return NextResponse.json({ error: 'Failed to load pending notifications' }, { status: 500 })
+    }
 
-  const startedAt = Date.now()
+    const claimed = (data || []) as ClaimedNotification[]
+    if (!claimed.length) break
+    totals.claimed += claimed.length
 
-  for (let i = 0; i < notifications.length; i += CONCURRENCY) {
-    if (Date.now() - startedAt > TIME_BUDGET_MS) {
-      timedOut = true
+    const result = await dispatchPushBatch(claimed, { concurrency: 10, deadline })
+    totals.processed += result.processed
+    totals.delivered += result.delivered
+    totals.removedSubscriptions += result.removed
+    totals.skipped += result.skipped
+    if (result.timedOut) {
+      totals.timedOut = true
       break
     }
-
-    const slice = notifications.slice(i, i + CONCURRENCY)
-    attempted += slice.length
-
-    const results = await Promise.allSettled(
-      slice.map(async (notification) => {
-        const result = await dispatchPushForNotification(notification)
-        const shouldDefer =
-          result.skipped && result.reason === 'VAPID keys are not configured'
-
-        return { notification, result, shouldDefer }
-      })
-    )
-
-    const toMark: string[] = []
-
-    for (const [index, settled] of results.entries()) {
-      if (settled.status === 'rejected') {
-        console.error(
-          `Failed to dispatch push for notification ${slice[index].id}:`,
-          settled.reason
-        )
-        continue
-      }
-
-      const { notification, result, shouldDefer } = settled.value
-
-      if (shouldDefer) {
-        deferred += 1
-        continue
-      }
-
-      toMark.push(notification.id)
-      processed += 1
-      delivered += result.delivered
-      removedSubscriptions += result.removed
-    }
-
-    if (toMark.length > 0) {
-      const { error: markError } = await supabaseAdmin
-        .from('notifications')
-        .update({ push_sent_at: new Date().toISOString() })
-        .in('id', toMark)
-
-      if (markError) {
-        console.error('Failed to mark notifications as dispatched:', markError)
-      }
-    }
+    if (claimed.length < BATCH_SIZE) break
   }
 
-  return NextResponse.json({
-    queued: notifications.length,
-    attempted,
-    processed,
-    delivered,
-    removedSubscriptions,
-    deferred,
-    timedOut,
-  })
+  return NextResponse.json(totals)
 }
-

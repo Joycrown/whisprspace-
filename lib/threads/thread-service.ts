@@ -36,6 +36,57 @@ const THREAD_CATEGORY_VALUES = [
 const THREAD_PRIVACY_VALUES = ['public', 'private', 'invite_only'] as const;
 const THREAD_MESSAGE_TYPE_VALUES = ['text', 'voice', 'image', 'file', 'link'] as const;
 
+const FEED_COLUMNS =
+  'id,title,content,type,category,creator_id,created_at,updated_at,likes_count,message_count,last_message_at,is_premium,member_limit,price,expires_at,is_locked,privacy,is_saved,' +
+  'creator:users!threads_creator_id_fkey(id,anonymous_id,is_premium,avatar_url),participants:thread_participants(count)'
+
+type FeedSortKey = 'created_at' | 'likes_count' | 'message_count'
+
+interface FeedCursorValue {
+  k: number | null
+  c: string
+  i: string
+}
+
+const quotePgValue = (value: string) => `"${value.replace(/"/g, '')}"`
+
+function encodeFeedCursor(row: any, sortKey: FeedSortKey): string {
+  const payload: FeedCursorValue = {
+    k: sortKey === 'created_at' ? null : Number(row[sortKey] ?? 0),
+    c: row.created_at,
+    i: row.id,
+  }
+  return btoa(JSON.stringify(payload))
+}
+
+function decodeFeedCursor(cursor: string | null | undefined): FeedCursorValue | null {
+  if (!cursor) return null
+  try {
+    const parsed = JSON.parse(atob(cursor)) as FeedCursorValue
+    if (!sanitizeUuid(parsed.i) || Number.isNaN(Date.parse(parsed.c))) return null
+    if (parsed.k !== null && !Number.isFinite(parsed.k)) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function buildKeysetCondition(sortKey: FeedSortKey, ascending: boolean, cursor: FeedCursorValue): string {
+  const op = ascending ? 'gt' : 'lt'
+  const c = quotePgValue(cursor.c)
+  const i = cursor.i
+  if (sortKey === 'created_at') {
+    return `or(created_at.${op}.${c},and(created_at.eq.${c},id.${op}.${i}))`
+  }
+  const k = Math.trunc(cursor.k ?? 0)
+  return `or(${sortKey}.lt.${k},and(${sortKey}.eq.${k},created_at.lt.${c}),and(${sortKey}.eq.${k},created_at.eq.${c},id.lt.${i}))`
+}
+
+export interface FetchThreadsOptions {
+  cursor?: string | null
+  includeUnread?: boolean
+}
+
 /**
  * Fetch threads with filters, search, and pagination
  */
@@ -44,22 +95,25 @@ export const fetchThreads = async (
   searchQuery: string,
   page: number,
   limit: number,
-  userId?: string
-): Promise<{ threads: Thread[]; hasMore: boolean }> => {
+  userId?: string,
+  options: FetchThreadsOptions = {}
+): Promise<{ threads: Thread[]; hasMore: boolean; nextCursor: string | null }> => {
   try {
     const safeUserId = userId ? sanitizeUuid(userId) : null
 
-    // Build filter object for rawDb
     const queryFilters: Record<string, string> = {};
-    
-    // Select string
-    const selectStr = '*,thread_likes(user_id),creator:users!threads_creator_id_fkey(id,username,anonymous_id,is_premium,avatar_url),thread_participants(user_id,last_read_at)';
-    
-    // Deleted check
-    queryFilters['deleted_at'] = 'is.null';
+    const selectStr = safeUserId
+      ? `${FEED_COLUMNS},my_like:thread_likes(user_id),me:thread_participants(user_id,last_read_at)`
+      : FEED_COLUMNS;
 
-    // Only show publicly-visible content — hide auto-hidden and removed threads
+    if (safeUserId) {
+      queryFilters['my_like.user_id'] = `eq.${safeUserId}`;
+      queryFilters['me.user_id'] = `eq.${safeUserId}`;
+    }
+
+    queryFilters['deleted_at'] = 'is.null';
     queryFilters['moderation_status'] = 'eq.visible';
+    queryFilters['story_id'] = 'is.null';
 
     const sanitizeSearch = (value: string) =>
       sanitizeSingleLineInput(value, { maxLength: 120 }).replace(/[^a-zA-Z0-9\s_-]/g, '').trim();
@@ -72,60 +126,59 @@ export const fetchThreads = async (
     const expirationMode = filters.expiration ?? 'active';
     const expirationLogic =
       expirationMode === 'active'
-        ? `or(expires_at.is.null,expires_at.gt.${nowIso})`
+        ? `or(expires_at.is.null,expires_at.gt.${quotePgValue(nowIso)})`
         : expirationMode === 'expired'
-          ? `and(expires_at.not.is.null,expires_at.lte.${nowIso})`
+          ? `and(expires_at.not.is.null,expires_at.lte.${quotePgValue(nowIso)})`
           : null;
 
-    // Search + visibility + expiration are composed as grouped logical expressions.
-    if (searchQuery) {
-      const safeSearch = sanitizeSearch(searchQuery);
-      if (safeSearch) {
-        const savedLogic = `or(${savedOrConditions})`;
-        const searchLogic = `or(title.ilike.*${safeSearch}*,content.ilike.*${safeSearch}*)`;
-        const andConditions = [savedLogic, searchLogic];
-        if (expirationLogic) {
-          andConditions.push(expirationLogic);
-        }
-        queryFilters['and'] = `(${andConditions.join(',')})`;
-      } else if (expirationLogic) {
-        queryFilters['and'] = `(or(${savedOrConditions}),${expirationLogic})`;
-      } else {
-        queryFilters['or'] = `(${savedOrConditions})`;
-      }
-    } else if (expirationLogic) {
-      queryFilters['and'] = `(or(${savedOrConditions}),${expirationLogic})`;
-    } else {
-      // Saved/Visibility logic using horizontal filtering (OR)
-      queryFilters['or'] = `(${savedOrConditions})`;
+    let sortKey: FeedSortKey = 'created_at';
+    let ascending = false;
+    switch (filters.sortBy) {
+      case 'popular':
+        sortKey = 'likes_count';
+        break;
+      case 'trending':
+        sortKey = 'message_count';
+        break;
+      case 'oldest':
+        ascending = true;
+        break;
+      default:
+        sortKey = 'created_at';
     }
 
-    // Category
+    const andConditions: string[] = [`or(${savedOrConditions})`];
+    if (expirationLogic) andConditions.push(expirationLogic);
+
+    const safeSearch = searchQuery ? sanitizeSearch(searchQuery) : '';
+    if (safeSearch.length >= 2) {
+      andConditions.push(`or(title.ilike.*${safeSearch}*,content.ilike.*${safeSearch}*)`);
+    }
+
+    const cursor = decodeFeedCursor(options.cursor);
+    if (cursor) andConditions.push(buildKeysetCondition(sortKey, ascending, cursor));
+
+    queryFilters['and'] = `(${andConditions.join(',')})`;
+
     if (filters.category && filters.category !== 'all') {
       const safeCategory = sanitizeEnumValue(filters.category, THREAD_CATEGORY_VALUES, 'general');
       queryFilters['category'] = `eq.${safeCategory}`;
     }
 
-    // Type
     if (filters.type && filters.type !== 'all') {
       const safeType = sanitizeEnumValue(filters.type, THREAD_TYPE_VALUES, 'text');
       queryFilters['type'] = `eq.${safeType}`;
     }
 
-    // Group
     if (filters.groupId) {
       const safeGroupId = sanitizeUuid(filters.groupId);
-      if (safeGroupId) {
-        queryFilters['group_id'] = `eq.${safeGroupId}`;
-      }
+      if (safeGroupId) queryFilters['group_id'] = `eq.${safeGroupId}`;
     }
 
-    // Premium
     if (filters.isPremium !== undefined) {
       queryFilters['is_premium'] = `eq.${filters.isPremium}`;
     }
 
-    // Privacy
     if (filters.privacy && filters.privacy !== 'all') {
       const safePrivacy = sanitizeEnumValue(filters.privacy, THREAD_PRIVACY_VALUES, 'public');
       queryFilters['privacy'] = `eq.${safePrivacy}`;
@@ -133,34 +186,16 @@ export const fetchThreads = async (
       queryFilters['privacy'] = 'eq.public';
     }
 
-    // Sorting
-    let orderBy = 'created_at';
-    let ascending = false;
-
-    switch (filters.sortBy) {
-      case 'newest':
-        orderBy = 'created_at';
-        break;
-      case 'popular':
-        orderBy = 'likes_count';
-        break;
-      case 'trending':
-        orderBy = 'message_count';
-        break;
-      case 'oldest':
-        orderBy = 'created_at';
-        ascending = true;
-        break;
-      default:
-        orderBy = 'created_at';
-    }
+    const direction = ascending ? 'asc' : 'desc';
+    queryFilters['order'] = sortKey === 'created_at'
+      ? `created_at.${direction},id.${direction}`
+      : `${sortKey}.desc,created_at.desc,id.desc`;
 
     const { data, error } = await rawDb.select<any[]>('threads', {
       select: selectStr,
       filters: queryFilters,
-      order: { column: orderBy, ascending },
-      limit: limit,
-      offset: (page - 1) * limit
+      limit: limit + 1,
+      offset: cursor ? 0 : Math.max(0, (page - 1) * limit),
     });
 
     if (error) {
@@ -168,55 +203,47 @@ export const fetchThreads = async (
       throw error
     }
 
-    const threadRows = data || []
+    const rows = data || []
+    const hasMore = rows.length > limit
+    const threadRows = rows.slice(0, limit)
+    const lastRow = threadRows[threadRows.length - 1]
+    const nextCursor = hasMore && lastRow ? encodeFeedCursor(lastRow, sortKey) : null
+
+    const premiumIds = threadRows.filter((thread: any) => thread.is_premium).map((thread: any) => thread.id)
     const threadIds = threadRows.map((thread: any) => thread.id).filter(Boolean)
-    let purchasedThreadIds = new Set<string>()
 
-    if (safeUserId && threadIds.length > 0) {
-      const { data: purchases, error: purchaseError } = await rawDb.select<any[]>('thread_purchases', {
-        select: 'thread_id',
-        filters: {
-          'user_id': rawDb.filter.eq(safeUserId),
-          'thread_id': rawDb.filter.in(threadIds),
-        },
-      })
-
-      if (purchaseError) {
-        console.warn('Failed to fetch thread purchases for access checks:', purchaseError)
-      } else {
-        purchasedThreadIds = new Set((purchases || []).map((row: any) => row.thread_id))
-      }
-    }
-
-    // Unread counts are an enhancement: rawDb.rpc throws when the function is
-    // missing (an environment that has not run the migration yet), so this must
-    // not be allowed to take down the whole feed.
-    let unreadCounts: Map<string, number> | undefined
-    if (safeUserId) {
-      try {
-        const { data: unreadRows } = await rawDb.rpc('get_thread_unread_counts', {
-          p_user_id: safeUserId,
+    const [purchasedThreadIds, unreadCounts] = await Promise.all([
+      (async () => {
+        if (!safeUserId || premiumIds.length === 0) return new Set<string>()
+        const { data: purchases, error: purchaseError } = await rawDb.select<any[]>('thread_purchases', {
+          select: 'thread_id',
+          filters: {
+            'user_id': rawDb.filter.eq(safeUserId),
+            'thread_id': rawDb.filter.in(premiumIds),
+          },
         })
-
-        if (Array.isArray(unreadRows)) {
-          unreadCounts = new Map(
-            unreadRows.map((row: any) => [row.thread_id, Number(row.unread_count) || 0])
-          )
+        if (purchaseError) {
+          console.warn('Failed to fetch thread purchases for access checks:', purchaseError)
+          return new Set<string>()
         }
-      } catch (unreadError) {
-        console.warn('Failed to fetch thread unread counts:', unreadError)
-      }
-    }
+        return new Set<string>((purchases || []).map((row: any) => row.thread_id))
+      })(),
+      (async () => {
+        if (!safeUserId || !options.includeUnread || threadIds.length === 0) return undefined
+        try {
+          const { data: unreadRows } = await rawDb.rpc('get_thread_unread_counts', { p_thread_ids: threadIds })
+          if (!Array.isArray(unreadRows)) return undefined
+          return new Map<string, number>(unreadRows.map((row: any) => [row.thread_id, Number(row.unread_count) || 0]))
+        } catch (unreadError) {
+          console.warn('Failed to fetch thread unread counts:', unreadError)
+          return undefined
+        }
+      })(),
+    ])
 
-    // Transform database records to Thread type
-    const threads: Thread[] = threadRows.map(thread => transformThread(thread, safeUserId || undefined, purchasedThreadIds, unreadCounts))
+    const threads: Thread[] = threadRows.map((thread: any) => transformThread(thread, safeUserId || undefined, purchasedThreadIds, unreadCounts))
 
-    // Check if there are more threads
-    const hasMore = (data || []).length === limit
-
-    return { threads, hasMore }
-
-
+    return { threads, hasMore, nextCursor }
   } catch (error) {
     console.error('fetchThreads error:', error)
     throw error
@@ -235,66 +262,56 @@ export const fetchThreadById = async (
     if (!safeThreadId) return null
     const safeUserId = userId ? sanitizeUuid(userId) : null
 
-    const select = `
-      *,
-      creator:users!threads_creator_id_fkey(id, username, anonymous_id, is_premium, avatar_url),
-      thread_likes(user_id),
-      thread_participants(user_id, user:users(id, username, anonymous_id, is_premium, avatar_url)),
-      messages!messages_thread_id_fkey(
-        *,
-        sender:users!messages_sender_id_fkey(id, username, anonymous_id, is_premium, avatar_url),
-        message_likes(user_id),
-        parent_message:messages!parent_message_id(
-          id,
-          content,
-          sender:users!messages_sender_id_fkey(id, username, anonymous_id, avatar_url, is_premium)
-        ),
-        message_reactions(reaction_type, user_id)
-      ),
-      
-      poll:polls(
-        id,
-        question,
-        duration_hours,
-        allow_multiple_votes,
-        expires_at,
-        poll_options(id, text, vote_count, order_index),
-        poll_votes(user_id, option_id)
-      )
-    `.replace(/\s+/g, '');
+    const personalEmbeds = safeUserId
+      ? { thread: ',my_like:thread_likes(user_id)', message: ',my_like:message_likes(user_id)', poll: ',my_vote:poll_votes(option_id)' }
+      : { thread: '', message: '', poll: '' }
 
-    const { data, error } = await rawDb.select<any>('threads', {
-      select,
-      filters: {
-        'id': rawDb.filter.eq(safeThreadId),
-        'deleted_at': 'is.null',
-        // Only fetch visible threads — hidden/removed return null
-        'moderation_status': 'eq.visible',
-        // Nested ordering/limits/visibility for messages
-        'messages.order': 'created_at.desc',
-        'messages.limit': 50,
-        'messages.moderation_status': 'eq.visible',
-      },
-      single: true
-    });
+    const select = [
+      'id,title,content,type,category,privacy,creator_id,created_at,updated_at,expires_at,is_premium,price,is_locked,is_saved,member_limit,likes_count,message_count,last_message_at,view_count,report_count',
+      'creator:users!threads_creator_id_fkey(id,anonymous_id,is_premium,avatar_url)',
+      'participants:thread_participants(count)',
+      'thread_participants(user_id,user:users(id,anonymous_id,is_premium,avatar_url))',
+      `messages!messages_thread_id_fkey(id,thread_id,sender_id,content,type,attachments,parent_message_id,is_edited,edited_at,created_at,likes_count,sender:users!messages_sender_id_fkey(id,anonymous_id,is_premium,avatar_url),message_reactions(reaction_type,user_id)${personalEmbeds.message})`,
+      `poll:polls(id,question,duration_hours,allow_multiple_votes,expires_at,poll_options(id,text,vote_count,order_index)${personalEmbeds.poll})`,
+    ].join(',') + personalEmbeds.thread;
+
+    const filters: Record<string, string | number> = {
+      'id': rawDb.filter.eq(safeThreadId),
+      'deleted_at': 'is.null',
+      'moderation_status': 'eq.visible',
+      'messages.order': 'created_at.desc',
+      'messages.limit': 50,
+      'messages.moderation_status': 'eq.visible',
+      'thread_participants.limit': 200,
+    };
+    if (safeUserId) {
+      filters['my_like.user_id'] = `eq.${safeUserId}`;
+      filters['messages.my_like.user_id'] = `eq.${safeUserId}`;
+      filters['poll.my_vote.user_id'] = `eq.${safeUserId}`;
+    }
+
+    const [{ data, error }, purchaseResult] = await Promise.all([
+      rawDb.select<any>('threads', { select, filters, single: true }),
+      safeUserId
+        ? rawDb.select<any[]>('thread_purchases', {
+            select: 'thread_id',
+            filters: {
+              'thread_id': rawDb.filter.eq(safeThreadId),
+              'user_id': rawDb.filter.eq(safeUserId),
+            },
+          })
+        : Promise.resolve({ data: null, error: null }),
+    ]);
 
     if (error) throw error
     if (!data) return null
 
     let purchasedThreadIds: Set<string> | undefined;
     if (safeUserId) {
-      const { data: purchases, error: purchaseError } = await rawDb.select<any[]>('thread_purchases', {
-        select: 'thread_id',
-        filters: {
-          'thread_id': rawDb.filter.eq(safeThreadId),
-          'user_id': rawDb.filter.eq(safeUserId),
-        },
-      });
-
-      if (purchaseError) {
-        console.warn('Failed to fetch thread purchase access for detail view:', purchaseError);
+      if (purchaseResult.error) {
+        console.warn('Failed to fetch thread purchase access for detail view:', purchaseResult.error);
       } else {
-        purchasedThreadIds = new Set((purchases || []).map((row: any) => row.thread_id));
+        purchasedThreadIds = new Set((purchaseResult.data || []).map((row: any) => row.thread_id));
       }
     }
 
@@ -1632,10 +1649,9 @@ export const fetchInvitedThreads = async (
       status,
       created_at,
       thread:threads(
-        *,
-        creator:users!threads_creator_id_fkey(id, username, anonymous_id, is_premium, avatar_url),
-        thread_likes(user_id),
-        thread_participants(user_id)
+        ${FEED_COLUMNS},
+        my_like:thread_likes(user_id),
+        me:thread_participants(user_id,last_read_at)
       )
     `.replace(/\s+/g, '');
 
@@ -1644,6 +1660,8 @@ export const fetchInvitedThreads = async (
       filters: {
         'invited_user_id': rawDb.filter.eq(safeUserId),
         'status': rawDb.filter.eq('pending'),
+        'thread.my_like.user_id': rawDb.filter.eq(safeUserId),
+        'thread.me.user_id': rawDb.filter.eq(safeUserId),
       },
       order: { column: 'created_at', ascending: false },
     });
@@ -2027,10 +2045,14 @@ export const removeThreadParticipant = async (
  */
 function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Set<string>, unreadCounts?: Map<string, number>): Thread {
   const hasLiked = userId
-    ? dbThread.thread_likes?.some((like: any) => like.user_id === userId)
+    ? Array.isArray(dbThread.my_like)
+      ? dbThread.my_like.length > 0
+      : Boolean(dbThread.thread_likes?.some((like: any) => like.user_id === userId))
     : false
   const participantRow = userId
-    ? (dbThread.thread_participants || []).find((p: any) => (p.user_id || p.user?.id) === userId)
+    ? Array.isArray(dbThread.me)
+      ? dbThread.me[0] ?? null
+      : (dbThread.thread_participants || []).find((p: any) => (p.user_id || p.user?.id) === userId)
     : null
   const hasJoined = Boolean(participantRow)
   const hasAccess = userId ? (purchasedThreadIds?.has(dbThread.id) ?? false) : false
@@ -2078,7 +2100,10 @@ function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Se
   }
   
   const computedCount = uniqueParticipants.size;
-  if (hasParticipantsArray) {
+  const aggregatedCount = Array.isArray(dbThread.participants) ? Number(dbThread.participants[0]?.count) : NaN;
+  if (Number.isFinite(aggregatedCount)) {
+    participantCount = aggregatedCount;
+  } else if (hasParticipantsArray) {
     participantCount = computedCount;
   } else if (typeof dbThread.participant_count === 'number') {
     participantCount = dbThread.participant_count;
@@ -2098,7 +2123,7 @@ function transformThread(dbThread: any, userId?: string, purchasedThreadIds?: Se
     authorId: dbThread.creator_id,
     createdAt: dbThread.created_at,
     updatedAt: dbThread.updated_at,
-    likes: Math.max(typeof dbThread.likes_count === 'number' ? dbThread.likes_count : 0, dbThread.thread_likes?.length || 0),
+    likes: Math.max(typeof dbThread.likes_count === 'number' ? dbThread.likes_count : 0, Array.isArray(dbThread.thread_likes) ? dbThread.thread_likes.length : 0),
     messageCount: dbThread.message_count || 0,
     hasLiked,
     hasJoined,
@@ -2199,6 +2224,7 @@ function transformThreadData(
       
       const pollOptions = dbThread.poll.poll_options;
       const pollVotes = dbThread.poll.poll_votes || [];
+      const myVotes = new Set<string>((dbThread.poll.my_vote || []).map((vote: any) => vote.option_id));
       
       // Pre-calculate counts in one pass
       const voteCountsMap: Record<string, number> = {};
@@ -2216,7 +2242,7 @@ function transformThreadData(
       return pollOptions.map((opt: any, index: number) => {
         const votes = optionCounts[index];
         const hasVoted = userId
-          ? pollVotes.some((vote: any) => vote.user_id === userId && vote.option_id === opt.id)
+          ? myVotes.has(opt.id) || pollVotes.some((vote: any) => vote.user_id === userId && vote.option_id === opt.id)
           : false;
 
         return {
@@ -2319,7 +2345,11 @@ export function transformMessage(msg: any, userId?: string): Message {
     isEdited: msg.is_edited ?? false,
     editedAt: msg.edited_at ?? undefined,
     likes: msg.likes_count || 0,
-    hasLiked: userId ? (msg.message_likes || []).some((like: any) => like.user_id === userId) : false,
+    hasLiked: userId
+      ? Array.isArray(msg.my_like)
+        ? msg.my_like.length > 0
+        : (msg.message_likes || []).some((like: any) => like.user_id === userId)
+      : false,
     replyToId: msg.parent_message_id,
     // Populate the actual replied message object if parent data exists
     repliedMessage: msg.parent_message ? {
@@ -2349,3 +2379,45 @@ export function transformMessage(msg: any, userId?: string): Message {
 }
 
 
+
+export const THREAD_MESSAGE_PAGE_SIZE = 50
+
+export const fetchOlderThreadMessages = async (
+  threadId: string,
+  before: { createdAt: string; id: string },
+  userId?: string
+): Promise<{ messages: Message[]; hasMore: boolean }> => {
+  const safeThreadId = sanitizeUuid(threadId)
+  const safeBeforeId = sanitizeUuid(before.id)
+  if (!safeThreadId || !safeBeforeId || Number.isNaN(Date.parse(before.createdAt))) {
+    return { messages: [], hasMore: false }
+  }
+  const safeUserId = userId ? sanitizeUuid(userId) : null
+  const beforeTs = `"${before.createdAt.replace(/"/g, '')}"`
+
+  const filters: Record<string, string> = {
+    'thread_id': rawDb.filter.eq(safeThreadId),
+    'moderation_status': 'eq.visible',
+    'or': `(created_at.lt.${beforeTs},and(created_at.eq.${beforeTs},id.lt.${safeBeforeId}))`,
+    'order': 'created_at.desc,id.desc',
+  }
+  if (safeUserId) filters['my_like.user_id'] = `eq.${safeUserId}`
+
+  const { data, error } = await rawDb.select<any[]>('messages', {
+    select:
+      'id,thread_id,sender_id,content,type,attachments,parent_message_id,is_edited,edited_at,created_at,likes_count,' +
+      'sender:users!messages_sender_id_fkey(id,anonymous_id,is_premium,avatar_url),message_reactions(reaction_type,user_id)' +
+      (safeUserId ? ',my_like:message_likes(user_id)' : ''),
+    filters,
+    limit: THREAD_MESSAGE_PAGE_SIZE + 1,
+  })
+
+  if (error || !data) {
+    console.error('fetchOlderThreadMessages error:', error)
+    return { messages: [], hasMore: false }
+  }
+
+  const hasMore = data.length > THREAD_MESSAGE_PAGE_SIZE
+  const rows = data.slice(0, THREAD_MESSAGE_PAGE_SIZE).reverse()
+  return { messages: rows.map((row: any) => transformMessage(row, safeUserId || undefined)), hasMore }
+}

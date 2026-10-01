@@ -13,6 +13,7 @@ import {
   NotificationCategory,
 } from './notification-service'
 import { useUserStore } from '@/store/userStore'
+import { REALTIME_RESUMED_EVENT } from '@/lib/core/supabase/raw-realtime'
 
 /**
  * Hook for managing notifications
@@ -55,7 +56,7 @@ export const useNotifications = (options?: {
     }
 
     setIsLoading(false)
-  }, [session.user, options?.category])
+  }, [session.user?.id, options?.category])
 
   // Refresh unread count only
   const refreshUnreadCount = useCallback(async () => {
@@ -63,7 +64,7 @@ export const useNotifications = (options?: {
 
     const { count } = await getUnreadCount()
     setUnreadCount(count)
-  }, [session.user])
+  }, [session.user?.id])
 
   // Mark notification as read
   const markNotificationAsRead = useCallback(async (notificationId: string) => {
@@ -169,7 +170,7 @@ export const useNotifications = (options?: {
     if (session.user) {
       loadNotifications()
     }
-  }, [session.user, loadNotifications])
+  }, [session.user?.id, loadNotifications])
 
   // Subscribe to real-time notifications
   useEffect(() => {
@@ -183,21 +184,25 @@ export const useNotifications = (options?: {
       }
     )
 
+    const onResume = () => { void loadNotifications() }
+    window.addEventListener(REALTIME_RESUMED_EVENT, onResume)
+
     return () => {
       subscription.unsubscribe()
+      window.removeEventListener(REALTIME_RESUMED_EVENT, onResume)
     }
-  }, [session.user, options?.enableRealtime])
+  }, [session.user?.id, options?.enableRealtime, loadNotifications])
 
-  // Auto-refresh unread count
   useEffect(() => {
     if (!session.user || !options?.autoRefresh) return
 
     const interval = setInterval(() => {
+      if (document.visibilityState === 'hidden') return
       refreshUnreadCount()
-    }, 30000) // Every 30 seconds
+    }, 120000)
 
     return () => clearInterval(interval)
-  }, [session.user, options?.autoRefresh, refreshUnreadCount])
+  }, [session.user?.id, options?.autoRefresh, refreshUnreadCount])
 
   return {
     notifications,
@@ -227,14 +232,14 @@ export const useNotificationBadge = () => {
 
     const { count } = await getUnreadCount()
     setUnreadCount(count)
-  }, [session.user])
+  }, [session.user?.id])
 
   // Initial load
   useEffect(() => {
     if (session.user) {
       refreshCount()
     }
-  }, [session.user, refreshCount])
+  }, [session.user?.id, refreshCount])
 
   // Subscribe to real-time updates
   useEffect(() => {
@@ -250,15 +255,14 @@ export const useNotificationBadge = () => {
     return () => {
       subscription.unsubscribe()
     }
-  }, [session.user])
+  }, [session.user?.id])
 
-  // Auto-refresh every 30 seconds
   useEffect(() => {
     if (!session.user) return
 
-    const interval = setInterval(refreshCount, 30000)
+    const interval = setInterval(refreshCount, 120000)
     return () => clearInterval(interval)
-  }, [session.user, refreshCount])
+  }, [session.user?.id, refreshCount])
 
   return {
     unreadCount,

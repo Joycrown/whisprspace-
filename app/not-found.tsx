@@ -77,11 +77,11 @@ export default function NotFound() {
           </button>
 
           <Link
-            href="/threads"
+            href="/discussions"
             className="flex items-center gap-2 px-6 py-3 bg-white text-purple-600 border-2 border-purple-300 rounded-lg font-semibold hover:bg-purple-50 transition-colors shadow-sm"
           >
             <Search className="w-5 h-5" />
-            Browse Threads
+            Browse Discussions
           </Link>
         </motion.div>
 
@@ -97,11 +97,11 @@ export default function NotFound() {
             <Link href="/" className="text-purple-600 hover:text-purple-700 hover:underline">
               Home
             </Link>
-            <Link href="/threads" className="text-purple-600 hover:text-purple-700 hover:underline">
-              All Threads
+            <Link href="/discussions" className="text-purple-600 hover:text-purple-700 hover:underline">
+              All Discussions
             </Link>
-            <Link href="/my-threads" className="text-purple-600 hover:text-purple-700 hover:underline">
-              My Threads
+            <Link href="/my-discussions" className="text-purple-600 hover:text-purple-700 hover:underline">
+              My Discussions
             </Link>
             <Link href="/profile" className="text-purple-600 hover:text-purple-700 hover:underline">
               Profile

@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { publicRoutes } from "@/lib/utils/utils/routes"
 import Sidebar from "./Sidebar"
@@ -11,6 +10,8 @@ import FirstTimeEducationModal from "@/components/features/onboarding/FirstTimeE
 import { UnseenSummaryModal } from "@/components/features/threads/UnseenSummaryModal"
 import { PostThreadNudge } from "@/components/features/inbox/PostThreadNudge"
 import SupportButton from "@/components/SupportButton"
+import { useUserStore } from "@/store/userStore"
+import { isStoriesPath, isStoryReaderPath } from "@/lib/stories/config"
 
 // components/layout/MainLayout.tsx
 export default function MainLayout({
@@ -19,17 +20,12 @@ export default function MainLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const session = useUserStore((state) => state.session)
+  const sessionValidated = useUserStore((state) => state.sessionValidated)
+  const isRegistered = Boolean(sessionValidated && session.isAuthenticated && session.user && !session.user.isAnonymous)
+  const onStories = isStoriesPath(pathname)
 
-  // Global seed trigger — fires on mount and every 2 minutes across all pages
-  // so reply scheduling continues even when navigating away from the feed
-  useEffect(() => {
-    fetch('/api/cron/seed-trigger').catch(() => {})
-    const interval = setInterval(() => {
-      fetch('/api/cron/seed-trigger').catch(() => {})
-    }, 2 * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [])
-  // Launch page — render with zero chrome, no seed trigger
+  // Launch page — render with zero chrome
   if (pathname === '/launch') {
     return <>{children}</>
   }
@@ -38,8 +34,18 @@ export default function MainLayout({
   // /curiosity-ask/create or /curiosity-ask/[id]/manage|export — those keep the app chrome.
   const isPublicPromptPage = /^\/curiosity-ask\/[^/]+\/?$/.test(pathname || '')
 
+  if (onStories && !isRegistered) {
+    return (
+      <div className="min-h-screen bg-[#0A0A10] flex overflow-x-hidden w-full max-w-full">
+        <Sidebar />
+        <main className="flex-1 md:pl-20 pb-16 md:pb-0 overflow-x-hidden w-full min-w-0">{children}</main>
+        <BottomNav />
+      </div>
+    )
+  }
+
   const isPublicRoute =
-    publicRoutes.includes(pathname || '') ||
+    (publicRoutes.includes(pathname || '') && !onStories) ||
     (pathname?.startsWith('/auth/') ?? false) ||
     (pathname?.startsWith('/profile/') ?? false) ||
     (pathname?.startsWith('/message/') ?? false) ||
@@ -89,7 +95,7 @@ export default function MainLayout({
       <PWAInstallPrompt />
       <UnseenSummaryModal />
       <PostThreadNudge />
-      <SupportButton />
+      {!isStoryReaderPath(pathname) && <SupportButton />}
     </div>
   )
 }

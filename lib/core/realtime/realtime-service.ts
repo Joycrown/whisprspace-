@@ -259,9 +259,9 @@ export const subscribeToAllThreads = (
     channelName: 'realtime:threads:all',
     config: {
       postgres_changes: [
-        { event: 'INSERT', schema: 'public', table: 'threads' },
-        { event: 'UPDATE', schema: 'public', table: 'threads' },
-        { event: 'DELETE', schema: 'public', table: 'threads' }
+        { event: 'INSERT', schema: 'public', table: 'threads', filter: 'privacy=eq.public' },
+        ...(onUpdate ? [{ event: 'UPDATE' as const, schema: 'public', table: 'threads', filter: 'privacy=eq.public' }] : []),
+        ...(onDelete ? [{ event: 'DELETE' as const, schema: 'public', table: 'threads' }] : [])
       ]
     },
     onPostgresChange: (change) => {
@@ -276,32 +276,6 @@ export const subscribeToAllThreads = (
     console.error('[Realtime] Failed to subscribe to all threads:', err);
   });
   return () => channel.unsubscribe();
-};
-
-/**
- * Subscribe to ALL participant changes (to update counts in lists)
- */
-export const subscribeToAllParticipantChanges = (
-  onChange: () => void
-): (() => void) => {
-  const unsubInsert = rawRealtime.subscribeToTable('thread_participants', {
-    event: 'INSERT',
-    onChange: () => {
-      onChange();
-    }
-  });
-
-  const unsubDelete = rawRealtime.subscribeToTable('thread_participants', {
-    event: 'DELETE',
-    onChange: () => {
-      onChange();
-    }
-  });
-
-  return () => {
-    unsubInsert();
-    unsubDelete();
-  };
 };
 
 export const subscribeToUserNotifications = (
@@ -454,4 +428,116 @@ export const subscribeToPollVotes = (
     console.error(`[Realtime] Failed to subscribe to poll votes for poll ${pollId}:`, err);
   });
   return () => channel.unsubscribe();
+};
+
+// ─────────────────────────────────────────────
+//  Stories
+// ─────────────────────────────────────────────
+
+function subscribeWithBackoff(channel: any, label: string, maxRetryAttempts = 8): () => void {
+  let isActive = true;
+  let retryAttempt = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const subscribeWithRetry = () => {
+    if (!isActive) return;
+
+    channel.subscribe().catch((err: unknown) => {
+      if (!isActive) return;
+      if (retryAttempt >= maxRetryAttempts) {
+        console.warn(`[Realtime] ${label} subscription disabled after ${maxRetryAttempts} retries`);
+        return;
+      }
+      console.error(`[Realtime] Failed to subscribe to ${label}:`, err);
+      const retryDelayMs = Math.min(1000 * Math.pow(2, retryAttempt), 15000);
+      retryAttempt++;
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        subscribeWithRetry();
+      }, retryDelayMs);
+    });
+  };
+
+  subscribeWithRetry();
+
+  return () => {
+    isActive = false;
+    if (retryTimer) clearTimeout(retryTimer);
+    channel.unsubscribe();
+  };
+}
+
+/**
+ * Live counters for one story (reply_count, reaction_counts, episodes) from
+ * the `story_live` projection. One channel per open story page.
+ */
+export const subscribeToStoryLive = (
+  storyId: string,
+  onUpdate: (payload: RealtimePostgresChangesPayload<any>) => void
+): (() => void) => {
+  const channel = rawRealtime.createChannel({
+    channelName: `realtime:story:${storyId}:live`,
+    config: {
+      postgres_changes: [
+        { event: 'UPDATE', schema: 'public', table: 'story_live', filter: `story_id=eq.${storyId}` },
+      ],
+    },
+    onPostgresChange: (change) => {
+      if (change.type === 'UPDATE') onUpdate(transformChange(change));
+    },
+  });
+
+  return subscribeWithBackoff(channel, `story ${storyId} live`);
+};
+
+/**
+ * Comment reactions on a story's thread. Only INSERT is subscribed: Supabase
+ * can't filter DELETE events, so a DELETE subscription would receive every
+ * reaction removal app-wide.
+ */
+export const subscribeToStoryCommentReactions = (
+  storyId: string,
+  threadId: string,
+  onInsert: (payload: RealtimePostgresChangesPayload<any>) => void
+): (() => void) => {
+  const channel = rawRealtime.createChannel({
+    channelName: `realtime:story:${storyId}:comment-reactions`,
+    config: {
+      postgres_changes: [
+        { event: 'INSERT', schema: 'public', table: 'message_reactions', filter: `thread_id=eq.${threadId}` },
+      ],
+    },
+    onPostgresChange: (change) => {
+      if (change.type === 'INSERT') onInsert(transformChange(change));
+    },
+  });
+
+  return subscribeWithBackoff(channel, `story ${storyId} comment reactions`);
+};
+
+/**
+ * Subscribe to newly published stories and story updates feed-wide (one
+ * channel regardless of how many stories are visible; the client discards
+ * events for stories it isn't currently displaying).
+ */
+export const subscribeToStoriesFeed = (
+  onNewStory: (payload: RealtimePostgresChangesPayload<any>) => void,
+  onStoryUpdate?: (payload: RealtimePostgresChangesPayload<any>) => void
+): (() => void) => {
+  const channel = rawRealtime.createChannel({
+    channelName: 'realtime:stories:feed',
+    config: {
+      postgres_changes: [
+        { event: 'INSERT', schema: 'public', table: 'story_live', filter: 'visible=eq.true' },
+        ...(onStoryUpdate ? [{ event: 'UPDATE' as const, schema: 'public', table: 'story_live', filter: 'visible=eq.true' }] : []),
+      ],
+    },
+    onPostgresChange: (change) => {
+      const payload = transformChange(change);
+      if (change.type === 'INSERT') onNewStory(payload);
+      if (change.type === 'UPDATE') onStoryUpdate?.(payload);
+    },
+  });
+
+  return subscribeWithBackoff(channel, 'stories feed');
 };

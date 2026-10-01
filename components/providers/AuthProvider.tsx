@@ -8,9 +8,10 @@ import { getCurrentSession } from '@/lib/auth/auth-service'
 import { initializeStorage } from '@/lib/utils/storage-migration'
 import { getAnonymousSessionExpiry, getRegisteredSessionExpiry } from '@/lib/utils/session-expiry'
 import { setAccessToken } from '@/lib/utils/auth-token-cache'
+import { storiesIsHome } from '@/lib/stories/config'
 
 // Stable outside component — never recreated
-const PUBLIC_PREFIXES = ['/auth', '/privacy-policy', '/community-guidelines', '/getting-started', '/profile', '/invite', '/message', '/claim']
+const PUBLIC_PREFIXES = ['/auth', '/privacy-policy', '/community-guidelines', '/getting-started', '/profile', '/invite', '/message', '/claim', '/stories']
 
 // Matches only the sender-facing ask landing page (/curiosity-ask/[id]), never
 // /curiosity-ask/create or /curiosity-ask/[id]/manage|export — those stay behind auth.
@@ -126,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           sessionValidated: true,
         })
 
-        if (pathnameRef.current === '/') router.push('/threads')
+        if (pathnameRef.current === '/' && !storiesIsHome) router.push('/stories')
       } catch (error) {
         if (cancelled) return
         console.error('[AuthProvider] Session validation error:', error)

@@ -57,7 +57,7 @@ export function InboxLinkNudge() {
     openDropdown(shareButtonRef.current.getBoundingClientRect())
   }
 
-  if (!mounted || !visible || !handle) return null
+  if (!mounted || !visible || !handle || !session.isAuthenticated || session.user?.isAnonymous) return null
 
   const displayLink = link.replace(/^https?:\/\//, '')
   const displayName = session?.user?.username || session?.user?.anonymousId || handle

@@ -19,19 +19,19 @@ async function resolveUser(handle: string) {
 
   const { data: byUsername } = await supabase
     .from('users')
-    .select('id, username, anonymous_id')
+    .select('id, username, anonymous_id, is_anonymous')
     .ilike('username', escapeLikePattern(normalizedHandle))
     .single();
 
-  if (byUsername) return byUsername;
+  if (byUsername) return byUsername.is_anonymous ? null : byUsername;
 
   const { data: byAnonId } = await supabase
     .from('users')
-    .select('id, username, anonymous_id')
+    .select('id, username, anonymous_id, is_anonymous')
     .eq('anonymous_id', normalizedHandle)
     .single();
 
-  return byAnonId ?? null;
+  return byAnonId && !byAnonId.is_anonymous ? byAnonId : null;
 }
 
 export async function generateMetadata({ params }: MessageLinkPageProps): Promise<Metadata> {

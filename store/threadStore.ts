@@ -80,7 +80,8 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
         searchQuery,
         page,
         limit,
-        userId
+        userId,
+        { includeUnread: true }
       );
       
       console.log('Store: Received threads', newThreads.length);
@@ -504,9 +505,10 @@ export const useThreadStore = create<ThreadStore>()((set, get) => ({
             filter: `thread_id=eq.${threadId}`,
           },
           {
-            event: '*',
+            event: 'INSERT',
             schema: 'public',
             table: 'message_reactions',
+            filter: `thread_id=eq.${threadId}`,
           }
         ]
       },

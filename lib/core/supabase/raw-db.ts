@@ -120,6 +120,28 @@ export async function select<T = any>(
   }
 }
 
+export async function count(
+  table: string,
+  filters: Record<string, any> = {}
+): Promise<{ count: number; error: Error | null }> {
+  try {
+    const queryString = buildQueryString({ select: 'id', filters });
+    const url = `${SUPABASE_URL}/rest/v1/${table}?${queryString}`;
+    const headers = await getHeaders();
+    headers['Prefer'] = 'count=exact';
+    headers['Range'] = '0-0';
+    const res = await fetch(url, { method: 'HEAD', headers, cache: 'no-store' });
+    if (!res.ok && res.status !== 206) {
+      throw new Error(`COUNT failed: ${res.status}`);
+    }
+    const total = Number(res.headers.get('content-range')?.split('/')[1] ?? 0);
+    return { count: Number.isFinite(total) ? total : 0, error: null };
+  } catch (error: any) {
+    console.error(`[RawDb] COUNT ${table} error:`, error);
+    return { count: 0, error };
+  }
+}
+
 /**
  * INSERT query
  * @example insert('users', { name: 'John', email: 'john@example.com' })

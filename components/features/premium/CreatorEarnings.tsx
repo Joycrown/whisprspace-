@@ -11,6 +11,7 @@ import { useUserStore } from '@/store/userStore'
 export function CreatorEarnings() {
   const { session } = useUserStore()
   const { earnings, summary, isLoading, refresh } = useCreatorEarnings(session.user?.id || null)
+  const creatorShare = session.user?.isPremium ? 70 : 50
 
   if (!session.user) {
     return (
@@ -35,7 +36,7 @@ export function CreatorEarnings() {
         {/* Total Earnings */}
         <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl p-6 border border-green-200 dark:border-green-800">
           <div className="text-sm text-green-600 dark:text-green-400 font-medium mb-2">
-            Total Earnings (70%)
+            Total Earnings ({creatorShare}%)
           </div>
           <div className="text-3xl font-bold text-green-700 dark:text-green-300">
             ${summary.netEarnings.toFixed(2)}
@@ -127,7 +128,7 @@ export function CreatorEarnings() {
                       +${parseFloat(earning.net_amount).toFixed(2)}
                     </div>
                     <div className="text-xs text-gray-500">
-                      (${parseFloat(earning.amount).toFixed(2)} - 30% fee)
+                      (${parseFloat(earning.amount).toFixed(2)} before platform fee)
                     </div>
                   </div>
                 </div>
@@ -146,7 +147,8 @@ export function CreatorEarnings() {
               Revenue Sharing
             </h4>
             <p className="text-sm text-purple-700 dark:text-purple-300">
-              You earn <strong>70%</strong> of every premium thread sale. The platform takes a 30% fee to cover transaction costs and maintain the service.
+              You earn <strong>{creatorShare}%</strong> of every paid discussion sale. The platform keeps {100 - creatorShare}% to cover transaction costs and run the service.
+              {creatorShare < 70 && ' Upgrade to Premium to keep 70%.'}
             </p>
           </div>
         </div>

@@ -1,85 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createHash } from 'crypto'
 import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { containsBlockedContent } from '@/lib/moderation/blocklist'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_CONTENT_LENGTH = 500
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000   // 1 hour
-const RATE_LIMIT_MAX_PER_INBOX = 5             // per sender token OR ip, per hour
-const SENDER_TOKEN_COOKIE = 'whs_sit'          // sender identity token (HttpOnly)
-const SENDER_TOKEN_TTL_DAYS = 90
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getClientIp(req: NextRequest): string {
-  return (
-    req.headers.get('cf-connecting-ip') ||
-    req.headers.get('x-real-ip') ||
-    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    'unknown'
-  )
-}
-
-function hashIp(ip: string): string {
-  return createHash('sha256').update(ip).digest('hex')
-}
-
-function generateSenderToken(): string {
-  // 32 random bytes → 64-char hex string
-  const array = new Uint8Array(32)
-  crypto.getRandomValues(array)
-  return Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
-// ─── Rate limit check ────────────────────────────────────────────────────────
-
-async function isRateLimited(
-  inboxOwnerId: string,
-  senderToken: string | null,
-  ipHash: string
-): Promise<boolean> {
-  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString()
-
-  // Count recent sends from this sender (by token OR ip — both signals together)
-  let query = supabaseAdmin
-    .from('inbox_send_log')
-    .select('id', { count: 'exact', head: true })
-    .eq('inbox_owner_id', inboxOwnerId)
-    .gte('sent_at', windowStart)
-
-  if (senderToken) {
-    query = query.or(`sender_token.eq.${senderToken},ip_hash.eq.${ipHash}`)
-  } else {
-    query = query.eq('ip_hash', ipHash)
-  }
-
-  const { count, error } = await query
-
-  if (error) {
-    console.error('[InboxSend] Rate limit query failed:', error.message)
-    // Fail open — don't block sends on a DB error
-    return false
-  }
-
-  return (count ?? 0) >= RATE_LIMIT_MAX_PER_INBOX
-}
-
-async function logSend(
-  inboxOwnerId: string,
-  senderToken: string | null,
-  ipHash: string
-): Promise<void> {
-  const { error } = await supabaseAdmin
-    .from('inbox_send_log')
-    .insert({ inbox_owner_id: inboxOwnerId, sender_token: senderToken, ip_hash: ipHash })
-
-  if (error) {
-    console.error('[InboxSend] Failed to log send:', error.message)
-    // Non-fatal — the message was already written
-  }
-}
 
 // ─── Route handler ────────────────────────────────────────────────────────────
 
@@ -125,30 +50,13 @@ export async function POST(req: NextRequest) {
     // ── Verify recipient exists ──────────────────────────────────────────────
     const { data: recipient, error: recipientError } = await supabaseAdmin
       .from('users')
-      .select('id')
+      .select('id, is_anonymous')
       .eq('id', recipientId)
       .single()
 
-    if (recipientError || !recipient) {
+    if (recipientError || !recipient || recipient.is_anonymous) {
       return NextResponse.json({ error: 'Recipient not found' }, { status: 404 })
     }
-
-    // ── Sender token + IP ────────────────────────────────────────────────────
-    const existingToken = req.cookies.get(SENDER_TOKEN_COOKIE)?.value || null
-    const ip = getClientIp(req)
-    const ipHash = hashIp(ip)
-
-    // ── Rate limit ───────────────────────────────────────────────────────────
-    const limited = await isRateLimited(recipientId, existingToken, ipHash)
-    if (limited) {
-      return NextResponse.json(
-        { error: 'Too many messages. Please wait before sending again.' },
-        { status: 429 }
-      )
-    }
-
-    // Issue token if this is the first send (no existing cookie)
-    const senderToken = existingToken ?? generateSenderToken()
 
     // ── Write the conversation + message via service role ────────────────────
     // sender_id is null for fully anonymous (no-account) sends.
@@ -185,24 +93,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to deliver message' }, { status: 500 })
     }
 
-    // ── Log the send (rate limit audit trail) ────────────────────────────────
-    await logSend(recipientId, senderToken, ipHash)
-
-    // ── Issue / refresh the sender token cookie ───────────────────────────────
-    const response = NextResponse.json({ success: true })
-
-    const cookieExpiry = new Date()
-    cookieExpiry.setDate(cookieExpiry.getDate() + SENDER_TOKEN_TTL_DAYS)
-
-    response.cookies.set(SENDER_TOKEN_COOKIE, senderToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      expires: cookieExpiry,
-      path: '/',
-    })
-
-    return response
+    return NextResponse.json({ success: true })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     console.error('[InboxSend] Unexpected error:', message)

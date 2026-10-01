@@ -1,30 +1,42 @@
-/**
- * Realtime Notification Provider
- * Handles real-time notification subscriptions for logged-in users
- */
-
 'use client';
 
+import { useCallback, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRealtimeNotifications } from '@/lib/core/realtime/hooks';
+import { REALTIME_RESUMED_EVENT } from '@/lib/core/supabase/raw-realtime';
+import { queryKeys } from '@/lib/react-query/queryKeys';
 import { useUserStore } from '@/store/userStore';
 
 export const RealtimeNotificationProvider = () => {
-  const { session } = useUserStore();
-  const userId = session?.user?.id;
+  const userId = useUserStore((state) => state.session.user?.id);
+  const isAnonymous = useUserStore((state) => state.session.user?.isAnonymous ?? true);
+  const queryClient = useQueryClient();
   const isRealtimeEnabled = process.env.NODE_ENV === 'production';
 
-  // Subscribe to realtime notifications
+  const handleNotification = useCallback((notification: { type?: string }) => {
+    if (notification?.type === 'direct_message') {
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.lists() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.unreadCount() });
+    }
+  }, [queryClient]);
+
+  useEffect(() => {
+    const onResume = () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.conversations.all, refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all, refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: queryKeys.threads.all, refetchType: 'active' });
+    };
+    window.addEventListener(REALTIME_RESUMED_EVENT, onResume);
+    return () => window.removeEventListener(REALTIME_RESUMED_EVENT, onResume);
+  }, [queryClient]);
+
   useRealtimeNotifications({
     userId,
-    enabled: !!userId && isRealtimeEnabled,
+    enabled: !!userId && !isAnonymous && isRealtimeEnabled,
     showToastNotification: true,
     playSound: true,
-    onNotification: (notification) => {
-      // Additional handling if needed
-      console.log('[RealtimeNotifications] Received:', notification);
-    },
+    onNotification: handleNotification,
   });
 
-  // This component doesn't render anything
   return null;
 };

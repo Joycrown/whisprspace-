@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import BackButton from '@/components/navigation/BackButton'
 import type { PromptDetail } from '@/lib/prompts/types'
 import type { ExportSource } from '@/lib/prompts/export-types'
 import { promptApi } from '@/lib/prompts/api-client'
@@ -31,5 +32,5 @@ export default function PromptExportPage() {
     responseFormat: prompt.response_format,
     choice: prompt.response_format === 'choice' && prompt.options ? { options: prompt.options, correctOptionIndex: prompt.correct_option_index } : undefined,
   }
-  return <main className="min-h-screen bg-[#0A0A10] px-4 py-8 text-[#F2F2F6]"><div className="mx-auto max-w-2xl"><Link href={`/curiosity-ask/${prompt.id}/manage`} className="mb-6 inline-flex items-center gap-1 text-sm text-[#8F8FA3] hover:text-white"><ArrowLeft className="h-4 w-4" /> Highlights</Link><p className="text-xs font-medium uppercase tracking-[0.17em] text-[#C4B5FD]">Export</p><h1 className="mt-2 text-2xl font-medium leading-snug">{prompt.question}</h1><p className="mt-2 text-sm text-[#8F8FA3]">Build a finished shareable asset from your selected anonymous answers.</p><div className="mt-7"><CarouselExport source={source} /></div></div></main>
+  return <main className="min-h-screen bg-[#0A0A10] px-4 py-8 text-[#F2F2F6]"><div className="mx-auto max-w-2xl"><BackButton fallbackHref={`/curiosity-ask/${prompt.id}/manage`} className="mb-6 inline-flex items-center gap-1 text-sm text-[#8F8FA3] hover:text-white" iconClassName="h-4 w-4" /><p className="text-xs font-medium uppercase tracking-[0.17em] text-[#C4B5FD]">Export</p><h1 className="mt-2 text-2xl font-medium leading-snug">{prompt.question}</h1><p className="mt-2 text-sm text-[#8F8FA3]">Build a finished shareable asset from your selected anonymous answers.</p><div className="mt-7"><CarouselExport source={source} /></div></div></main>
 }

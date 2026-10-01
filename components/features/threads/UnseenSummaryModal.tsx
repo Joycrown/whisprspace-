@@ -102,7 +102,7 @@ export function UnseenSummaryModal() {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4 }}
             className="fixed inset-0 z-[1200] flex items-center justify-center p-6"
-            style={{ backgroundColor: 'var(--color-bg-primary)' }}
+            style={{ backgroundColor: '#0A0A10' }}
           >
             {/* Purple glow — decorative only, sits behind text */}
             <div
@@ -140,7 +140,7 @@ export function UnseenSummaryModal() {
                 transition={{ delay: 0.35, duration: 0.5 }}
               >
                 <p className="text-white/90 text-3xl mb-3 leading-tight font-light">
-                  Your thread<br />just closed.
+                  Your discussion<br />just closed.
                 </p>
                 <p className="text-gray-500 text-base mb-12 leading-relaxed">
                   Here's what it meant<br />while it was alive.
@@ -176,7 +176,7 @@ export function UnseenSummaryModal() {
                   onClick={handleDismiss}
                   className="text-gray-600 text-sm hover:text-gray-400 transition-colors duration-200 underline underline-offset-4"
                 >
-                  View later in My Threads
+                  View later in My Discussions
                 </button>
               </motion.div>
             </div>

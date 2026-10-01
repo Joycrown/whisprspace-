@@ -70,8 +70,10 @@ export default function AnalyticsProvider({ children }: { children: React.ReactN
         anonymous_id: user.anonymousId,
         username: user.username || user.anonymousId,
       });
+      posthog.register({ user_tier: user.isAnonymous ? 'guest' : 'registered', is_premium: !!user.isPremium });
     } else {
       posthog.reset();
+      posthog.register({ user_tier: 'visitor', is_premium: false });
     }
   }, [user]);
 

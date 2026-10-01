@@ -25,6 +25,7 @@ import { useThreadStore } from '@/store/threadStore';
 import { useUserStore } from '@/store/userStore';
 import { useToast } from '@/components/ui/Toast';
 import { useRouter } from 'next/navigation';
+import { track } from '@/lib/analytics/track';
 import {
   ThreadType,
   ThreadCategory,
@@ -41,6 +42,7 @@ import PremiumPaymentForm from '@/components/features/premium/PremiumPaymentForm
 import SignupPromptModal from '@/components/auth/SignupPromptModal';
 import { getUserPollStats } from '@/lib/threads/thread-service';
 import { buildThreadPath } from '@/lib/threads/thread-url';
+import { POST_THREAD_NUDGE_EVENT, type PostThreadNudgeDetail } from '@/components/features/inbox/PostThreadNudge';
 
 interface ThreadComposerProps {
   isOpen: boolean;
@@ -239,7 +241,15 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
       const threadId = await createThread(formData);
 
       if (threadId) {
-        // Clear draft
+        track('discussion_created', {
+          feature: formData.isPremium ? 'exclusive_discussions' : 'discussions',
+          thread_id: threadId,
+          type: formData.type,
+          privacy: formData.privacy,
+          is_paid: Boolean(formData.isPremium),
+          price: formData.isPremium ? formData.price : undefined,
+          origin: onCreated ? 'converted' : 'composer',
+        });
         localStorage.removeItem('thread_draft');
 
         // Post-create hook (e.g. import inbox messages into the new thread).
@@ -279,9 +289,9 @@ const ThreadComposer: React.FC<ThreadComposerProps> = ({ isOpen, onClose, draft,
           memberLimit: undefined,
         });
 
-        // Signal MainLayout's PostThreadNudge to appear — fires before the router push
-        // so both components are still mounted and can receive the event.
-        window.dispatchEvent(new CustomEvent('whisprspace:inbox-nudge'))
+        window.dispatchEvent(new CustomEvent<PostThreadNudgeDetail>(POST_THREAD_NUDGE_EVENT, {
+          detail: { threadId, title: formData.title, privacy: formData.privacy },
+        }))
 
         // Navigate to the new thread or threads list
         setTimeout(() => {

@@ -50,5 +50,17 @@ next-env.d.ts
 /artifacts/
 *_PLAYBOOK.md
 
+# local docs, exports and seed batches
+/*.md
+!/README.md
+/*.pdf
+/whs_new_batch*.json
+
 # Claude Code local settings
 .claude/settings.local.json
+
+# volunteer applicant data / onboarding email tooling (contains PII, not for source control)
+/Job Application*.csv
+/scripts/send-onboarding-emails.js
+/scripts/_preview/
+/WhisprSpace-*Agreement*.pdf

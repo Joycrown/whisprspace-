@@ -86,7 +86,7 @@ export default function PremiumContentPreview({
           <div className="space-y-1">
             <h3 className="text-base font-medium text-[#F2F2F6]">Unlock premium content</h3>
             <p className="text-sm text-[#8F8FA3]">
-              Full thread access. 70% goes directly to the creator.
+              Full discussion access. Most of what you pay goes directly to the creator.
             </p>
           </div>
 

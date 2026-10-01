@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef, memo } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -24,6 +24,9 @@ interface ThreadMessagesProps {
   messageFilter?: { senderId?: string; keyword?: string };
   typingUsers?: string[]; // Added typingUsers prop
   onRetry?: (message: Message) => void; // Added onRetry prop
+  hasOlder?: boolean;
+  isLoadingOlder?: boolean;
+  onLoadOlder?: () => Promise<void> | void;
 }
 
 const ThreadMessages: React.FC<ThreadMessagesProps> = ({
@@ -36,18 +39,34 @@ const ThreadMessages: React.FC<ThreadMessagesProps> = ({
   onReact,
   messageFilter,
   typingUsers = [], // Default to empty array
-  onRetry
+  onRetry,
+  hasOlder = false,
+  isLoadingOlder = false,
+  onLoadOlder
 }) => {
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const messagesContainerRef = React.useRef<HTMLDivElement>(null);
+  const handlersRef = useRef({ onReply, onEditMessage, onReact, onRetry });
+  handlersRef.current = { onReply, onEditMessage, onReact, onRetry };
+
+  const stableOnReply = useCallback((message: Message) => handlersRef.current.onReply(message), []);
+  const stableOnEdit = useCallback((messageId: string, content: string) => handlersRef.current.onEditMessage?.(messageId, content), []);
+  const stableOnReact = useCallback((messageId: string, reaction: string) => handlersRef.current.onReact(messageId, reaction), []);
+  const stableOnRetry = useCallback((message: Message) => handlersRef.current.onRetry?.(message), []);
+  const handleQuoteClick = useCallback((id: string) => {
+    const el = document.getElementById(`message-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('bg-purple-900/20');
+      setTimeout(() => el.classList.remove('bg-purple-900/20'), 2000);
+    }
+  }, []);
 
   const messagesMap = useMemo(() => {
     const map: { [key: string]: Message } = {};
     messages.forEach(msg => map[msg.id] = msg);
     return map;
   }, [messages]);
-
-  const getRepliedMessage = (messageId: string) => messagesMap[messageId];
 
   const visibleMessages = useMemo(() => {
     if (!messageFilter) return messages;
@@ -70,54 +89,77 @@ const ThreadMessages: React.FC<ThreadMessagesProps> = ({
     return filtered;
   }, [messages, messageFilter]);
 
-  // Auto-scroll to bottom when messages change
-  useEffect(() => {
-    const scrollToBottom = () => {
-      if (messagesEndRef.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }
-    };
+  const lastMessage = visibleMessages[visibleMessages.length - 1];
+  const lastMessageId = lastMessage?.id;
+  const lastIsMine = lastMessage?.sender?.id === currentUserId;
+  const hasScrolledInitiallyRef = useRef(false);
 
-    // Small delay to ensure DOM has updated
-    const timeoutId = setTimeout(scrollToBottom, 100);
+  useEffect(() => {
+    if (!lastMessageId) return;
+    const end = messagesEndRef.current;
+    if (!end) return;
+    const firstScroll = !hasScrolledInitiallyRef.current;
+    const scroller = messagesContainerRef.current?.parentElement;
+    const nearBottom = scroller
+      ? scroller.scrollHeight - (scroller.scrollTop + scroller.clientHeight) < 400
+      : true;
+    if (!firstScroll && !nearBottom && !lastIsMine) return;
+    hasScrolledInitiallyRef.current = true;
+    const timeoutId = setTimeout(() => {
+      end.scrollIntoView({ behavior: firstScroll ? 'auto' : 'smooth', block: 'end' });
+    }, 50);
     return () => clearTimeout(timeoutId);
-  }, [visibleMessages]);
+  }, [lastMessageId, lastIsMine]);
+
+  const handleLoadOlder = async () => {
+    if (!onLoadOlder || isLoadingOlder) return;
+    const scroller = messagesContainerRef.current?.parentElement;
+    const previousHeight = scroller?.scrollHeight ?? 0;
+    const previousTop = scroller?.scrollTop ?? 0;
+    await onLoadOlder();
+    requestAnimationFrame(() => {
+      if (scroller) scroller.scrollTop = previousTop + (scroller.scrollHeight - previousHeight);
+    });
+  };
 
   return (
-    <div ref={messagesContainerRef} className="px-3 md:px-4 py-4 space-y-4 w-full max-w-full overflow-x-hidden scroll-smooth">
-      <AnimatePresence mode="popLayout">
-        {visibleMessages.map((message, index) => (
+    <div ref={messagesContainerRef} className="px-3 md:px-4 py-4 space-y-4 w-full max-w-full overflow-x-hidden">
+      {hasOlder && !messageFilter?.keyword && !messageFilter?.senderId && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={handleLoadOlder}
+            disabled={isLoadingOlder}
+            className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-1.5 text-xs text-gray-300 hover:bg-white/[0.06] disabled:opacity-50"
+          >
+            {isLoadingOlder && <FaSpinner className="h-3 w-3 animate-spin" />}
+            {isLoadingOlder ? 'Loading earlier messages…' : 'Load earlier messages'}
+          </button>
+        </div>
+      )}
+      <AnimatePresence initial={false}>
+        {visibleMessages.map((message) => (
           <motion.div
             key={message.id}
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{
-              duration: 0.3,
-              delay: index * 0.05,
-              ease: [0.4, 0, 0.2, 1]
-            }}
+            className="[content-visibility:auto] [contain-intrinsic-size:auto_96px]"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
           >
             <div id={`message-${message.id}`} className="transition-colors duration-1000">
               <MessageItem
                 message={message}
                 threadId={threadId}
                 threadCreatorId={threadCreatorId}
-                onReply={onReply}
-                onEditMessage={onEditMessage}
-                onReact={onReact}
+                onReply={stableOnReply}
+                onEditMessage={onEditMessage ? stableOnEdit : undefined}
+                onReact={stableOnReact}
                 isCurrentUser={message.sender.id === currentUserId}
                 currentUserId={currentUserId}
-                getRepliedMessage={getRepliedMessage}
-                onQuoteClick={(id) => {
-                  const el = document.getElementById(`message-${id}`);
-                  if (el) {
-                    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    el.classList.add('bg-purple-900/20');
-                    setTimeout(() => el.classList.remove('bg-purple-900/20'), 2000);
-                  }
-                }}
-                onRetry={onRetry}
+                repliedMessage={message.replyToId ? messagesMap[message.replyToId] ?? null : null}
+                onQuoteClick={handleQuoteClick}
+                onRetry={onRetry ? stableOnRetry : undefined}
               />
             </div>
           </motion.div>
@@ -156,7 +198,7 @@ const ThreadMessages: React.FC<ThreadMessagesProps> = ({
   );
 };
 
-const MessageItem: React.FC<{
+const MessageItem = memo(function MessageItem({ message, threadId, threadCreatorId, onReply, onEditMessage, onReact, isCurrentUser, currentUserId, repliedMessage, onQuoteClick, onRetry }: {
   message: Message;
   threadId: string;
   threadCreatorId: string; // ID of the thread creator
@@ -165,10 +207,10 @@ const MessageItem: React.FC<{
   onReact: (messageId: string, reaction: string) => void;
   isCurrentUser: boolean;
   currentUserId: string;
-  getRepliedMessage: (messageId: string) => Message | undefined;
+  repliedMessage: Message | null;
   onQuoteClick?: (messageId: string) => void;
   onRetry?: (message: Message) => void;
-}> = ({ message, threadId, threadCreatorId, onReply, onEditMessage, onReact, isCurrentUser, currentUserId, getRepliedMessage, onQuoteClick, onRetry }) => {
+}) {
   const [showReactions, setShowReactions] = useState(false);
   const [activeImage, setActiveImage] = useState<{ url: string; name?: string } | null>(null);
   const [pickerPosition, setPickerPosition] = useState<{ top: number; left: number; showBelow: boolean }>({
@@ -179,7 +221,6 @@ const MessageItem: React.FC<{
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
   const buttonRef = React.useRef<HTMLButtonElement>(null);
-  const repliedMessage = message.replyToId ? getRepliedMessage(message.replyToId) : null;
 
   useEffect(() => {
     setEditContent(message.content);
@@ -559,6 +600,6 @@ const MessageItem: React.FC<{
       </div>
     </div>
   );
-};
+});
 
 export default ThreadMessages;

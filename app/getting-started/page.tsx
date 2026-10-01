@@ -54,7 +54,7 @@ const steps = [
         body: 'You control who sees the link. If you share it publicly, you get public responses. Share it with a private group, it stays private.',
       },
     ],
-    cta: { label: 'Create a thread', href: '/threads' },
+    cta: { label: 'Create a thread', href: '/discussions' },
   },
   {
     number: '03',
@@ -81,7 +81,7 @@ const steps = [
         body: 'Any registered account can create premium discussions. Anonymous/guest accounts cannot — create a full account to unlock this.',
       },
     ],
-    cta: { label: 'Create a premium thread', href: '/threads' },
+    cta: { label: 'Create a premium thread', href: '/discussions' },
   },
   {
     number: '04',
@@ -218,7 +218,7 @@ export default function GettingStartedPage() {
         <div className="text-center py-8 border-t border-gray-100">
           <p className="text-gray-500 text-sm mb-4">Ready to dive in?</p>
           <Link
-            href="/threads"
+            href="/discussions"
             className="inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-gradient-to-r from-purple-500 to-orange-500 text-white font-semibold hover:opacity-90 transition-opacity"
           >
             Take me to WhisprSpace →

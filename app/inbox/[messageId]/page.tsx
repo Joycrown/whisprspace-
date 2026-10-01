@@ -127,7 +127,7 @@ export default function ConversationPage() {
         },
       };
       localStorage.setItem(INBOX_THREAD_DRAFT_KEY, JSON.stringify(draft));
-      router.push('/threads/create?from=inbox');
+      router.push('/discussions/create?from=inbox');
     } finally {
       setPreparingThread(false);
     }
@@ -233,83 +233,52 @@ export default function ConversationPage() {
     };
   }, [conversationId, session.user, syncIncomingReceiptState]);
 
+  const sessionUserId = session.user?.id;
+  const otherParticipantId = otherUser?.user?.id || otherUser?.userId;
+
   useEffect(() => {
-    if (!session.user || !conversationId) return;
+    if (!sessionUserId || !conversationId) return;
 
     const channel = rawRealtime.createChannel({
-      channelName: `realtime:typing:${conversationId}`,
+      channelName: `realtime:dm:${conversationId}`,
+      config: { presence: { key: sessionUserId } },
       onBroadcast: (payload) => {
         if (payload?.event !== 'typing') return;
         const typingPayload = payload?.payload || {};
-        if (typingPayload.userId === session.user?.id) return;
+        if (typingPayload.userId === sessionUserId) return;
         setIsOtherTyping(Boolean(typingPayload.isTyping));
+      },
+      onPresenceSync: (payload) => {
+        if (!payload || !otherParticipantId) return;
+        if (payload.joins || payload.leaves) {
+          if (payload.joins?.[otherParticipantId]) setIsOtherOnline(true);
+          if (payload.leaves?.[otherParticipantId]) setIsOtherOnline(false);
+          return;
+        }
+        setIsOtherOnline(Boolean(payload?.[otherParticipantId]?.length));
       },
     });
 
     typingChannelRef.current = channel;
-    // Typing indicator is best-effort — a join timeout must not crash the page.
-    // The socket auto-rejoins in the background; swallow the rejection here.
-    channel.subscribe().catch((err) => {
-      console.warn('[DM] typing channel subscribe failed (non-fatal):', err);
-    });
-
-    return () => {
-      if (channel && session.user?.id) {
-        channel.broadcast('typing', {
-          userId: session.user.id,
-          isTyping: false,
-        });
-      }
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-      channel.unsubscribe();
-      typingChannelRef.current = null;
-    };
-  }, [conversationId, session.user]);
-
-  useEffect(() => {
-    if (!session.user || !conversationId) return;
-
-    const otherUserId = otherUser?.user?.id || otherUser?.userId;
-    if (!otherUserId) return;
-
-    const channel = rawRealtime.createChannel({
-      channelName: `realtime:presence:dm:${conversationId}`,
-      config: { presence: { key: session.user.id } },
-      onPresenceSync: (payload) => {
-        if (!payload) return;
-        if (payload.joins || payload.leaves) {
-          if (payload.joins?.[otherUserId]) {
-            setIsOtherOnline(true);
-          }
-          if (payload.leaves?.[otherUserId]) {
-            setIsOtherOnline(false);
-          }
-          return;
-        }
-
-        const isOnline = Boolean(payload?.[otherUserId]?.length);
-        setIsOtherOnline(isOnline);
-      },
-    });
-
     presenceChannelRef.current = channel;
-    // Online presence is best-effort — a join timeout must not crash the page.
-    // The socket auto-rejoins in the background; swallow the rejection here.
     channel.subscribe()
       .then(() => {
         channel.track({ onlineAt: new Date().toISOString() });
       })
       .catch((err) => {
-        console.warn('[DM] presence channel subscribe failed (non-fatal):', err);
+        console.warn('[DM] realtime channel subscribe failed (non-fatal):', err);
       });
 
     return () => {
+      channel.broadcast('typing', { userId: sessionUserId, isTyping: false });
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
       channel.unsubscribe();
+      typingChannelRef.current = null;
       presenceChannelRef.current = null;
     };
-  }, [conversationId, session.user, otherUser?.user?.id, otherUser?.userId]);
+  }, [conversationId, sessionUserId, otherParticipantId]);
 
   const handleSend = async () => {
     const trimmedContent = messageText.trim();
