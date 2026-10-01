@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, ChevronLeft, Copy, Loader2, Plus, Share2, Star, Trash2 } from 'lucide-react'
+import { Check, Copy, Loader2, Plus, Share2, Star, Trash2 } from 'lucide-react'
+import BackButton from '@/components/navigation/BackButton'
 import posthog from 'posthog-js'
 import { PROMPT_LIBRARY } from '@/lib/prompts/library'
 import { promptApi } from '@/lib/prompts/api-client'
@@ -174,7 +175,7 @@ export default function PromptComposer() {
           <div className="space-y-3">
             <button ref={shareButtonRef} onClick={openSharePicker} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white"><Share2 className="h-4 w-4" /> Share this ask</button>
             <button onClick={copyLink} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[#2A2A38] text-sm text-[#F2F2F6]"><Copy className="h-4 w-4" /> {copied ? 'Copied' : 'Copy link'}</button>
-            <button onClick={() => router.push(`/curiosity-ask/${createdPrompt.id}/manage`)} className="h-11 w-full text-sm text-[#8F8FA3] hover:text-white">View responses</button>
+            <button onClick={() => router.replace(`/curiosity-ask/${createdPrompt.id}/manage`)} className="h-11 w-full text-sm text-[#8F8FA3] hover:text-white">View responses</button>
           </div>
         </div>
 
@@ -204,7 +205,7 @@ export default function PromptComposer() {
   return (
     <div className="min-h-screen bg-[#0A0A10] px-4 py-8 text-[#F2F2F6] md:py-12">
       <div className="mx-auto max-w-2xl">
-        <button onClick={() => router.back()} className="mb-7 inline-flex items-center gap-1 text-sm text-[#8F8FA3] hover:text-white"><ChevronLeft className="h-4 w-4" /> Back</button>
+        <BackButton fallbackHref="/curiosity-ask" className="mb-7 inline-flex items-center gap-1 text-sm text-[#8F8FA3] hover:text-white" iconClassName="h-4 w-4" />
         <div className="mb-8"><p className="mb-2 text-sm font-medium uppercase tracking-[0.18em] text-[#C4B5FD]">Curiosity Ask</p><h1 className="text-3xl font-semibold tracking-tight">Ask a better question.</h1><p className="mt-2 text-sm text-[#8F8FA3]">Answers stay private until you choose what to share.</p></div>
 
         <div className="space-y-6 rounded-2xl border border-[#23232E] bg-[#12121A] p-5 md:p-7">

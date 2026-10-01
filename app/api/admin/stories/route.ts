@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { requireAdmin } from '@/lib/security/admin-auth'
 
-const FILTERS = ['review', 'hidden', 'removed', 'consented', 'recent'] as const
+const FILTERS = ['review', 'hidden', 'removed', 'recent'] as const
 type Filter = (typeof FILTERS)[number]
 
 export async function GET(request: NextRequest) {
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabaseAdmin
     .from('stories')
-    .select('id, title, category, family, excerpt, moderation_status, report_count, reply_count, follower_count, episode_count, is_sensitive, feature_consent, is_team, author_user_id, created_at, updated_at, deleted_at')
+    .select('id, title, category, family, excerpt, moderation_status, report_count, reply_count, follower_count, episode_count, is_sensitive, is_team, author_user_id, created_at, updated_at, deleted_at')
     .is('deleted_at', null)
     .order('updated_at', { ascending: false })
     .limit(50)
@@ -22,7 +22,6 @@ export async function GET(request: NextRequest) {
   if (filter === 'review') query = query.or('moderation_status.neq.visible,report_count.gt.0').neq('moderation_status', 'removed')
   if (filter === 'hidden') query = query.eq('moderation_status', 'hidden')
   if (filter === 'removed') query = query.eq('moderation_status', 'removed')
-  if (filter === 'consented') query = query.eq('feature_consent', true).eq('moderation_status', 'visible')
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: 'Unable to load stories.' }, { status: 500 })

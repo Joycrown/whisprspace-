@@ -6,7 +6,7 @@ import { storiesApi } from '@/lib/stories/api-client'
 import { buildStoryPath } from '@/lib/stories/story-url'
 import { CATEGORY_META, type StoryCategory } from '@/lib/stories/types'
 
-type Filter = 'review' | 'hidden' | 'removed' | 'consented' | 'recent'
+type Filter = 'review' | 'hidden' | 'removed' | 'recent'
 type Action = 'restore' | 'hide' | 'remove' | 'mark_team' | 'unmark_team' | 'mark_sensitive'
 
 interface AdminStory {
@@ -20,7 +20,6 @@ interface AdminStory {
   follower_count: number
   episode_count: number
   is_sensitive: boolean
-  feature_consent: boolean
   is_team: boolean
   has_account: boolean
   created_at: string
@@ -31,7 +30,6 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
   { value: 'review', label: 'Needs review' },
   { value: 'hidden', label: 'Hidden' },
   { value: 'removed', label: 'Removed' },
-  { value: 'consented', label: 'OK to feature' },
   { value: 'recent', label: 'All recent' },
 ]
 
@@ -108,7 +106,6 @@ export default function StoriesModeration() {
                 <span className={`rounded-full px-2 py-0.5 font-semibold ${STATUS_STYLES[story.moderation_status]}`}>{story.moderation_status}</span>
                 <span className="text-gray-500">{CATEGORY_META[story.category].tag} · {CATEGORY_META[story.category].label}</span>
                 {story.report_count > 0 && <span className="text-red-600">{story.report_count} reports</span>}
-                {story.feature_consent && <span className="text-purple-600">OK to feature</span>}
                 {story.is_team && <span className="text-blue-600">Team</span>}
                 {story.is_sensitive && <span className="text-orange-600">Sensitive</span>}
                 <span className="text-gray-400">{story.has_account ? 'Account' : 'No account'}</span>

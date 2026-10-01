@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound, permanentRedirect } from 'next/navigation'
-import { ArrowLeft, Eye } from 'lucide-react'
+import { Eye } from 'lucide-react'
+import BackButton from '@/components/navigation/BackButton'
 import RelativeTime from '@/components/features/stories/RelativeTime'
 import SensitiveGate from '@/components/features/stories/SensitiveGate'
 import StoriesTopBar from '@/components/features/stories/StoriesTopBar'
@@ -119,10 +119,7 @@ export default async function StoryPage({ params }: PageProps) {
         <StoryViewerProvider storyId={story.id} initialReactionCounts={story.reaction_counts} replyCount={story.reply_count}>
           <div className="lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
           <div className="px-4 pb-28 pt-5 md:px-5 scrollbar-hide lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:px-8 lg:pb-12">
-            <Link href={STORIES_FEED_PATH} prefetch={false} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]">
-              <ArrowLeft className="h-3.5 w-3.5" />
-              All stories
-            </Link>
+            <BackButton fallbackHref={STORIES_FEED_PATH} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]" />
             <div className="mt-4">
               <StoryTags story={story} size="md" />
             </div>

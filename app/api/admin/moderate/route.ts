@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { resolveUserFromRequest } from '@/lib/security/request-auth'
+import { revalidateStory, revalidateStoryReplies } from '@/lib/stories/server'
 
 async function isAdmin(userId: string): Promise<boolean> {
   const [{ data: u }, { data: a }] = await Promise.all([
@@ -43,6 +44,17 @@ export async function POST(request: NextRequest) {
     if (contentError) {
       console.error('[Moderate] Failed to update content status:', contentError)
       return NextResponse.json({ error: 'Failed to update content' }, { status: 500 })
+    }
+
+    if (table === 'messages') {
+      const { data: message } = await supabaseAdmin.from('messages').select('thread_id').eq('id', contentId).maybeSingle()
+      const { data: story } = message?.thread_id
+        ? await supabaseAdmin.from('stories').select('id').eq('thread_id', message.thread_id).maybeSingle()
+        : { data: null }
+      if (story) {
+        revalidateStory(story.id)
+        revalidateStoryReplies(story.id)
+      }
     }
 
     // Mark report as reviewed with outcome

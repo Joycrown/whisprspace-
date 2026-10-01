@@ -20,6 +20,7 @@ export type NotificationType =
   | 'prompt_response'
   | 'story_episode'
   | 'story_reply'
+  | 'story_moderation'
 
 export type NotificationCategory = 'all' | 'interactions' | 'system' | 'social'
 
@@ -432,6 +433,8 @@ export const getNotificationIcon = (type: NotificationType): string => {
       return '\u{1F4D6}'
     case 'story_reply':
       return '\u{1F4AC}'
+    case 'story_moderation':
+      return '\u{1F6E1}'
     default:
       return '\u{1F514}'
   }
@@ -466,6 +469,8 @@ export const getNotificationColor = (type: NotificationType): string => {
       return 'text-orange-500'
     case 'story_reply':
       return 'text-blue-500'
+    case 'story_moderation':
+      return 'text-yellow-500'
     default:
       return 'text-gray-500'
   }

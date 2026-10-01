@@ -40,7 +40,7 @@ export default function ReportStoryModal({ storyId, onClose }: { storyId: string
           </button>
         </div>
         {done ? (
-          <p className="mt-3 text-sm leading-6 text-[#8F8FA3]">We’ll take a look. Stories reported by several readers are hidden until our team reviews them.</p>
+          <p className="mt-3 text-sm leading-6 text-[#8F8FA3]">Thanks for letting us know. Our team will review this story.</p>
         ) : (
           <>
             <div className="mt-4 space-y-1.5">

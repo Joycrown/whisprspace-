@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { PenLine } from 'lucide-react'
 import { useUserStore } from '@/store/userStore'
+import { MY_STORIES_PATH } from '@/lib/stories/config'
 
 export default function StoriesHeading() {
   const session = useUserStore((state) => state.session)
@@ -16,14 +17,23 @@ export default function StoriesHeading() {
         <span className="sr-only">: true stories, regrets, fiction and poetry shared anonymously on WhisprSpace</span>
       </h1>
       {isRegistered && (
-        <Link
-          href="/stories/new"
-          prefetch={false}
-          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] px-3.5 text-xs font-medium text-white active:scale-[0.97]"
-        >
-          <PenLine className="h-3.5 w-3.5" />
-          Tell your story
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href={MY_STORIES_PATH}
+            prefetch={false}
+            className="inline-flex h-9 items-center rounded-xl border border-[#2A2A38] px-3.5 text-xs text-[#DFDFE7] hover:border-[#8B5CF6]/50"
+          >
+            My stories
+          </Link>
+          <Link
+            href="/stories/new"
+            prefetch={false}
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] px-3.5 text-xs font-medium text-white active:scale-[0.97]"
+          >
+            <PenLine className="h-3.5 w-3.5" />
+            Tell your story
+          </Link>
+        </div>
       )}
     </div>
   )

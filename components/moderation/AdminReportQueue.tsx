@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/core/supabase/client'
+import { buildStoryPath } from '@/lib/stories/story-url'
+import { buildThreadPath } from '@/lib/threads/thread-url'
 import { AlertTriangle, CheckCircle, Trash2, RefreshCw, Eye } from 'lucide-react'
 
 interface Report {
@@ -14,12 +16,19 @@ interface Report {
   status: string
 }
 
+interface ContentContext {
+  kind: 'story' | 'discussion'
+  title: string
+  href: string
+}
+
 interface ContentItem {
   id: string
   content: string
   title?: string
   moderation_status: string
   report_count: number
+  context?: ContentContext
 }
 
 interface QueueItem {
@@ -82,10 +91,26 @@ export function AdminReportQueue() {
       messageIds.length
         ? supabase
             .from('messages')
-            .select('id, content, moderation_status, report_count')
+            .select('id, content, moderation_status, report_count, thread_id')
             .in('id', messageIds)
         : Promise.resolve({ data: [] as any[], error: null }),
     ])
+
+    const parentThreadIds = [...new Set((messageResult.data ?? []).map((m) => m.thread_id).filter(Boolean))]
+    const { data: parentThreads } = parentThreadIds.length
+      ? await supabase.from('threads').select('id, title, story_id').in('id', parentThreadIds)
+      : { data: [] as Array<{ id: string; title: string | null; story_id: string | null }> }
+
+    const contextByThread = new Map<string, ContentContext>()
+    for (const t of parentThreads ?? []) {
+      const title = t.title || 'Untitled'
+      contextByThread.set(
+        t.id,
+        t.story_id
+          ? { kind: 'story', title, href: `${buildStoryPath({ id: t.story_id, title })}#comments` }
+          : { kind: 'discussion', title, href: buildThreadPath({ id: t.id, title }) }
+      )
+    }
 
     const contentMap = new Map<string, ContentItem>()
     for (const t of threadResult.data ?? []) {
@@ -103,6 +128,7 @@ export function AdminReportQueue() {
         content: m.content,
         moderation_status: m.moderation_status,
         report_count: m.report_count,
+        context: contextByThread.get(m.thread_id),
       })
     }
 
@@ -213,7 +239,11 @@ export function AdminReportQueue() {
               <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[11px] text-gray-600 uppercase tracking-wider">
-                    {report.content_type}
+                    {report.content_type === 'thread'
+                      ? 'discussion'
+                      : content?.context?.kind === 'story'
+                        ? 'story comment'
+                        : 'discussion message'}
                   </span>
                   <span className="text-gray-700">·</span>
                   <span className="text-[11px] text-red-400/80 uppercase tracking-wider">
@@ -230,6 +260,15 @@ export function AdminReportQueue() {
                   </span>
                 )}
               </div>
+
+              {content?.context && (
+                <p className="text-xs text-gray-500 mb-2">
+                  {content.context.kind === 'story' ? 'On story: ' : 'In discussion: '}
+                  <a href={content.context.href} target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">
+                    {content.context.title}
+                  </a>
+                </p>
+              )}
 
               {/* Content preview */}
               <div className="bg-[#0a0a0a] border border-[#1a1a1a] rounded-lg p-3 mb-3">

@@ -162,8 +162,8 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
       modifiedTime: thread.updated_at,
       images: [
         {
-          url: `${siteConfig.appUrl}/discussions/${thread.id}/og`,
-          secureUrl: `${siteConfig.appUrl}/discussions/${thread.id}/og`,
+          url: `${siteConfig.appUrl}/discussions/${thread.id}/og?v=2`,
+          secureUrl: `${siteConfig.appUrl}/discussions/${thread.id}/og?v=2`,
           width: 1200,
           height: 630,
           alt: title,
@@ -176,7 +176,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
       description,
       site: siteConfig.twitterHandle,
       creator: siteConfig.twitterHandle,
-      images: [`${siteConfig.appUrl}/discussions/${thread.id}/og`],
+      images: [`${siteConfig.appUrl}/discussions/${thread.id}/og?v=2`],
     },
     keywords: [
       'anonymous discussion',

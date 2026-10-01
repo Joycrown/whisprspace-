@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import type { PromptResponse } from '@/lib/prompts/types'
-import type { ExportSource } from '@/lib/prompts/export-types'
+import { THREAD_EXPORT_LIMITS, type ExportSource } from '@/lib/prompts/export-types'
 import { promptApi } from '@/lib/prompts/api-client'
 import { extractThreadIdFromRef, buildThreadPath } from '@/lib/threads/thread-url'
 import CarouselExport from '@/components/features/prompts/CarouselExport'
@@ -41,9 +41,10 @@ export default function ThreadExportPage() {
     question: thread.title,
     responseCount: thread.response_count,
     isPremium: thread.is_premium,
+    maxReplies: thread.is_premium ? THREAD_EXPORT_LIMITS.premium : THREAD_EXPORT_LIMITS.free,
     responses: thread.responses,
     url: typeof window === 'undefined' ? '' : `${window.location.origin}${threadPath}`,
-    finalCta: 'Join the discussion',
+    finalCta: 'Read the rest of the discussion',
   }
-  return <main className="min-h-screen bg-[#0A0A10] px-4 py-8 text-[#F2F2F6]"><div className="mx-auto max-w-2xl"><Link href={threadPath} className="mb-6 inline-flex items-center gap-1 text-sm text-[#8F8FA3] hover:text-white"><ArrowLeft className="h-4 w-4" /> Discussion</Link><p className="text-xs font-medium uppercase tracking-[0.17em] text-[#C4B5FD]">Discussion export</p><h1 className="mt-2 text-2xl font-medium leading-snug">{thread.title}</h1><p className="mt-2 text-sm text-[#8F8FA3]">Choose the replies you want to turn into a finished shareable asset.</p><div className="mt-7"><CarouselExport source={source} /></div></div></main>
+  return <main className="min-h-screen bg-[#0A0A10] px-4 py-8 text-[#F2F2F6]"><div className="mx-auto max-w-2xl"><Link href={threadPath} className="mb-6 inline-flex items-center gap-1 text-sm text-[#8F8FA3] hover:text-white"><ArrowLeft className="h-4 w-4" /> Discussion</Link><p className="text-xs font-medium uppercase tracking-[0.17em] text-[#C4B5FD]">Discussion export</p><h1 className="mt-2 text-2xl font-medium leading-snug">{thread.title}</h1><p className="mt-2 text-sm text-[#8F8FA3]">Choose the messages you want to turn into a finished shareable asset, including your own.{thread.is_premium ? '' : ' Free accounts can export each discussion twice.'}</p><div className="mt-7"><CarouselExport source={source} /></div></div></main>
 }

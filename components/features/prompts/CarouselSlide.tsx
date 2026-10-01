@@ -106,8 +106,13 @@ const CarouselSlide = forwardRef<HTMLDivElement, CarouselSlideProps>(
 
         {slide.kind === 'cta' && (
           <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', flex: 1 }}>
-            <div style={{ color: '#F97316', fontSize: 20, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 28 }}>{isPrompt ? 'Want in?' : 'Your turn'}</div>
+            <div style={{ color: '#F97316', fontSize: 20, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase', marginBottom: 28 }}>{isPrompt ? 'Want in?' : 'There’s more'}</div>
             <div style={{ fontSize: isStory ? 72 : 62, lineHeight: 1.08, fontWeight: 800, letterSpacing: '-2px', maxWidth: 780 }}>{isPrompt ? 'Ask what they’re really thinking.' : `${slide.cta}.`}</div>
+            {!isPrompt && (
+              <div style={{ marginTop: 24, color: '#B9B9C6', fontSize: isStory ? 32 : 28, lineHeight: 1.4, fontWeight: 500, maxWidth: 760 }}>
+                Can you relate? Add your thoughts, anonymously.
+              </div>
+            )}
             <div style={{ marginTop: 44, borderRadius: 999, padding: '20px 32px', background: 'linear-gradient(100deg, #8B5CF6, #F97316)', color: '#fff', fontSize: 23, fontWeight: 700 }}>{isPrompt ? 'Start your own Curiosity Ask' : 'Join the conversation.'}</div>
             <div style={{ marginTop: 46, display: 'flex', alignItems: 'center', gap: 20 }}>
               {SOCIAL_ICONS.map((Icon, index) => (
