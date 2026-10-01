@@ -1,4 +1,4 @@
-export const STORY_CATEGORIES = ['live_story', 'regret', 'bad_experience', 'fiction', 'poetry'] as const
+export const STORY_CATEGORIES = ['live_story', 'regret', 'bad_experience', 'other', 'fiction', 'poetry'] as const
 export type StoryCategory = (typeof STORY_CATEGORIES)[number]
 
 export const STORY_FAMILIES = ['true_story', 'fiction_poetry'] as const
@@ -59,6 +59,13 @@ export const CATEGORY_META: Record<
     tag: 'TRUE STORY',
     family: 'true_story',
     description: 'Something that went wrong, and what it taught you.',
+    episodic: false,
+  },
+  other: {
+    label: 'Other',
+    tag: 'TRUE STORY',
+    family: 'true_story',
+    description: '',
     episodic: false,
   },
   fiction: {
@@ -172,6 +179,7 @@ export interface StoryReply {
   parent_content?: string | null
   parent_avatar_seed?: string | null
   reaction_counts?: ReactionCounts
+  pending?: 'sending' | 'failed'
 }
 
 export interface StoryRepliesPage {

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import BackButton from '@/components/navigation/BackButton'
 import { useUserStore } from '@/store/userStore'
 import { StoriesApiError, storiesApi } from '@/lib/stories/api-client'
 import { STORIES_FEED_PATH } from '@/lib/stories/config'
@@ -219,9 +220,7 @@ export default function StoryManager({ storyId }: { storyId: string }) {
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-4 px-4 pb-16 pt-5">
-      <Link href={path} prefetch={false} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]">
-        <ArrowLeft className="h-3.5 w-3.5" /> View story
-      </Link>
+      <BackButton fallbackHref={path} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]" />
       <div>
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#F97316]">{meta.tag} · {meta.label}</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-[-0.4px]">{story.title}</h1>

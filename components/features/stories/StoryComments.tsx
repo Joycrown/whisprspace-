@@ -91,9 +91,13 @@ interface CommentRowProps {
   onEdit: (id: string, content: string) => Promise<void>
   onReact: (id: string, reaction: StoryReaction) => void
   onQuoteClick: (id: string) => void
+  onRetry: (id: string) => void
+  onDiscard: (id: string) => void
 }
 
-const CommentRow = memo(function CommentRow({ comment, mine, myReaction, highlighted, onReply, onReport, onEdit, onReact, onQuoteClick }: CommentRowProps) {
+const CommentRow = memo(function CommentRow({ comment, mine, myReaction, highlighted, onReply, onReport, onEdit, onReact, onQuoteClick, onRetry, onDiscard }: CommentRowProps) {
+  const pending = comment.pending
+  const [failedMenuOpen, setFailedMenuOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState(comment.content)
   const [saving, setSaving] = useState(false)
@@ -121,7 +125,7 @@ const CommentRow = memo(function CommentRow({ comment, mine, myReaction, highlig
   }
 
   const onTouchStart = (event: React.TouchEvent) => {
-    if (editing) return
+    if (editing || pending) return
     const touch = event.touches[0]
     touchRef.current = { x: touch.clientX, y: touch.clientY, mode: 'pending' }
   }
@@ -154,7 +158,7 @@ const CommentRow = memo(function CommentRow({ comment, mine, myReaction, highlig
   }
 
   const onBodyClick = (event: React.MouseEvent) => {
-    if (editing) return
+    if (editing || pending) return
     const target = event.target as HTMLElement
     if (target.closest('button, a, textarea, input')) return
     if (window.getSelection()?.toString()) return
@@ -164,7 +168,7 @@ const CommentRow = memo(function CommentRow({ comment, mine, myReaction, highlig
   return (
     <li
       id={`comment-${comment.id}`}
-      className={`relative overflow-hidden transition-colors duration-700 [content-visibility:auto] [contain-intrinsic-size:auto_84px] ${highlighted ? 'bg-[#8B5CF6]/10' : ''}`}
+      className={`relative overflow-hidden transition-colors duration-700 [content-visibility:auto] [contain-intrinsic-size:auto_84px] ${highlighted ? 'bg-[#8B5CF6]/10' : ''} ${pending === 'sending' ? 'opacity-70' : ''}`}
     >
       <span
         aria-hidden
@@ -186,10 +190,41 @@ const CommentRow = memo(function CommentRow({ comment, mine, myReaction, highlig
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-[11px] text-[#5C5C6E]">
             {mine && <span className="text-[#C4B5FD]">You</span>}
-            <RelativeTime iso={comment.created_at} />
+            {pending === 'sending' ? (
+              <Loader2 className="h-3 w-3 animate-spin text-[#8F8FA3]" aria-label="Sending" />
+            ) : pending === 'failed' ? (
+              <span className="inline-flex items-center gap-2.5">
+                <button
+                  onClick={() => setFailedMenuOpen((open) => !open)}
+                  aria-label="Not sent. Tap to retry or remove"
+                  aria-expanded={failedMenuOpen}
+                  className="flex h-4 w-4 items-center justify-center rounded-full bg-[#E24B4A] text-[10px] font-bold leading-none text-white"
+                >
+                  !
+                </button>
+                {failedMenuOpen && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setFailedMenuOpen(false)
+                        onRetry(comment.id)
+                      }}
+                      className="font-medium text-[#C4B5FD] hover:text-[#F2F2F6]"
+                    >
+                      Retry
+                    </button>
+                    <button onClick={() => onDiscard(comment.id)} className="text-[#8F8FA3] hover:text-[#F2F2F6]">
+                      Remove
+                    </button>
+                  </>
+                )}
+              </span>
+            ) : (
+              <RelativeTime iso={comment.created_at} />
+            )}
             {comment.is_edited && <span>· edited</span>}
             <span className="ml-auto flex items-center gap-0.5">
-              {mine && !editing && (
+              {mine && !editing && !pending && (
                 <button
                   onClick={() => {
                     setValue(comment.content)
@@ -201,7 +236,7 @@ const CommentRow = memo(function CommentRow({ comment, mine, myReaction, highlig
                   Edit
                 </button>
               )}
-              {!mine && (
+              {!mine && !pending && (
                 <button onClick={() => onReport(comment.id)} className="rounded p-1 text-[#3F3F4E] hover:text-[#8F8FA3]" aria-label="Report comment">
                   <Flag className="h-3 w-3" />
                 </button>
@@ -247,7 +282,7 @@ const CommentRow = memo(function CommentRow({ comment, mine, myReaction, highlig
             <p className="mt-0.5 whitespace-pre-wrap break-words text-sm leading-6 text-[#DFDFE7]">{comment.content}</p>
           )}
 
-          {!editing && (
+          {!editing && !pending && (
             <div className="mt-1.5 flex items-center gap-3">
               <CommentReactions counts={comment.reaction_counts} mine={myReaction} onReact={(reaction) => onReact(comment.id, reaction)} />
               <button onClick={() => onReply(comment)} className="text-[11px] font-medium text-[#8F8FA3] hover:text-[#F2F2F6]">
@@ -278,7 +313,6 @@ export default function StoryComments({ storyId, threadId, replyCount, episodes,
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null)
-  const [posting, setPosting] = useState(false)
   const [postError, setPostError] = useState<string | null>(null)
   const [highlightId, setHighlightId] = useState<string | null>(null)
   const [reportingId, setReportingId] = useState<string | null>(null)
@@ -508,33 +542,74 @@ export default function StoryComments({ storyId, threadId, replyCount, episodes,
     writeDraft(storyId, draft, null)
   }
 
-  const post = async () => {
+  const deliver = useCallback(async (temp: StoryReply) => {
+    try {
+      const { reply } = await storiesApi<{ reply: StoryReply }>(`/api/stories/${storyId}/replies`, {
+        method: 'POST',
+        body: JSON.stringify({ content: temp.content, parentId: temp.parent_id ?? null }),
+      })
+      setComments((current) => current.filter((item) => item.id !== reply.id).map((item) => (item.id === temp.id ? reply : item)))
+      setMineIds((current) => {
+        const next = new Set(current)
+        next.delete(temp.id)
+        next.add(reply.id)
+        return next
+      })
+      import('posthog-js').then(({ default: posthog }) => posthog.capture('story_reply_posted', { story_id: storyId, is_reply: Boolean(temp.parent_id) })).catch(() => {})
+    } catch (cause) {
+      if (cause instanceof StoriesApiError && cause.code === 'account_required') {
+        setComments((current) => current.filter((item) => item.id !== temp.id))
+        setDraft(temp.content)
+        writeDraft(storyId, temp.content, null)
+        requireAccount('comment', temp.content)
+        return
+      }
+      setComments((current) => current.map((item) => (item.id === temp.id ? { ...item, pending: 'failed' } : item)))
+    }
+  }, [storyId, requireAccount])
+
+  const post = () => {
     const content = draft.trim()
-    if (!content || posting) return
+    if (!content) return
     if (!isRegistered) {
       requireAccount('comment', content)
       return
     }
-    setPosting(true)
-    setPostError(null)
-    try {
-      const { reply } = await storiesApi<{ reply: StoryReply }>(`/api/stories/${storyId}/replies`, {
-        method: 'POST',
-        body: JSON.stringify({ content, parentId: replyTo?.id ?? null }),
-      })
-      stickToBottomRef.current = true
-      setComments((current) => [reply, ...current])
-      setMineIds((current) => new Set(current).add(reply.id))
-      setReplyTo(null)
-      updateDraft('', null)
-      import('posthog-js').then(({ default: posthog }) => posthog.capture('story_reply_posted', { story_id: storyId, is_reply: Boolean(replyTo) })).catch(() => {})
-    } catch (cause) {
-      if (cause instanceof StoriesApiError && cause.code === 'account_required') requireAccount('comment', content)
-      else setPostError(cause instanceof Error ? cause.message : 'Unable to post your comment.')
-    } finally {
-      setPosting(false)
+    const ownSeed = comments.find((item) => mineIds.has(item.id) && !item.pending)?.avatar_seed ?? 'you'
+    const temp: StoryReply = {
+      id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      content,
+      created_at: new Date().toISOString(),
+      avatar_seed: ownSeed,
+      is_edited: false,
+      parent_id: replyTo?.id ?? null,
+      parent_content: replyTo?.content ?? null,
+      parent_avatar_seed: replyTo?.avatar_seed ?? null,
+      reaction_counts: {},
+      pending: 'sending',
     }
+    stickToBottomRef.current = true
+    setPostError(null)
+    setComments((current) => [temp, ...current])
+    setMineIds((current) => new Set(current).add(temp.id))
+    setReplyTo(null)
+    updateDraft('', null)
+    void deliver(temp)
   }
+
+  const onRetry = useCallback((id: string) => {
+    let target: StoryReply | undefined
+    setComments((current) => current.map((item) => {
+      if (item.id !== id) return item
+      target = { ...item, pending: 'sending' }
+      return target
+    }))
+    window.setTimeout(() => { if (target) void deliver(target) }, 0)
+  }, [deliver])
+
+  const onDiscard = useCallback((id: string) => {
+    setComments((current) => current.filter((item) => item.id !== id))
+  }, [])
 
   const onInputKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey && window.matchMedia('(pointer: fine)').matches) {
@@ -713,6 +788,8 @@ export default function StoryComments({ storyId, threadId, replyCount, episodes,
                   onEdit={onEdit}
                   onReact={onReact}
                   onQuoteClick={onQuoteClick}
+                  onRetry={onRetry}
+                  onDiscard={onDiscard}
                 />
               ) : (
                 <li key={`episode-${row.episode.number}`} className="flex items-center gap-3 px-4 py-3 text-[11px] uppercase tracking-[0.1em] text-[#FDBA74] md:px-5">
@@ -751,11 +828,11 @@ export default function StoryComments({ storyId, threadId, replyCount, episodes,
             />
             <button
               onClick={post}
-              disabled={!draft.trim() || posting}
+              disabled={!draft.trim()}
               aria-label={replyTo ? 'Send reply' : 'Post comment'}
               className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-white transition-opacity disabled:opacity-35"
             >
-              {posting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+<Send className="h-4 w-4" />
             </button>
           </div>
           {(postError || draft.length > STORY_LIMITS.replyMax * 0.8) && (

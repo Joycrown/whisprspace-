@@ -31,6 +31,11 @@ const CAPTIONS: Record<StoryCategory, Array<(title: string) => string>> = {
     (title) => `Told without names, felt without filters 🥀 "${title}"`,
     (title) => `"${title}" 🩹 It really happened. Now it's finally been said.`,
   ],
+  other: [
+    (title) => `A true story, told with no name attached 🤍 "${title}"`,
+    (title) => `"${title}" 👀 You'll want to hear how this one ends.`,
+    (title) => `Real life, no filter 🤍 "${title}"`,
+  ],
   fiction: [
     (title) => `Started reading "${title}" and couldn't stop 📖 Your turn.`,
     (title) => `A story you won't see coming: "${title}" ✨`,

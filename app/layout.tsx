@@ -8,6 +8,7 @@ import { AuthProvider } from "@/components/providers/AuthProvider";
 import { RealtimeNotificationProvider } from "@/components/providers/RealtimeNotificationProvider";
 import AnalyticsProvider from "@/components/providers/AnalyticsProvider";
 import ServiceWorkerGuard from "@/components/providers/ServiceWorkerGuard";
+import NavigationHistoryTracker from "@/components/navigation/NavigationHistoryTracker";
 import { QueryProvider } from "@/lib/react-query";
 import { generateMetadata as generateSEO, seoKeywords, siteConfig } from "@/lib/seo";
 
@@ -104,6 +105,7 @@ export default function RootLayout({
       >
         <QueryProvider>
           <ServiceWorkerGuard />
+          <NavigationHistoryTracker />
           <AnalyticsProvider>
             <AuthProvider>
               <ThemeProvider>

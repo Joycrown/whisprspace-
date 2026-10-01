@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Check, Crown, Loader2, ShieldCheck } from 'lucide-react'
 import { useUserStore } from '@/store/userStore'
+import BackButton from '@/components/navigation/BackButton'
 import PremiumPaymentForm from '@/components/features/premium/PremiumPaymentForm'
 import { StoriesApiError, authRedirectPath, storiesApi } from '@/lib/stories/api-client'
 import { STORIES_FEED_PATH } from '@/lib/stories/config'
@@ -262,9 +263,7 @@ export default function StoryComposer() {
       <div className="mx-auto w-full max-w-xl px-4 pb-16 pt-5">
         <div className="flex items-center justify-between">
           {draft.step === 'category' || draft.step === 'done' ? (
-            <Link href={STORIES_FEED_PATH} prefetch={false} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]">
-              <ArrowLeft className="h-3.5 w-3.5" /> Stories
-            </Link>
+            <BackButton fallbackHref={STORIES_FEED_PATH} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]" />
           ) : (
             <button onClick={() => { if (!submitting) update({ step: draft.step === 'consent' ? 'write' : 'category' }) }} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]">
               <ArrowLeft className="h-3.5 w-3.5" /> Back
@@ -295,7 +294,9 @@ export default function StoryComposer() {
                       className="w-full rounded-2xl border border-[#23232E] bg-[#12121A] p-4 text-left transition-colors hover:border-[#8B5CF6]/45"
                     >
                       <span className="block text-[15px] font-medium">{CATEGORY_META[category].label}</span>
-                      <span className="mt-1 block text-sm leading-5 text-[#8F8FA3]">{CATEGORY_META[category].description}</span>
+                      {CATEGORY_META[category].description && (
+                        <span className="mt-1 block text-sm leading-5 text-[#8F8FA3]">{CATEGORY_META[category].description}</span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -448,7 +449,7 @@ export default function StoryComposer() {
               </p>
               <div className="mx-auto mt-6 max-w-sm space-y-2">
                 <StoryShareButton story={created} variant="primary" label="Share your story link" />
-                <Link href={created.path} prefetch={false} className="flex h-11 w-full items-center justify-center rounded-xl border border-[#2A2A38] text-sm text-[#F2F2F6] hover:border-[#8B5CF6]/50">
+                <Link href={created.path} replace prefetch={false} className="flex h-11 w-full items-center justify-center rounded-xl border border-[#2A2A38] text-sm text-[#F2F2F6] hover:border-[#8B5CF6]/50">
                   View your story
                 </Link>
               </div>
