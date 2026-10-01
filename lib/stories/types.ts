@@ -197,6 +197,18 @@ export interface StoryViewerState {
   replyCount?: number
 }
 
+export type StoryModerationStatus = 'visible' | 'hidden' | 'removed'
+
+export interface MyStoryItem extends StoryFeedItem {
+  moderation_status: StoryModerationStatus
+}
+
+export interface MyStoriesPage {
+  items: MyStoryItem[]
+  nextCursor: string | null
+  unsaved: MyStoryItem[]
+}
+
 export interface StoryLiveRow {
   story_id: string
   title: string

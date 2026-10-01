@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Check, Crown, Loader2, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, Check, Crown, Loader2 } from 'lucide-react'
 import { useUserStore } from '@/store/userStore'
 import BackButton from '@/components/navigation/BackButton'
 import PremiumPaymentForm from '@/components/features/premium/PremiumPaymentForm'
 import { StoriesApiError, authRedirectPath, storiesApi } from '@/lib/stories/api-client'
-import { STORIES_FEED_PATH } from '@/lib/stories/config'
+import { MY_STORIES_PATH, STORIES_FEED_PATH } from '@/lib/stories/config'
 import { buildStoryPath } from '@/lib/stories/story-url'
 import {
   CATEGORY_META,
@@ -25,12 +25,11 @@ import AccountRequiredSheet from './AccountRequiredSheet'
 import StoryExport from './StoryExport'
 import StoryShareButton from './StoryShareButton'
 
-type Step = 'category' | 'write' | 'consent' | 'done'
+type Step = 'category' | 'write' | 'done'
 
 interface Draft {
   step: Step
   category: StoryCategory | null
-  featureConsent: boolean
   title: string
   body: string
   isEpisodic: boolean
@@ -49,7 +48,6 @@ const DRAFT_KEY = 'whs_story_draft'
 const EMPTY_DRAFT: Draft = {
   step: 'category',
   category: null,
-  featureConsent: false,
   title: '',
   body: '',
   isEpisodic: false,
@@ -79,11 +77,10 @@ export default function StoryComposer() {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
   const [hydrated, setHydrated] = useState(false)
   const [needsAccount, setNeedsAccount] = useState(false)
-  const [submitting, setSubmitting] = useState<'agree' | 'decline' | null>(null)
+  const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [created, setCreated] = useState<CreatedStory | null>(null)
   const [submittedBody, setSubmittedBody] = useState('')
-  const [checking, setChecking] = useState(false)
   const [limitState, setLimitState] = useState<SeriesLimitState | null>(null)
   const [showPremium, setShowPremium] = useState(false)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
@@ -97,7 +94,7 @@ export default function StoryComposer() {
       const saved = localStorage.getItem(DRAFT_KEY)
       if (saved) {
         const parsed = { ...EMPTY_DRAFT, ...(JSON.parse(saved) as Partial<Draft>) }
-        setDraft({ ...parsed, step: !parsed.category ? 'category' : parsed.step === 'done' || parsed.step === 'consent' ? 'write' : parsed.step })
+        setDraft({ ...parsed, step: !parsed.category || parsed.step === 'category' ? 'category' : 'write' })
       }
     } catch {}
     setHydrated(true)
@@ -194,65 +191,40 @@ export default function StoryComposer() {
     [draft.category, titleLength, bodyLength, requiresAccount, isRegistered, limitReached]
   )
 
-  const buildPayload = (featureConsent: boolean) => ({
+  const buildPayload = () => ({
     category: draft.category,
     title: draft.title.trim(),
     body: draft.body.trim(),
     isEpisodic: draft.isEpisodic,
     cadence: draft.cadence.trim(),
-    featureConsent,
   })
 
-  const handleCheckError = (cause: unknown) => {
-    if (cause instanceof StoriesApiError && cause.code === 'account_required') setNeedsAccount(true)
-    else if (cause instanceof StoriesApiError && cause.code === 'series_limit') setLimitState((cause.details as { limit?: SeriesLimitState })?.limit ?? null)
-    else setError(cause instanceof Error ? cause.message : 'Something went wrong. Please try again.')
-  }
-
-  const goToConsent = async () => {
-    if (!canSubmit || submitting || checking) return
+  const submit = async () => {
+    if (!canSubmit || submitting || !draft.category) return
     if (requiresAccount && !isRegistered) {
       setNeedsAccount(true)
       return
     }
-    setError(null)
-    setChecking(true)
-    try {
-      await storiesApi('/api/stories', { method: 'POST', body: JSON.stringify({ ...buildPayload(false), validateOnly: true }) })
-      persistDraft()
-      update({ step: 'consent' })
-    } catch (cause) {
-      handleCheckError(cause)
-    } finally {
-      setChecking(false)
-    }
-  }
-
-  const submit = async (featureConsent: boolean) => {
-    if (!canSubmit || submitting || !draft.category) return
-    update({ featureConsent })
-    setSubmitting(featureConsent ? 'agree' : 'decline')
+    persistDraft()
+    setSubmitting(true)
     setError(null)
     try {
       const { story } = await storiesApi<{ story: CreatedStory }>('/api/stories', {
         method: 'POST',
-        body: JSON.stringify(buildPayload(featureConsent)),
+        body: JSON.stringify(buildPayload()),
       })
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
       setSubmittedBody(draft.body.trim())
       setCreated(story)
       localStorage.removeItem(DRAFT_KEY)
       update({ step: 'done' })
-      import('posthog-js').then(({ default: posthog }) => posthog.capture('story_submitted', { category: story.category, episodic: draft.isEpisodic, feature_consent: featureConsent, has_account: story.hasAccount })).catch(() => {})
+      import('posthog-js').then(({ default: posthog }) => posthog.capture('story_submitted', { category: story.category, episodic: draft.isEpisodic, has_account: story.hasAccount })).catch(() => {})
     } catch (cause) {
-      if (cause instanceof StoriesApiError && cause.code === 'account_required') {
-        update({ step: 'write' })
-        handleCheckError(cause)
-      } else {
-        setError(cause instanceof Error ? cause.message : 'We couldn’t share your story. Your draft is safe, please try again.')
-      }
+      if (cause instanceof StoriesApiError && cause.code === 'account_required') setNeedsAccount(true)
+      else if (cause instanceof StoriesApiError && cause.code === 'series_limit') setLimitState((cause.details as { limit?: SeriesLimitState })?.limit ?? null)
+      else setError(cause instanceof Error ? cause.message : 'We couldn’t share your story. Your draft is safe, please try again.')
     } finally {
-      setSubmitting(null)
+      setSubmitting(false)
     }
   }
 
@@ -265,7 +237,7 @@ export default function StoryComposer() {
           {draft.step === 'category' || draft.step === 'done' ? (
             <BackButton fallbackHref={STORIES_FEED_PATH} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]" />
           ) : (
-            <button onClick={() => { if (!submitting) update({ step: draft.step === 'consent' ? 'write' : 'category' }) }} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]">
+            <button onClick={() => { if (!submitting) update({ step: 'category' }) }} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]">
               <ArrowLeft className="h-3.5 w-3.5" /> Back
             </button>
           )}
@@ -274,7 +246,7 @@ export default function StoryComposer() {
               {draft.step === 'write' && saveState !== 'idle' && (
                 <span className={saveState === 'saved' ? 'text-[#5DCAA5]' : ''}>{saveState === 'saved' ? 'Draft saved' : 'Saving…'}</span>
               )}
-              <span>Step {draft.step === 'category' ? 1 : draft.step === 'write' ? 2 : 3} of 3</span>
+              <span>Step {draft.step === 'category' ? 1 : 2} of 2</span>
             </span>
           )}
         </div>
@@ -384,12 +356,12 @@ export default function StoryComposer() {
             {error && <p className="text-sm text-[#F09595]">{error}</p>}
 
             <button
-              onClick={goToConsent}
-              disabled={!canSubmit || Boolean(submitting) || checking}
+              onClick={submit}
+              disabled={!canSubmit || submitting}
               className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white disabled:opacity-40"
             >
-              {checking && <Loader2 className="h-4 w-4 animate-spin" />}
-              {checking ? 'Posting your story…' : 'Share my story'}
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {submitting ? 'Posting your story…' : 'Share my story'}
             </button>
             <div className="text-center">
               {confirmReset ? (
@@ -407,36 +379,6 @@ export default function StoryComposer() {
           </section>
         )}
 
-        {draft.step === 'consent' && meta && (
-          <section className="mt-10 text-center">
-            <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#8B5CF6]/25 to-[#F97316]/25">
-              <ShieldCheck className="h-6 w-6 text-[#C4B5FD]" />
-            </span>
-            <h1 className="mt-5 text-xl font-semibold">WhisprSpace may share this on her socials</h1>
-            <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-[#8F8FA3]">
-              If your story is picked, we may feature it on our Instagram, TikTok or X, anonymously, with no name attached. It always appears in the WhisprSpace feed either way.
-            </p>
-            <button
-              onClick={() => submit(true)}
-              disabled={Boolean(submitting)}
-              className="mt-8 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white active:scale-[0.98] disabled:opacity-60"
-            >
-              {submitting === 'agree' && <Loader2 className="h-4 w-4 animate-spin" />}
-              I agree & share my story
-            </button>
-            <button
-              onClick={() => submit(false)}
-              disabled={Boolean(submitting)}
-              className="mt-4 inline-flex items-center gap-2 text-sm text-[#8F8FA3] underline-offset-4 hover:text-[#F2F2F6] hover:underline disabled:opacity-60"
-            >
-              {submitting === 'decline' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              Share without featuring
-            </button>
-            {error && <p className="mt-4 text-sm text-[#F09595]">{error}</p>}
-          </section>
-        )}
-
-
         {draft.step === 'done' && created && (
           <section className="mt-8">
             <div className="text-center">
@@ -452,6 +394,11 @@ export default function StoryComposer() {
                 <Link href={created.path} replace prefetch={false} className="flex h-11 w-full items-center justify-center rounded-xl border border-[#2A2A38] text-sm text-[#F2F2F6] hover:border-[#8B5CF6]/50">
                   View your story
                 </Link>
+                {created.hasAccount && (
+                  <Link href={MY_STORIES_PATH} prefetch={false} className="block pt-1 text-center text-xs text-[#C4B5FD] underline-offset-2 hover:underline">
+                    See all your stories
+                  </Link>
+                )}
               </div>
             </div>
             <div className="mt-8 rounded-2xl border border-[#23232E] bg-[#12121A] p-5">

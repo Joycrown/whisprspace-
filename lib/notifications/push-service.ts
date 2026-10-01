@@ -1,7 +1,7 @@
 import webpush from 'web-push'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
 import { buildThreadPath } from '@/lib/threads/thread-url'
-import { buildStoryPath } from '@/lib/stories/story-url'
+import { storyNotificationPath } from '@/lib/stories/story-url'
 import { buildPromptPath } from '@/lib/prompts/prompt-url'
 
 type PushSubscriptionRow = {
@@ -97,11 +97,8 @@ const buildNotificationUrl = (notification: NotificationDispatchRecord) => {
     (typeof data.promptId === 'string' && data.promptId) ||
     null
 
-  const storyId = typeof data.story_id === 'string' ? data.story_id : null
-  if (storyId) {
-    const storyPath = buildStoryPath({ id: storyId, title: typeof data.story_title === 'string' ? data.story_title : null })
-    return typeof data.message_id === 'string' ? `${storyPath}#comments` : storyPath
-  }
+  const storyPath = storyNotificationPath(data)
+  if (storyPath) return storyPath
 
   if (threadId) {
     return buildThreadPath({ id: threadId, title: threadTitle })

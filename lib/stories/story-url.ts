@@ -43,6 +43,13 @@ export function buildStoryPath(source: StoryUrlSource): string {
   return `/stories/${buildStoryRef(source)}`
 }
 
+export function storyNotificationPath(data: Record<string, unknown>): string | null {
+  if (typeof data.story_id !== 'string') return null
+  const storyPath = buildStoryPath({ id: data.story_id, title: typeof data.story_title === 'string' ? data.story_title : null })
+  if (data.open === 'manage') return `${storyPath}/manage`
+  return typeof data.message_id === 'string' ? `${storyPath}#comments` : storyPath
+}
+
 export function isCanonicalStoryRef(ref: string, source: StoryUrlSource): boolean {
   return safeDecode(ref).trim() === buildStoryRef(source)
 }

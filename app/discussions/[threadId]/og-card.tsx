@@ -61,8 +61,8 @@ export async function renderThreadOgCard(threadRef: string): Promise<ImageRespon
   }
 
   const accent         = categoryColor(category)
-  const displayTitle   = truncate(title,   72)
-  const displayContent = truncate(content, 120)
+  const displayTitle   = truncate(title,   64)
+  const displayContent = truncate(content, 90)
   const categoryLabel  = (category || 'General').replace(/_/g, ' ')
   const baseHost       = getBaseHost()
 
@@ -132,11 +132,11 @@ export async function renderThreadOgCard(threadRef: string): Promise<ImageRespon
             </div>
 
             {/* Thread title */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{
-                fontSize: displayTitle.length > 50 ? 36 : displayTitle.length > 30 ? 44 : 52,
+                fontSize: displayTitle.length > 40 ? 56 : displayTitle.length > 22 ? 66 : 80,
                 fontWeight: 900,
-                lineHeight: 1.2,
+                lineHeight: 1.12,
                 letterSpacing: '-0.03em',
                 color: '#F2F2F6',
                 display: 'flex',
@@ -147,9 +147,9 @@ export async function renderThreadOgCard(threadRef: string): Promise<ImageRespon
 
               {displayContent && displayContent !== displayTitle && (
                 <div style={{
-                  fontSize: 26,
-                  fontWeight: 600,
-                  lineHeight: 1.5,
+                  fontSize: 36,
+                  fontWeight: 700,
+                  lineHeight: 1.35,
                   color: '#64748b',
                   display: 'flex',
                   flexWrap: 'wrap',

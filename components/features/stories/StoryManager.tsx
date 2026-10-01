@@ -7,7 +7,7 @@ import { Loader2 } from 'lucide-react'
 import BackButton from '@/components/navigation/BackButton'
 import { useUserStore } from '@/store/userStore'
 import { StoriesApiError, storiesApi } from '@/lib/stories/api-client'
-import { STORIES_FEED_PATH } from '@/lib/stories/config'
+import { MY_STORIES_PATH, STORIES_FEED_PATH } from '@/lib/stories/config'
 import { buildStoryPath } from '@/lib/stories/story-url'
 import { CATEGORY_META, STORY_LIMITS, type StoryCategory, type StoryEpisode, type StoryStatus } from '@/lib/stories/types'
 import StoryExport from './StoryExport'
@@ -20,7 +20,6 @@ interface ManagedStory {
   is_episodic: boolean
   status: StoryStatus
   is_sensitive: boolean
-  feature_consent: boolean
   cadence_label: string | null
   moderation_status: 'visible' | 'hidden' | 'removed'
   episode_count: number
@@ -220,7 +219,12 @@ export default function StoryManager({ storyId }: { storyId: string }) {
 
   return (
     <div className="mx-auto w-full max-w-xl space-y-4 px-4 pb-16 pt-5">
-      <BackButton fallbackHref={path} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]" />
+      <div className="flex items-center justify-between">
+        <BackButton fallbackHref={path} className="inline-flex items-center gap-1 text-xs text-[#8F8FA3] hover:text-[#F2F2F6]" />
+        <Link href={MY_STORIES_PATH} prefetch={false} className="text-xs text-[#C4B5FD] underline-offset-2 hover:underline">
+          My stories
+        </Link>
+      </div>
       <div>
         <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#F97316]">{meta.tag} · {meta.label}</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-[-0.4px]">{story.title}</h1>
@@ -386,35 +390,6 @@ export default function StoryManager({ storyId }: { storyId: string }) {
           {patchError && <p className="text-xs leading-5 text-[#F09595]">{patchError}</p>}
         </section>
       )}
-
-      <section className={`${card} space-y-3`}>
-        <h2 className="text-base font-medium">Settings</h2>
-        {([
-          {
-            key: 'consent',
-            label: 'WhisprSpace may share this on her socials',
-            hint: 'Anonymously, with no name attached. Turning this off stops any future features.',
-            value: story.feature_consent,
-            body: { featureConsent: !story.feature_consent },
-            apply: { feature_consent: !story.feature_consent },
-          },
-        ] as const).map((setting) => (
-          <button
-            key={setting.key}
-            onClick={() => patch(setting.key, setting.body, setting.apply)}
-            disabled={saving === setting.key}
-            className="flex w-full items-start gap-3 rounded-xl border border-[#23232E] p-3 text-left disabled:opacity-60"
-          >
-            <span className={`mt-0.5 flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${setting.value ? 'bg-[#8B5CF6]' : 'bg-[#2A2A38]'}`}>
-              <span className={`h-4 w-4 rounded-full bg-white transition-transform ${setting.value ? 'translate-x-4' : ''}`} />
-            </span>
-            <span>
-              <span className="block text-sm text-[#F2F2F6]">{setting.label}</span>
-              <span className="mt-0.5 block text-xs leading-5 text-[#8F8FA3]">{setting.hint}</span>
-            </span>
-          </button>
-        ))}
-      </section>
 
       {story.moderation_status === 'visible' && episodes.length > 0 && (
         <StoryExport

@@ -3,7 +3,6 @@ import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { resolveUserFromRequest } from '@/lib/security/request-auth'
 import { resolveSenderIdentity, setSenderTokenCookie } from '@/lib/security/anon-sender'
 import { sanitizeUuid } from '@/lib/security/input-sanitization'
-import { revalidateStory } from '@/lib/stories/server'
 import { STORY_REPORT_REASONS, type StoryReportReason } from '@/lib/stories/types'
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -28,11 +27,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       if (error.code === '23503') return NextResponse.json({ error: 'Story not found.' }, { status: 404 })
       console.error('[Stories] Report failed:', error.message)
       return NextResponse.json({ error: 'Unable to send your report.' }, { status: 500 })
-    }
-
-    if (!error) {
-      const { data: story } = await supabaseAdmin.from('stories').select('moderation_status').eq('id', storyId).maybeSingle()
-      if (story?.moderation_status === 'hidden') revalidateStory(storyId)
     }
 
     const response = NextResponse.json({ success: true })
