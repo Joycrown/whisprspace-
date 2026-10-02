@@ -43,7 +43,15 @@ function handleCandidates(rawHandle: string): string[] {
   return [...new Set(candidates.filter(Boolean))];
 }
 
-async function findUser(handle: string) {
+interface InboxOwner {
+  id: string;
+  username: string | null;
+  anonymous_id: string;
+}
+
+// Used only until the resolve_inbox_handle migration is applied, so deploying
+// the code first can't break every inbox link.
+async function findUserExact(handle: string): Promise<InboxOwner | null> {
   const supabase = await createClient();
 
   const { data: byUsername } = await supabase
@@ -63,16 +71,25 @@ async function findUser(handle: string) {
   return byAnonId && !byAnonId.is_anonymous ? byAnonId : null;
 }
 
-const resolveUser = cache(async (rawHandle: string) => {
-  const [exact, ...fallbacks] = handleCandidates(rawHandle);
-  const user = exact ? await findUser(exact) : null;
-  if (user) return { user, isExactMatch: true };
+const resolveUser = cache(async (rawHandle: string): Promise<{ user: InboxOwner | null; isExactMatch: boolean }> => {
+  const candidates = handleCandidates(rawHandle);
+  if (!candidates.length) return { user: null, isExactMatch: false };
 
-  for (const candidate of fallbacks) {
-    const match = await findUser(candidate);
-    if (match) return { user: match, isExactMatch: false };
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc('resolve_inbox_handle', { p_candidates: candidates })
+    .maybeSingle<InboxOwner & { candidate_index: number }>();
+
+  if (error?.code === 'PGRST202') {
+    return { user: await findUserExact(candidates[0]), isExactMatch: true };
   }
-  return { user: null, isExactMatch: false };
+  if (error || !data) {
+    if (error) console.error('[Inbox] Handle lookup failed:', error.message);
+    return { user: null, isExactMatch: false };
+  }
+
+  const { candidate_index: candidateIndex, ...user } = data;
+  return { user, isExactMatch: candidateIndex === 1 };
 });
 
 export async function generateMetadata({ params }: MessageLinkPageProps): Promise<Metadata> {
