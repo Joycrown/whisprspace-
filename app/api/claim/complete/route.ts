@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'crypto'
 import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
+import { buildInboxPath } from '@/lib/inbox/inbox-url'
 
 const NEUTRAL_ERROR = 'This link is no longer valid.'
 
@@ -242,7 +243,7 @@ export async function POST(req: NextRequest) {
     handle,
     session: sessionData,
     messageCount,
-    inboxUrl: `${base}/message/${handle}`,
+    inboxUrl: `${base}${buildInboxPath(handle)}`,
     inboxReadUrl: `${base}/inbox`,
   })
 }

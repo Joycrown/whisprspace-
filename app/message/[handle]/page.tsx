@@ -1,6 +1,9 @@
+import { cache } from 'react';
 import { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/core/supabase/server';
 import { siteConfig } from '@/lib/seo';
+import { buildInboxPath } from '@/lib/inbox/inbox-url';
 import { escapeLikePattern } from '@/lib/utils/username-validation';
 import MessageDrop from './components/MessageDrop';
 
@@ -13,30 +16,85 @@ interface MessageLinkPageProps {
 // instead of serving a stale, imageless cache. Format: ISO date of the change.
 const OG_VERSION = '2026-07-24T03:00:00Z';
 
-async function resolveUser(handle: string) {
+const MAX_HANDLE_CANDIDATES = 8;
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+// People paste text straight after their link ("…/message/joy🤫 Message me!"),
+// and chat apps fold the emoji into the URL. Build fallbacks by cutting at the
+// first space, then peeling trailing emoji/punctuation one character at a time.
+// Only non-letter/number characters are peeled, and the exact handle is always
+// tried first, so a real handle like "A☠️A" is never shortened.
+function handleCandidates(rawHandle: string): string[] {
+  const exact = safeDecode(rawHandle).trim();
+  const candidates = [exact];
+  let chars = Array.from(exact.split(/\s/)[0]);
+  candidates.push(chars.join(''));
+  while (chars.length > 1 && /[^\p{L}\p{N}]/u.test(chars[chars.length - 1]) && candidates.length < MAX_HANDLE_CANDIDATES) {
+    chars = chars.slice(0, -1);
+    candidates.push(chars.join(''));
+  }
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+interface InboxOwner {
+  id: string;
+  username: string | null;
+  anonymous_id: string;
+}
+
+// Used only until the resolve_inbox_handle migration is applied, so deploying
+// the code first can't break every inbox link.
+async function findUserExact(handle: string): Promise<InboxOwner | null> {
   const supabase = await createClient();
-  const normalizedHandle = decodeURIComponent(handle).trim();
 
   const { data: byUsername } = await supabase
     .from('users')
     .select('id, username, anonymous_id, is_anonymous')
-    .ilike('username', escapeLikePattern(normalizedHandle))
-    .single();
+    .ilike('username', escapeLikePattern(handle))
+    .maybeSingle();
 
   if (byUsername) return byUsername.is_anonymous ? null : byUsername;
 
   const { data: byAnonId } = await supabase
     .from('users')
     .select('id, username, anonymous_id, is_anonymous')
-    .eq('anonymous_id', normalizedHandle)
-    .single();
+    .eq('anonymous_id', handle)
+    .maybeSingle();
 
   return byAnonId && !byAnonId.is_anonymous ? byAnonId : null;
 }
 
+const resolveUser = cache(async (rawHandle: string): Promise<{ user: InboxOwner | null; isExactMatch: boolean }> => {
+  const candidates = handleCandidates(rawHandle);
+  if (!candidates.length) return { user: null, isExactMatch: false };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .rpc('resolve_inbox_handle', { p_candidates: candidates })
+    .maybeSingle<InboxOwner & { candidate_index: number }>();
+
+  if (error?.code === 'PGRST202') {
+    return { user: await findUserExact(candidates[0]), isExactMatch: true };
+  }
+  if (error || !data) {
+    if (error) console.error('[Inbox] Handle lookup failed:', error.message);
+    return { user: null, isExactMatch: false };
+  }
+
+  const { candidate_index: candidateIndex, ...user } = data;
+  return { user, isExactMatch: candidateIndex === 1 };
+});
+
 export async function generateMetadata({ params }: MessageLinkPageProps): Promise<Metadata> {
   const { handle } = await params;
-  const user = await resolveUser(handle);
+  const { user } = await resolveUser(handle);
 
   const displayName = user?.username || user?.anonymous_id || handle;
   const title = `Tell ${displayName} the truth.`;
@@ -99,7 +157,11 @@ export async function generateMetadata({ params }: MessageLinkPageProps): Promis
 
 export default async function MessageLinkPage({ params }: MessageLinkPageProps) {
   const { handle } = await params;
-  const userData = await resolveUser(handle);
+  const { user: userData, isExactMatch } = await resolveUser(handle);
+
+  if (userData && !isExactMatch) {
+    redirect(buildInboxPath(userData.username || userData.anonymous_id));
+  }
 
   if (!userData) {
     return (

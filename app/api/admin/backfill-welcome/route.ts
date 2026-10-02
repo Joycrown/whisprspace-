@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { resolveUserFromRequest } from '@/lib/security/request-auth'
 import { getTrustedAppBaseUrl } from '@/lib/security/app-url'
 import { buildInboxMessageContent, buildWelcomeEmailHtml } from '@/lib/welcome/templates'
+import { buildInboxPath } from '@/lib/inbox/inbox-url'
 
 const SYSTEM_USER_ID = 'ffffffff-ffff-ffff-ffff-ffffffffffff'
 
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
 
     for (const user of users) {
       const handle = user.username || user.anonymous_id
-      const inboxUrl = `${baseUrl}/message/${encodeURIComponent(handle)}`
+      const inboxUrl = `${baseUrl}${buildInboxPath(handle)}`
       const alreadyGotInbox = alreadyWelcomedUserIds.has(user.id)
 
       if (!alreadyGotInbox) {

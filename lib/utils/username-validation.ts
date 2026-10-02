@@ -8,6 +8,8 @@
  *   Usernames become public inbox URLs (/message/<username>) and are matched
  *   with SQL ilike, so URL-structural characters and ilike wildcards are unsafe.
  * - No spaces anywhere (usernames appear in public inbox URLs)
+ * - Must end with a letter, number or emoji: chat apps drop trailing
+ *   punctuation from links, which would point the link at a different handle
  * - Case-insensitive uniqueness
  */
 
@@ -82,6 +84,13 @@ export function validateUsername(username: string, allowUnicode = true): Usernam
     return {
       isValid: false,
       error: 'Username cannot have leading or trailing spaces',
+    };
+  }
+
+  if (!/[\p{L}\p{N}\p{M}\p{Extended_Pictographic}️]$/u.test(trimmed)) {
+    return {
+      isValid: false,
+      error: 'Username must end with a letter, number or emoji',
     };
   }
 
