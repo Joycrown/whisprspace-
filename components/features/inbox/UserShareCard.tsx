@@ -1,6 +1,7 @@
 'use client'
 
 import { forwardRef } from 'react'
+import { displayInboxUrl } from '@/lib/inbox/inbox-url'
 
 interface UserShareCardProps {
   displayName: string
@@ -16,7 +17,7 @@ interface UserShareCardProps {
  */
 const UserShareCard = forwardRef<HTMLDivElement, UserShareCardProps>(
   ({ displayName, inboxUrl }, ref) => {
-    const shortUrl = inboxUrl.replace(/^https?:\/\//, '')
+    const shortUrl = displayInboxUrl(inboxUrl)
     const initial = displayName.charAt(0).toUpperCase()
     const nameFontSize = displayName.length > 12 ? 44 : displayName.length > 8 ? 54 : 64
 

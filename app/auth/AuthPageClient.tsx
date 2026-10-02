@@ -16,6 +16,7 @@ import {
 import { generatePseudonym } from '@/lib/utils/pseudonym-generator';
 import { checkUsernameAvailability, updateUsername } from '@/lib/services/username-service';
 import { validateUsername } from '@/lib/utils/username-validation';
+import { buildInboxPath } from '@/lib/inbox/inbox-url';
 import { STORIES_FEED_PATH } from '@/lib/stories/config';
 import { track } from '@/lib/analytics/track';
 
@@ -238,13 +239,13 @@ const AuthPage = () => {
   };
 
   const copyInboxLink = () => {
-    navigator.clipboard.writeText(`${window.location.origin}/message/${claimedHandle}`);
+    navigator.clipboard.writeText(`${window.location.origin}${buildInboxPath(claimedHandle)}`);
     setCopiedInboxLink(true);
     setTimeout(() => setCopiedInboxLink(false), 2500);
   };
 
   const shareInbox = async () => {
-    const link = `${window.location.origin}/message/${claimedHandle}`;
+    const link = `${window.location.origin}${buildInboxPath(claimedHandle)}`;
     const text = `Tell me what you actually think — anonymously. No name. No trace.\n${link}`;
     if (navigator.share) {
       try { await navigator.share({ title: 'My WhisprSpace inbox', text, url: link }); } catch { /* cancelled */ }
