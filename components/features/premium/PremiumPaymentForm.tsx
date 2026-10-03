@@ -124,7 +124,7 @@ export default function PremiumPaymentForm({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm modal-safe-overlay">
+    <div className="fixed inset-0 z-[1500] flex items-center justify-center bg-black/60 backdrop-blur-sm modal-safe-overlay">
       <div className="relative w-full max-w-md modal-safe-panel bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-4 sm:p-6 overflow-y-auto">
         {/* Back Button */}
         <button
