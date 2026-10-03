@@ -1,6 +1,7 @@
 'use client'
 
 import { forwardRef } from 'react'
+import { displayInboxUrl } from '@/lib/inbox/inbox-url'
 
 interface SeedCardAProps {
   handle: string
@@ -14,7 +15,7 @@ interface SeedCardAProps {
  */
 const SeedCardA = forwardRef<HTMLDivElement, SeedCardAProps>(({ handle, inboxUrl }, ref) => {
   const initial = handle.charAt(0).toUpperCase()
-  const shortUrl = (inboxUrl || '').replace(/^https?:\/\//, '')
+  const shortUrl = displayInboxUrl(inboxUrl || '')
 
   return (
     <div

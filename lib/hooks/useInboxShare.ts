@@ -3,6 +3,7 @@
 import { useUserStore } from '@/store/userStore'
 import { useShareLink } from './useShareLink'
 import { track } from '@/lib/analytics/track'
+import { buildInboxPath } from '@/lib/inbox/inbox-url'
 
 const FALLBACK_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://whisprspace.com'
 
@@ -17,10 +18,10 @@ export function useInboxShare() {
   // Use the actual origin at runtime so the link always matches the deployed domain.
   // Falls back to the env var for SSR contexts where window is unavailable.
   const origin = typeof window !== 'undefined' ? window.location.origin : FALLBACK_URL
-  const link = handle ? `${origin}/message/${handle}` : ''
+  const link = handle ? `${origin}${buildInboxPath(handle)}` : ''
 
   // Card always shows the canonical production URL, never localhost.
-  const cardLink = handle ? `${FALLBACK_URL}/message/${handle}` : link
+  const cardLink = handle ? `${FALLBACK_URL}${buildInboxPath(handle)}` : link
 
   const shared = useShareLink({ link, shareText: SHARE_TEXT, downloadName: `whisprspace-${handle || 'card'}` })
 

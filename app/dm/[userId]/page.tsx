@@ -6,6 +6,7 @@ import { Send, MessageCircle, Zap } from 'lucide-react';
 import { createOneTimeConversation, getOrCreateConversation, sendMessage } from '@/lib/messaging';
 import { useUserStore } from '@/store/userStore';
 import * as rawAuth from '@/lib/core/supabase/raw-auth';
+import { buildInboxPath } from '@/lib/inbox/inbox-url';
 
 interface PageProps {
   params: Promise<{
@@ -262,13 +263,13 @@ export default function DMPage({ params }: PageProps) {
             <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
-                value={`${typeof window !== 'undefined' ? window.location.origin : ''}/message/${session?.user?.username || session?.user?.anonymousId || 'your-id'}`}
+                value={`${typeof window !== 'undefined' ? window.location.origin : ''}${buildInboxPath(session?.user?.username || session?.user?.anonymousId || 'your-id')}`}
                 readOnly
                 className="flex-1 px-3 md:px-4 py-2.5 md:py-3 bg-gray-900 border border-gray-700 rounded-lg text-gray-300 text-xs md:text-sm"
               />
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/message/${session?.user?.username || session?.user?.anonymousId}`);
+                  navigator.clipboard.writeText(`${window.location.origin}${buildInboxPath(session?.user?.username || session?.user?.anonymousId || '')}`);
                 }}
                 className="px-4 md:px-6 py-2.5 md:py-3 bg-purple-600 hover:bg-purple-700 active:scale-95 rounded-lg text-white font-semibold transition-all min-h-[44px]"
               >

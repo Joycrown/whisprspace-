@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTrustedAppBaseUrl } from '@/lib/security/app-url'
 import { sanitizeUuid, sanitizeEmailAddress } from '@/lib/security/input-sanitization'
 import { buildWelcomeEmailHtml } from '@/lib/welcome/templates'
+import { buildInboxPath } from '@/lib/inbox/inbox-url'
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     const baseUrl = getTrustedAppBaseUrl(request)
     const inboxUrl = inboxHandle
-      ? `${baseUrl}/message/${encodeURIComponent(inboxHandle)}`
+      ? `${baseUrl}${buildInboxPath(inboxHandle)}`
       : `${baseUrl}/inbox`
     const gettingStartedUrl = `${baseUrl}/getting-started`
 

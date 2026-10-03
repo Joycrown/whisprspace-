@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createHash, randomBytes } from 'crypto'
 import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { resolveUserFromRequest } from '@/lib/security/request-auth'
+import { buildInboxPath } from '@/lib/inbox/inbox-url'
 
 async function verifyAdmin(req: NextRequest): Promise<string | null> {
   const user = await resolveUserFromRequest(req)
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const base = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://whisprspace.com'
   const claimUrl = `${base}/claim/${rawToken}`
-  const inboxUrl = `${base}/message/${encodeURIComponent(user.username || user.anonymous_id)}`
+  const inboxUrl = `${base}${buildInboxPath(user.username || user.anonymous_id)}`
 
   return NextResponse.json({
     id,

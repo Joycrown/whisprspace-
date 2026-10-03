@@ -5,6 +5,7 @@ import { resolveUserFromRequest } from '@/lib/security/request-auth'
 import { generatePseudonym } from '@/lib/utils/pseudonym-generator'
 import { validateUsername, sanitizeUsername, escapeLikePattern } from '@/lib/utils/username-validation'
 import { sanitizeSingleLineInput } from '@/lib/security/input-sanitization'
+import { buildInboxPath } from '@/lib/inbox/inbox-url'
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ function buildClaimUrl(token: string): string {
 }
 
 function buildInboxUrl(handle: string): string {
-  return `${getBaseUrl()}/message/${encodeURIComponent(handle)}`
+  return `${getBaseUrl()}${buildInboxPath(handle)}`
 }
 
 // ─── GET — list all seed accounts ────────────────────────────────────────────
