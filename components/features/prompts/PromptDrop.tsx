@@ -6,6 +6,7 @@ import { detectSource, track } from '@/lib/analytics/track'
 import { AlertCircle, CheckCircle2, Send } from 'lucide-react'
 import posthog from 'posthog-js'
 import type { PromptResponseFormat } from '@/lib/prompts/types'
+import { useUserStore } from '@/store/userStore'
 import AskViewCount from './AskViewCount'
 
 export const ASK_ANSWERED_EVENT = 'ask:answered'
@@ -31,6 +32,10 @@ const closesInLabel = (expiresAt: string | null) => {
 
 export default function PromptDrop({ promptId, question, expiresAt, responseFormat = 'text', options, isPublic = false, windowLabel, viewCount }: PromptDropProps) {
   const router = useRouter()
+  const session = useUserStore((state) => state.session)
+  const createAskHref = session.isAuthenticated && session.user && !session.user.isAnonymous
+    ? '/curiosity-ask/create'
+    : '/auth?force=1&view=signup&reason=prompt&redirect=%2Fcuriosity-ask%2Fcreate'
   const [answer, setAnswer] = useState('')
   const [selectedOption, setSelectedOption] = useState<number | null>(null)
   const [isSending, setIsSending] = useState(false)
@@ -89,11 +94,11 @@ export default function PromptDrop({ promptId, question, expiresAt, responseForm
   }
 
   if (dismissed) {
-    return <div className="mx-auto w-full max-w-lg rounded-2xl border border-[#23232E] bg-[#12121A] p-7 text-center"><CheckCircle2 className="mx-auto mb-4 h-10 w-10 text-[#5DCAA5]" /><h1 className="text-xl font-medium text-[#F2F2F6]">Thank you.</h1><p className="mt-2 text-sm text-[#8F8FA3]">Ask what people are afraid to say out loud. Create an account and run your own Curiosity Ask — the questions everyone thinks, nobody says.</p><button onClick={() => { try { posthog.capture('prompt_cta_clicked', { prompt_id: promptId }) } catch {} ; router.push('/auth?force=1&view=signup&reason=prompt&redirect=%2Fcuriosity-ask%2Fcreate') }} className="mt-6 h-12 w-full rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white">Create your own curiosity ask</button></div>
+    return <div className="mx-auto w-full max-w-lg rounded-2xl border border-[#23232E] bg-[#12121A] p-7 text-center"><CheckCircle2 className="mx-auto mb-4 h-10 w-10 text-[#5DCAA5]" /><h1 className="text-xl font-medium text-[#F2F2F6]">Thank you.</h1><p className="mt-2 text-sm text-[#8F8FA3]">Ask what people are afraid to say out loud. Create an account and run your own Curiosity Ask — the questions everyone thinks, nobody says.</p><button onClick={() => { try { posthog.capture('prompt_cta_clicked', { prompt_id: promptId }) } catch {} ; router.push(createAskHref) }} className="mt-6 h-12 w-full rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white">Create your own curiosity ask</button></div>
   }
 
   if (sent) {
-    return <div className="mx-auto w-full max-w-lg rounded-2xl border border-[#23232E] bg-[#12121A] p-7 text-center"><CheckCircle2 className="mx-auto mb-4 h-10 w-10 text-[#5DCAA5]" /><h1 className="text-xl font-medium text-[#F2F2F6]">Sent. They&apos;ll never know it was you.</h1><p className="mt-2 text-sm text-[#8F8FA3]">{isPublic ? 'Answers show up below once they pass moderation. Ask your people the same question.' : 'Ask your people the same question.'}</p><button onClick={() => { try { posthog.capture('prompt_cta_clicked', { prompt_id: promptId }) } catch {} ; router.push('/auth?force=1&view=signup&reason=prompt&redirect=%2Fcuriosity-ask%2Fcreate') }} className="mt-6 h-12 w-full rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white">Create your own curiosity ask</button><button onClick={() => setDismissed(true)} className="mt-3 text-sm text-[#5C5C6E] hover:text-[#8F8FA3]">Maybe later</button></div>
+    return <div className="mx-auto w-full max-w-lg rounded-2xl border border-[#23232E] bg-[#12121A] p-7 text-center"><CheckCircle2 className="mx-auto mb-4 h-10 w-10 text-[#5DCAA5]" /><h1 className="text-xl font-medium text-[#F2F2F6]">Sent. They&apos;ll never know it was you.</h1><p className="mt-2 text-sm text-[#8F8FA3]">{isPublic ? 'Answers show up below once they pass moderation. Ask your people the same question.' : 'Ask your people the same question.'}</p><button onClick={() => { try { posthog.capture('prompt_cta_clicked', { prompt_id: promptId }) } catch {} ; router.push(createAskHref) }} className="mt-6 h-12 w-full rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white">Create your own curiosity ask</button><button onClick={() => setDismissed(true)} className="mt-3 text-sm text-[#5C5C6E] hover:text-[#8F8FA3]">Maybe later</button></div>
   }
 
   return (
