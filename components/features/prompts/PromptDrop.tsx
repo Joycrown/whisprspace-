@@ -3,9 +3,12 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { detectSource, track } from '@/lib/analytics/track'
-import { AlertCircle, CheckCircle2, Eye, Send } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Send } from 'lucide-react'
 import posthog from 'posthog-js'
 import type { PromptResponseFormat } from '@/lib/prompts/types'
+import AskViewCount from './AskViewCount'
+
+export const ASK_ANSWERED_EVENT = 'ask:answered'
 
 interface PromptDropProps {
   promptId: string
@@ -15,6 +18,7 @@ interface PromptDropProps {
   options?: string[] | null
   isPublic?: boolean
   windowLabel?: string | null
+  viewCount?: number
 }
 
 const closesInLabel = (expiresAt: string | null) => {
@@ -25,7 +29,7 @@ const closesInLabel = (expiresAt: string | null) => {
   return `Closes in ${days} days`
 }
 
-export default function PromptDrop({ promptId, question, expiresAt, responseFormat = 'text', options, isPublic = false, windowLabel }: PromptDropProps) {
+export default function PromptDrop({ promptId, question, expiresAt, responseFormat = 'text', options, isPublic = false, windowLabel, viewCount }: PromptDropProps) {
   const router = useRouter()
   const [answer, setAnswer] = useState('')
   const [selectedOption, setSelectedOption] = useState<number | null>(null)
@@ -40,6 +44,15 @@ export default function PromptDrop({ promptId, question, expiresAt, responseForm
     track('ask_page_viewed', { feature: 'curiosity_ask', prompt_id: promptId, format: isChoice ? 'icebreaker' : 'open', source: detectSource() })
   }, [promptId, isChoice])
 
+  const handleSent = () => {
+    setSent(true)
+    if (isPublic) {
+      window.dispatchEvent(new CustomEvent(ASK_ANSWERED_EVENT, { detail: { askId: promptId } }))
+      router.refresh()
+    }
+    try { posthog.capture('prompt_response_sent', { prompt_id: promptId, public: isPublic }) } catch {}
+  }
+
   const sendText = async () => {
     const content = answer.trim()
     if (!content || isSending) return
@@ -50,9 +63,7 @@ export default function PromptDrop({ promptId, question, expiresAt, responseForm
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data?.error || 'Unable to send your answer.')
       setAnswer('')
-      setSent(true)
-      if (isPublic) router.refresh()
-      try { posthog.capture('prompt_response_sent', { prompt_id: promptId, public: isPublic }) } catch {}
+      handleSent()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to send your answer.')
     } finally {
@@ -69,9 +80,7 @@ export default function PromptDrop({ promptId, question, expiresAt, responseForm
       const response = await fetch(`/api/prompts/${promptId}/responses`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ optionIndex: selectedOption, ...(comment ? { content: comment } : {}) }) })
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data?.error || 'Unable to send your answer.')
-      setSent(true)
-      if (isPublic) router.refresh()
-      try { posthog.capture('prompt_response_sent', { prompt_id: promptId, public: isPublic }) } catch {}
+      handleSent()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to send your answer.')
     } finally {
@@ -94,6 +103,7 @@ export default function PromptDrop({ promptId, question, expiresAt, responseForm
       <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-[#8F8FA3]">
         <span className="rounded-full bg-[#8B5CF6]/10 px-2.5 py-1 text-[#C4B5FD]">{closesInLabel(expiresAt)}</span>
         {isPublic && <span className="rounded-full bg-[#F97316]/10 px-2.5 py-1 text-[#FCA46A]">Public</span>}
+        {typeof viewCount === 'number' && <AskViewCount count={viewCount} className="rounded-full bg-white/[0.04] px-2.5 py-1 text-[#8F8FA3]" />}
       </div>
       {isPublic && expiresAt && windowLabel && (
         <p className="mt-2 text-xs text-[#5C5C6E]">Stays open {windowLabel} after the latest answer.</p>
@@ -121,8 +131,6 @@ export default function PromptDrop({ promptId, question, expiresAt, responseForm
 
           {error && <p className="mt-1 flex gap-2 rounded-xl border border-red-400/25 bg-red-400/10 px-3 py-2 text-sm text-red-200"><AlertCircle className="h-4 w-4 shrink-0" />{error}</p>}
 
-          {isPublic && <p className="flex gap-2 rounded-xl border border-[#F97316]/25 bg-[#F97316]/[0.06] px-3 py-2 text-xs text-[#FCA46A]"><Eye className="h-4 w-4 shrink-0" />Your answer will be visible to anyone with this link.</p>}
-
           <button onClick={sendChoice} disabled={selectedOption === null || isSending} className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"><Send className="h-4 w-4" />{isSending ? 'Sending…' : 'Submit'}</button>
         </div>
       ) : (
@@ -130,7 +138,6 @@ export default function PromptDrop({ promptId, question, expiresAt, responseForm
           <textarea value={answer} onChange={(event) => setAnswer(event.target.value.slice(0, 1000))} rows={6} placeholder="Share your answer honestly…" className="mt-6 w-full resize-none rounded-xl border border-[#2A2A38] bg-white/[0.03] px-4 py-3 text-sm text-[#F2F2F6] placeholder:text-[#5C5C6E] focus:border-[#8B5CF6]/70 focus:outline-none" />
           <div className="mt-1 text-right text-xs text-[#5C5C6E]">{answer.length}/1000</div>
           {error && <p className="mt-3 flex gap-2 rounded-xl border border-red-400/25 bg-red-400/10 px-3 py-2 text-sm text-red-200"><AlertCircle className="h-4 w-4 shrink-0" />{error}</p>}
-          {isPublic && <p className="mt-3 flex gap-2 rounded-xl border border-[#F97316]/25 bg-[#F97316]/[0.06] px-3 py-2 text-xs text-[#FCA46A]"><Eye className="h-4 w-4 shrink-0" />Your answer will be visible to anyone with this link.</p>}
           <button onClick={sendText} disabled={!answer.trim() || isSending} className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"><Send className="h-4 w-4" />{isSending ? 'Sending…' : 'Send anonymously'}</button>
         </>
       )}

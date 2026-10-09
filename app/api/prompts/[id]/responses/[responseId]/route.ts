@@ -36,7 +36,7 @@ export async function PATCH(
     .eq('id', safeResponseId)
     .eq('prompt_id', promptId)
     .eq('moderation_status', 'passed')
-    .select('id, prompt_id, content, is_starred, starred_at, created_at')
+    .select('id, prompt_id, content, is_starred, starred_at, option_index, same_count, bold_count, oof_count, created_at')
     .maybeSingle()
 
   if (error || !response) {
