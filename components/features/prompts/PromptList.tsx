@@ -5,26 +5,7 @@ import Link from 'next/link'
 import { ArrowUpRight, MessageSquarePlus, Sparkles } from 'lucide-react'
 import type { Prompt } from '@/lib/prompts/types'
 import { promptApi } from '@/lib/prompts/api-client'
-
-const PURGE_GRACE_DAYS = 3
-
-const getStatus = (prompt: Prompt) => {
-  const remaining = new Date(prompt.expires_at).getTime() - Date.now()
-  if (remaining > 0) {
-    const hours = Math.ceil(remaining / (60 * 60 * 1000))
-    return `Closes in ${hours}h`
-  }
-
-  if (prompt.is_saved) return 'Closed · Saved'
-
-  const purgeAt = new Date(prompt.expires_at).getTime() + PURGE_GRACE_DAYS * 24 * 60 * 60 * 1000
-  const untilPurge = purgeAt - Date.now()
-  if (untilPurge <= 0) return 'Closed'
-
-  const purgeHours = Math.ceil(untilPurge / (60 * 60 * 1000))
-  const purgeLabel = purgeHours >= 24 ? `${Math.ceil(purgeHours / 24)}d` : `${purgeHours}h`
-  return `Closed · Clears in ${purgeLabel}`
-}
+import { describePromptStatus as getStatus } from '@/lib/prompts/status'
 
 export default function PromptList() {
   const [prompts, setPrompts] = useState<Prompt[]>([])

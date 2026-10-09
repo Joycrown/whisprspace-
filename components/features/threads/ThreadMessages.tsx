@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FaReply, FaMicrophone, FaRegLaugh, FaRegLaughBeam,
-  FaRegHeart, FaHeart, FaRegSmile, FaRegAngry, FaAngry, FaSpinner, FaCheckCircle, FaTimesCircle, FaEdit
+  FaRegHeart, FaHeart, FaRegSmile, FaRegAngry, FaAngry, FaSpinner, FaCheckCircle, FaTimesCircle, FaEdit, FaTrashAlt
 } from 'react-icons/fa';
 import { FiImage, FiFile } from 'react-icons/fi';
 import { Attachment, Message, ReactionType } from '@/types';
@@ -19,6 +19,7 @@ interface ThreadMessagesProps {
   threadCreatorId: string; // ID of the thread creator
   onReply: (message: Message) => void;
   onEditMessage?: (messageId: string, content: string) => void;
+  onDeleteMessage?: (messageId: string) => void;
   onReact: (messageId: string, reaction: string) => void;
   getRepliedMessage: (messageId: string) => Message | undefined;
   messageFilter?: { senderId?: string; keyword?: string };
@@ -36,6 +37,7 @@ const ThreadMessages: React.FC<ThreadMessagesProps> = ({
   threadCreatorId,
   onReply,
   onEditMessage,
+  onDeleteMessage,
   onReact,
   messageFilter,
   typingUsers = [], // Default to empty array
@@ -46,11 +48,12 @@ const ThreadMessages: React.FC<ThreadMessagesProps> = ({
 }) => {
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
   const messagesContainerRef = React.useRef<HTMLDivElement>(null);
-  const handlersRef = useRef({ onReply, onEditMessage, onReact, onRetry });
-  handlersRef.current = { onReply, onEditMessage, onReact, onRetry };
+  const handlersRef = useRef({ onReply, onEditMessage, onDeleteMessage, onReact, onRetry });
+  handlersRef.current = { onReply, onEditMessage, onDeleteMessage, onReact, onRetry };
 
   const stableOnReply = useCallback((message: Message) => handlersRef.current.onReply(message), []);
   const stableOnEdit = useCallback((messageId: string, content: string) => handlersRef.current.onEditMessage?.(messageId, content), []);
+  const stableOnDelete = useCallback((messageId: string) => handlersRef.current.onDeleteMessage?.(messageId), []);
   const stableOnReact = useCallback((messageId: string, reaction: string) => handlersRef.current.onReact(messageId, reaction), []);
   const stableOnRetry = useCallback((message: Message) => handlersRef.current.onRetry?.(message), []);
   const handleQuoteClick = useCallback((id: string) => {
@@ -154,6 +157,7 @@ const ThreadMessages: React.FC<ThreadMessagesProps> = ({
                 threadCreatorId={threadCreatorId}
                 onReply={stableOnReply}
                 onEditMessage={onEditMessage ? stableOnEdit : undefined}
+                onDeleteMessage={onDeleteMessage ? stableOnDelete : undefined}
                 onReact={stableOnReact}
                 isCurrentUser={message.sender.id === currentUserId}
                 currentUserId={currentUserId}
@@ -198,12 +202,13 @@ const ThreadMessages: React.FC<ThreadMessagesProps> = ({
   );
 };
 
-const MessageItem = memo(function MessageItem({ message, threadId, threadCreatorId, onReply, onEditMessage, onReact, isCurrentUser, currentUserId, repliedMessage, onQuoteClick, onRetry }: {
+const MessageItem = memo(function MessageItem({ message, threadId, threadCreatorId, onReply, onEditMessage, onDeleteMessage, onReact, isCurrentUser, currentUserId, repliedMessage, onQuoteClick, onRetry }: {
   message: Message;
   threadId: string;
-  threadCreatorId: string; // ID of the thread creator
+  threadCreatorId: string;
   onReply: (message: Message) => void;
   onEditMessage?: (messageId: string, content: string) => void;
+  onDeleteMessage?: (messageId: string) => void;
   onReact: (messageId: string, reaction: string) => void;
   isCurrentUser: boolean;
   currentUserId: string;
@@ -220,7 +225,23 @@ const MessageItem = memo(function MessageItem({ message, threadId, threadCreator
   });
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(message.content);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const buttonRef = React.useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!confirmingDelete) return;
+    const timeoutId = setTimeout(() => setConfirmingDelete(false), 4000);
+    return () => clearTimeout(timeoutId);
+  }, [confirmingDelete]);
+
+  const handleDelete = () => {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    setConfirmingDelete(false);
+    onDeleteMessage?.(message.id);
+  };
 
   useEffect(() => {
     setEditContent(message.content);
@@ -519,6 +540,17 @@ const MessageItem = memo(function MessageItem({ message, threadId, threadCreator
               >
                 <FaEdit className="w-3.5 h-3.5" />
                 {isEditing ? 'Editing' : 'Edit'}
+              </button>
+            )}
+
+            {isCurrentUser && onDeleteMessage && message.status !== 'sending' && message.status !== 'failed' && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className={`inline-flex items-center gap-1.5 text-sm transition-colors ${confirmingDelete ? 'text-red-400 hover:text-red-300' : 'text-gray-400 hover:text-gray-200'}`}
+              >
+                <FaTrashAlt className="w-3.5 h-3.5" />
+                {confirmingDelete ? 'Tap again to delete' : 'Delete'}
               </button>
             )}
 

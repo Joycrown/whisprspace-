@@ -1,8 +1,12 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import PromptDrop from '@/components/features/prompts/PromptDrop'
-import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
+import PublicAskResponses from '@/components/features/prompts/PublicAskResponses'
 import { siteConfig } from '@/lib/seo'
+import { describeWindow, getPublicAskWindowHours } from '@/lib/prompts/config'
+import { getPublicAsk, getPublicAskResponses, isAskClosed } from '@/lib/prompts/public'
+import type { PublicAsk, PublicAskResponsesPage } from '@/lib/prompts/public-types'
 import { buildPromptPath, extractPromptIdFromRef, isCanonicalPromptRef } from '@/lib/prompts/prompt-url'
 
 export const dynamic = 'force-dynamic'
@@ -11,71 +15,121 @@ interface PromptPageProps {
   params: Promise<{ id: string }>
 }
 
-async function getPublicPrompt(ref: string) {
-  const promptId = extractPromptIdFromRef(ref)
-  if (!promptId) return null
+const CREATE_ASK_HREF = '/auth?force=1&view=signup&reason=prompt&redirect=%2Fcuriosity-ask%2Fcreate'
 
-  const { data } = await supabaseAdmin
-    .from('prompts')
-    .select('id, question, expires_at, deleted_at, response_format, options')
-    .eq('id', promptId)
-    .maybeSingle()
-
-  if (!data || data.deleted_at) return null
-  return data
+async function loadAsk(ref: string): Promise<PublicAsk | null> {
+  const askId = extractPromptIdFromRef(ref)
+  if (!askId) return null
+  try {
+    const ask = await getPublicAsk(askId)
+    return ask && !ask.deleted_at ? ask : null
+  } catch (error) {
+    console.error('[CuriosityAsk] Failed to load ask:', error instanceof Error ? error.message : error)
+    return null
+  }
 }
 
-const isIndexablePrompt = (prompt: { expires_at: string } | null): boolean => {
-  if (!prompt) return false
-  return new Date(prompt.expires_at).getTime() > Date.now()
-}
+const isIndexableAsk = (ask: PublicAsk) => ask.is_official && !isAskClosed(ask)
 
 export async function generateMetadata({ params }: PromptPageProps): Promise<Metadata> {
   const { id } = await params
-  const prompt = await getPublicPrompt(id)
-  if (!prompt) return { title: 'Ask not found', robots: { index: false, follow: false } }
+  const ask = await loadAsk(id)
+  if (!ask) return { title: 'Ask not found', robots: { index: false, follow: false } }
 
-  const canonicalPath = buildPromptPath({ id: prompt.id, question: prompt.question })
+  const canonicalPath = buildPromptPath({ id: ask.id, question: ask.question })
   const url = `${siteConfig.appUrl}${canonicalPath}`
-  const description = 'Answer anonymously on WhisprSpace. No name. No trace.'
-  const ogImageUrl = `${siteConfig.appUrl}/curiosity-ask/${prompt.id}/og`
-  const isIndexable = siteConfig.indexingEnabled && isIndexablePrompt(prompt)
+  const description = ask.mode === 'open'
+    ? 'Answer anonymously and see what everyone else said on WhisprSpace.'
+    : 'Answer anonymously on WhisprSpace. No name. No trace.'
+  const ogImageUrl = `${siteConfig.appUrl}/curiosity-ask/${ask.id}/og`
+  const isIndexable = siteConfig.indexingEnabled && isIndexableAsk(ask)
 
   return {
-    title: prompt.question,
+    title: ask.question,
     description,
     alternates: { canonical: canonicalPath },
     robots: isIndexable
       ? { index: true, follow: true }
       : { index: false, follow: true, googleBot: { index: false, follow: true, noimageindex: false } },
     openGraph: {
-      title: prompt.question,
+      title: ask.question,
       description,
       url,
       siteName: siteConfig.name,
       type: 'website',
-      images: [{ url: ogImageUrl, secureUrl: ogImageUrl, type: 'image/png', width: 1200, height: 630, alt: prompt.question }],
+      images: [{ url: ogImageUrl, secureUrl: ogImageUrl, type: 'image/png', width: 1200, height: 630, alt: ask.question }],
     },
-    twitter: { card: 'summary_large_image', title: prompt.question, description, images: [ogImageUrl] },
+    twitter: { card: 'summary_large_image', title: ask.question, description, images: [ogImageUrl] },
   }
 }
 
 export default async function PromptPage({ params }: PromptPageProps) {
   const { id } = await params
-  const prompt = await getPublicPrompt(id)
-  if (!prompt) notFound()
+  const ask = await loadAsk(id)
+  if (!ask) notFound()
 
-  // Redirect legacy/raw-UUID links (and stale slugs after a question edit) to the
-  // canonical slugged URL — keeps a single indexable URL per ask for SEO, while
-  // old shared links (bare UUID) still resolve via extractPromptIdFromRef above.
-  if (!isCanonicalPromptRef(id, { id: prompt.id, question: prompt.question })) {
-    redirect(buildPromptPath({ id: prompt.id, question: prompt.question }))
+  if (!isCanonicalPromptRef(id, { id: ask.id, question: ask.question })) {
+    redirect(buildPromptPath({ id: ask.id, question: ask.question }))
   }
 
-  const expired = new Date(prompt.expires_at).getTime() <= Date.now()
-  if (expired) {
-    return <div className="min-h-screen bg-[#0A0A10] px-5 py-20 text-center text-[#F2F2F6]"><p className="text-2xl font-medium">This ask has closed.</p><p className="mt-2 text-sm text-[#8F8FA3]">The answers are private to its creator.</p></div>
-  }
+  const closed = isAskClosed(ask)
+  const isPublic = ask.mode === 'open'
+  const options = Array.isArray(ask.options) ? ask.options : null
 
-  return <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#0A0A10] px-4 py-12"><div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 60% 45% at 50% 0%, rgba(139,92,246,0.14), transparent 70%)' }} /><div className="relative w-full"><PromptDrop promptId={prompt.id} question={prompt.question} expiresAt={prompt.expires_at} responseFormat={prompt.response_format} options={Array.isArray(prompt.options) ? (prompt.options as string[]) : null} /></div></main>
+  let firstPage: PublicAskResponsesPage = { items: [], nextCursor: null }
+  if (isPublic) {
+    try {
+      firstPage = await getPublicAskResponses(ask.id, null)
+    } catch (error) {
+      console.error('[CuriosityAsk] Failed to load public answers:', error instanceof Error ? error.message : error)
+    }
+  }
+  const windowLabel = isPublic && ask.expires_at ? describeWindow(await getPublicAskWindowHours()) : null
+
+  return (
+    <main className={`relative flex min-h-screen justify-center overflow-hidden bg-[#0A0A10] px-4 py-12 ${isPublic ? 'items-start' : 'items-center'}`}>
+      <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 60% 45% at 50% 0%, rgba(139,92,246,0.14), transparent 70%)' }} />
+      <div className="relative w-full space-y-8">
+        {closed ? (
+          <div className="mx-auto w-full max-w-lg rounded-2xl border border-[#23232E] bg-[#12121A] p-6 text-center md:p-8">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#C4B5FD]">This ask has closed</p>
+            <h1 className="mt-3 text-2xl font-medium leading-snug tracking-tight text-[#F2F2F6]">{ask.question}</h1>
+            <p className="mt-3 text-sm text-[#8F8FA3]">
+              {isPublic ? 'It’s no longer taking answers. Here’s what people said.' : 'The answers are private to its creator.'}
+            </p>
+            <Link
+              href={CREATE_ASK_HREF}
+              prefetch={false}
+              className="mt-6 flex h-12 w-full items-center justify-center rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white"
+            >
+              Create your own curiosity ask
+            </Link>
+          </div>
+        ) : (
+          <PromptDrop
+            promptId={ask.id}
+            question={ask.question}
+            expiresAt={ask.expires_at}
+            responseFormat={ask.response_format}
+            options={options}
+            isPublic={isPublic}
+            windowLabel={windowLabel}
+          />
+        )}
+
+        {isPublic && (
+          <PublicAskResponses
+            key={ask.response_count}
+            askId={ask.id}
+            responseFormat={ask.response_format}
+            options={options}
+            tally={ask.tally}
+            correctOptionIndex={ask.correct_option_index}
+            closed={closed}
+            initialPage={firstPage}
+          />
+        )}
+      </div>
+    </main>
+  )
 }

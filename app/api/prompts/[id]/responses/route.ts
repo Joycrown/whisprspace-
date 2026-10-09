@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createHash, randomBytes } from 'crypto'
 import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { containsBlockedContent } from '@/lib/moderation/blocklist'
+import { revalidatePublicAsk } from '@/lib/prompts/public'
 import { sanitizeMultilineInput, sanitizeUuid } from '@/lib/security/input-sanitization'
 
 const SENDER_TOKEN_COOKIE = 'whs_sit'
 const SENDER_TOKEN_TTL_DAYS = 90
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
 const RATE_LIMIT_MAX = 3
+const IP_RATE_LIMIT_MAX = 20
 
 const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 
@@ -20,21 +22,30 @@ function getClientIp(request: NextRequest): string {
   )
 }
 
-async function isRateLimited(promptId: string, senderTokenHash: string, ipHash: string) {
+async function isRateLimited(promptId: string, senderTokenHash: string, ipHash: string, ipKnown: boolean) {
   const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString()
-  const { count, error } = await supabaseAdmin
-    .from('prompt_responses')
-    .select('id', { count: 'exact', head: true })
-    .eq('prompt_id', promptId)
-    .gte('created_at', windowStart)
-    .or(`sender_token_hash.eq.${senderTokenHash},ip_hash.eq.${ipHash}`)
+  const [perAsk, perIp] = await Promise.all([
+    supabaseAdmin
+      .from('prompt_responses')
+      .select('id', { count: 'exact', head: true })
+      .eq('prompt_id', promptId)
+      .gte('created_at', windowStart)
+      .or(`sender_token_hash.eq.${senderTokenHash},ip_hash.eq.${ipHash}`),
+    ipKnown
+      ? supabaseAdmin
+          .from('prompt_responses')
+          .select('id', { count: 'exact', head: true })
+          .eq('ip_hash', ipHash)
+          .gte('created_at', windowStart)
+      : Promise.resolve({ count: 0, error: null }),
+  ])
 
-  if (error) {
-    console.error('[PromptResponse] Rate limit check failed:', error.message)
+  if (perAsk.error || perIp.error) {
+    console.error('[PromptResponse] Rate limit check failed:', perAsk.error?.message || perIp.error?.message)
     return false
   }
 
-  return (count ?? 0) >= RATE_LIMIT_MAX
+  return (perAsk.count ?? 0) >= RATE_LIMIT_MAX || (perIp.count ?? 0) >= IP_RATE_LIMIT_MAX
 }
 
 export async function POST(
@@ -59,13 +70,8 @@ export async function POST(
       return NextResponse.json({ error: 'This ask is no longer available.' }, { status: 404 })
     }
 
-    if (new Date(prompt.expires_at).getTime() <= Date.now()) {
+    if (prompt.expires_at && new Date(prompt.expires_at).getTime() <= Date.now()) {
       return NextResponse.json({ error: 'This ask has closed.' }, { status: 410 })
-    }
-
-    // Open-mode unlock mechanics are intentionally not live yet.
-    if (prompt.mode !== 'private') {
-      return NextResponse.json({ error: 'This ask is not accepting responses yet.' }, { status: 409 })
     }
 
     let content: string | null = null
@@ -98,9 +104,10 @@ export async function POST(
     const existingToken = request.cookies.get(SENDER_TOKEN_COOKIE)?.value
     const senderToken = existingToken || randomBytes(32).toString('hex')
     const senderTokenHash = hash(senderToken)
-    const ipHash = hash(getClientIp(request))
+    const clientIp = getClientIp(request)
+    const ipHash = hash(clientIp)
 
-    if (await isRateLimited(promptId, senderTokenHash, ipHash)) {
+    if (await isRateLimited(promptId, senderTokenHash, ipHash, clientIp !== 'unknown')) {
       return NextResponse.json({ error: 'Too many answers. Please try again in an hour.' }, { status: 429 })
     }
 
@@ -119,7 +126,10 @@ export async function POST(
       return NextResponse.json({ error: 'Unable to send your answer.' }, { status: 500 })
     }
 
-    // A neutral success response prevents the filter from becoming an oracle.
+    if (prompt.mode === 'open' && !blocked) {
+      revalidatePublicAsk(promptId)
+    }
+
     const response = NextResponse.json({ success: true })
     const expiry = new Date()
     expiry.setDate(expiry.getDate() + SENDER_TOKEN_TTL_DAYS)

@@ -114,7 +114,7 @@ async function updateCorrectOption(
     return NextResponse.json({ error: 'This ask has no options to mark.' }, { status: 400 })
   }
 
-  if (new Date(prompt.expires_at).getTime() <= Date.now()) {
+  if (prompt.expires_at && new Date(prompt.expires_at).getTime() <= Date.now()) {
     return NextResponse.json({ error: 'This ask has already closed.' }, { status: 409 })
   }
 

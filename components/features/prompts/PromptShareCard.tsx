@@ -4,13 +4,18 @@ import { forwardRef } from 'react'
 
 interface PromptShareCardProps {
   question: string
-  expiresAt: string
+  expiresAt: string | null
   promptUrl: string
+}
+
+const closesLabel = (expiresAt: string | null) => {
+  if (!expiresAt) return 'Always open'
+  const hoursLeft = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60)))
+  return hoursLeft <= 48 ? `Closes in ${hoursLeft}h` : `Closes in ${Math.ceil(hoursLeft / 24)} days`
 }
 
 const PromptShareCard = forwardRef<HTMLDivElement, PromptShareCardProps>(
   ({ question, expiresAt, promptUrl }, ref) => {
-    const hoursLeft = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60)))
     const shortUrl = promptUrl.replace(/^https?:\/\//, '')
 
     return (
@@ -49,7 +54,7 @@ const PromptShareCard = forwardRef<HTMLDivElement, PromptShareCardProps>(
         <div style={{ position: 'relative', borderTop: '1px solid #2A2A38', paddingTop: 34 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
             <span style={{ color: '#8F8FA3', fontSize: 25 }}>No name. No trace.</span>
-            <span style={{ color: '#5DCAA5', fontSize: 25, fontWeight: 700 }}>Closes in {hoursLeft}h</span>
+            <span style={{ color: '#5DCAA5', fontSize: 25, fontWeight: 700 }}>{closesLabel(expiresAt)}</span>
           </div>
           <div style={{ display: 'inline-flex', padding: '19px 30px', borderRadius: 999, background: 'linear-gradient(100deg, #8B5CF6, #F97316)', fontSize: 26, fontWeight: 750 }}>
             Share your answer →
