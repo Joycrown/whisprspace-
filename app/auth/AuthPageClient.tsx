@@ -116,13 +116,15 @@ const AuthPage = () => {
     }
   }, [redirectTo, forceAuth]);
 
+  const isRegistered = session.isAuthenticated && Boolean(session.user) && !session.user?.isAnonymous;
+
   useEffect(() => {
-    if (forceAuth && reasonParam !== 'story') return;
+    if (forceAuth && reasonParam !== 'story' && !isRegistered) return;
     if ((session.isAuthenticated || sessionInfo) && view === 'welcome') {
-      const timer = setTimeout(() => { router.push(redirectTo); }, 5000);
+      const timer = setTimeout(() => { router.replace(redirectTo); }, 5000);
       return () => clearTimeout(timer);
     }
-  }, [session.isAuthenticated, sessionInfo?.anonymousId, view, router, redirectTo, forceAuth, reasonParam]);
+  }, [session.isAuthenticated, sessionInfo?.anonymousId, view, router, redirectTo, forceAuth, reasonParam, isRegistered]);
 
   const handleAnonymousJoin = async () => {
     clearError();
@@ -178,6 +180,16 @@ const AuthPage = () => {
   }, [sessionInfo?.anonymousId, session.user?.id, isLoading]);
 
   const hasRedirected = useRef(false);
+  const arrivalChecked = useRef(false);
+  useEffect(() => {
+    if (!sessionValidated || arrivalChecked.current) return;
+    arrivalChecked.current = true;
+    if (isRegistered && !hasRedirected.current) {
+      hasRedirected.current = true;
+      window.location.replace(redirectTo);
+    }
+  }, [sessionValidated, isRegistered, redirectTo]);
+
   useEffect(() => {
     const storyAuthComplete = reasonParam === 'story' && session.isAuthenticated && !session.user?.isAnonymous;
     if (forceAuth && !storyAuthComplete) return;
@@ -641,8 +653,8 @@ const AuthPage = () => {
                 </div>
               )}
 
-              <button onClick={() => router.push(redirectTo)} className={heroBtnCls}>
-                Go to feed
+              <button onClick={() => router.replace(redirectTo)} className={heroBtnCls}>
+                {redirectTo === STORIES_FEED_PATH ? 'Go to feed' : 'Continue'}
               </button>
               <p className="text-[11px] text-[#5C5C6E]">Redirecting in 5 seconds…</p>
             </motion.div>
@@ -711,7 +723,7 @@ const AuthPage = () => {
                 {handleSaving ? <><Spinner /> Claiming…</> : 'Claim this handle'}
               </button>
 
-              <button onClick={() => reasonParam === 'prompt' ? router.push('/curiosity-ask/create') : setView('welcome')} className={ghostBtnCls}>
+              <button onClick={() => reasonParam === 'prompt' ? router.replace('/curiosity-ask/create') : setView('welcome')} className={ghostBtnCls}>
                 Skip — I&apos;ll set it later
               </button>
             </motion.div>
@@ -749,11 +761,11 @@ const AuthPage = () => {
                 </div>
               </div>
 
-              <button onClick={reasonParam === 'prompt' ? () => router.push('/curiosity-ask/create') : shareInbox} className={heroBtnCls}>
+              <button onClick={reasonParam === 'prompt' ? () => router.replace('/curiosity-ask/create') : shareInbox} className={heroBtnCls}>
                 {reasonParam === 'prompt' ? 'Create my first curiosity ask' : 'Share to WhatsApp Status'}
               </button>
 
-              <button onClick={() => router.push(redirectTo)} className={ghostBtnCls}>
+              <button onClick={() => router.replace(redirectTo)} className={ghostBtnCls}>
                 {reasonParam === 'prompt' ? 'Maybe later' : 'Go to my feed'}
               </button>
             </motion.div>
