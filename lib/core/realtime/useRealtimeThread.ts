@@ -160,6 +160,10 @@ export const useRealtimeThread = (threadId: string | null, pollId?: string | nul
     if (!threadId) return
     const record = payload?.new
     if (!record?.id) return
+    if (record.deleted_at || (record.moderation_status && record.moderation_status !== 'visible')) {
+      removeRealtimeMessage(payload)
+      return
+    }
 
     queryClient.setQueryData(queryKeys.threads.detail(threadId), (oldData: any) => {
       if (!oldData) return oldData

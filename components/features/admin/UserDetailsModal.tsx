@@ -1,8 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import { useUserDetails } from '@/lib/admin'
 import { useUserActivitySummary } from '@/lib/analytics/useAnalytics'
-import { X, Activity, Clock, Shield, Calendar } from 'lucide-react'
+import * as rawAuth from '@/lib/core/supabase/raw-auth'
+import { X, Activity, Clock, Shield, Calendar, BadgeCheck } from 'lucide-react'
 
 interface UserDetailsModalProps {
   userId: string
@@ -12,8 +14,33 @@ interface UserDetailsModalProps {
 export default function UserDetailsModal({ userId, onClose }: UserDetailsModalProps) {
   const { user, isLoading: isUserLoading } = useUserDetails(userId)
   const { summary, isLoading: isSummaryLoading } = useUserActivitySummary(userId)
+  const [officialOverride, setOfficialOverride] = useState<boolean | null>(null)
+  const [savingOfficial, setSavingOfficial] = useState(false)
+  const [officialError, setOfficialError] = useState<string | null>(null)
 
   const isLoading = isUserLoading || isSummaryLoading
+  const isOfficial = officialOverride ?? user?.is_official === true
+
+  const toggleOfficial = async () => {
+    setSavingOfficial(true)
+    setOfficialError(null)
+    try {
+      const token = await rawAuth.getValidAccessToken()
+      if (!token) throw new Error('Your admin session has expired. Sign in again.')
+      const response = await fetch(`/api/admin/users/${userId}/official`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ official: !isOfficial }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload?.error || 'Unable to update this account.')
+      setOfficialOverride(payload.user?.is_official === true)
+    } catch (error) {
+      setOfficialError(error instanceof Error ? error.message : 'Unable to update this account.')
+    } finally {
+      setSavingOfficial(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -63,6 +90,11 @@ export default function UserDetailsModal({ userId, onClose }: UserDetailsModalPr
                         Banned
                       </span>
                     )}
+                    {isOfficial && (
+                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-xs rounded-full font-semibold flex items-center gap-1">
+                        <BadgeCheck className="w-3 h-3" /> Official
+                      </span>
+                    )}
                   </h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {user.email || 'No email provided'}
@@ -73,7 +105,26 @@ export default function UserDetailsModal({ userId, onClose }: UserDetailsModalPr
                 </div>
               </div>
 
-              {/* Status Grid */}
+              <div className="rounded-xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-900/10 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-900 dark:text-white">Official WhisprSpace account</div>
+                    <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+                      Discussions and asks from this account never expire, and can be indexed by search engines.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={toggleOfficial}
+                    disabled={savingOfficial}
+                    className={`shrink-0 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${isOfficial ? 'border border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                  >
+                    {savingOfficial ? 'Saving…' : isOfficial ? 'Remove official status' : 'Mark as official'}
+                  </button>
+                </div>
+                {officialError && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{officialError}</p>}
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border border-gray-100 dark:border-gray-700">
                   <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-1">

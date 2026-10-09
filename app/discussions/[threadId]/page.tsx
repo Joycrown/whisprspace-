@@ -4,6 +4,8 @@ import { unstable_cache } from 'next/cache'
 import { notFound, permanentRedirect, redirect } from 'next/navigation'
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js'
 import ThreadPageClient from './ThreadPageClient'
+import ClosedDiscussion from './ClosedDiscussion'
+import { getDiscussionClosure } from '@/lib/threads/closure'
 import { buildThreadPath, extractThreadIdFromRef, isCanonicalThreadRef } from '@/lib/threads/thread-url'
 import { siteConfig } from '@/lib/seo'
 import { buildStoryPath } from '@/lib/stories/story-url'
@@ -133,8 +135,8 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
   const thread = await getThreadForSeo(threadId)
   if (!thread) {
     return {
-      title: 'Discussion Not Found | WhisprSpace',
-      robots: { index: false, follow: false },
+      title: 'This discussion has closed | WhisprSpace',
+      robots: { index: false, follow: true },
     }
   }
 
@@ -198,11 +200,18 @@ export default async function ThreadPage({ params, searchParams }: PageProps) {
 
   const thread = await getThreadForSeo(threadId)
   if (!thread) {
-    notFound()
+    return <ClosedDiscussion closure={{ state: 'missing' }} />
   }
 
   if (thread.story_id) {
     permanentRedirect(buildStoryPath({ id: thread.story_id, title: thread.title }))
+  }
+
+  if (thread.deleted_at || threadIsExpired(thread)) {
+    const closure = await getDiscussionClosure(thread.id, `${thread.expires_at ?? 'open'}|${thread.deleted_at ?? 'live'}`)
+    if (closure.state !== 'live') {
+      return <ClosedDiscussion closure={closure} />
+    }
   }
 
   const isIndexable = siteConfig.indexingEnabled && isPublicIndexableThread(thread)
