@@ -9,7 +9,7 @@ async function resolvePromptOwner(request: NextRequest, promptId: string) {
 
   const { data: prompt, error } = await supabaseAdmin
     .from('prompts')
-    .select('id, creator_id, question, mode, category, library_key, response_count, expires_at, is_saved, export_count, response_format, options, correct_option_index, created_at')
+    .select('id, creator_id, question, mode, category, library_key, response_count, view_count, expires_at, is_saved, export_count, response_format, options, correct_option_index, created_at')
     .eq('id', promptId)
     .is('deleted_at', null)
     .maybeSingle()
@@ -32,7 +32,7 @@ export async function GET(
   const [{ data: responses, error: responseError }, { data: profile }] = await Promise.all([
     supabaseAdmin
       .from('prompt_responses')
-      .select('id, prompt_id, content, is_starred, starred_at, option_index, created_at')
+      .select('id, prompt_id, content, is_starred, starred_at, option_index, same_count, bold_count, oof_count, created_at')
       .eq('prompt_id', promptId)
       .eq('moderation_status', 'passed')
       .order('is_starred', { ascending: false })

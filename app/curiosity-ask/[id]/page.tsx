@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import AskViewBeacon from '@/components/features/prompts/AskViewBeacon'
+import AskViewCount from '@/components/features/prompts/AskViewCount'
 import PromptDrop from '@/components/features/prompts/PromptDrop'
 import PublicAskResponses from '@/components/features/prompts/PublicAskResponses'
 import { siteConfig } from '@/lib/seo'
@@ -79,7 +81,7 @@ export default async function PromptPage({ params }: PromptPageProps) {
   let firstPage: PublicAskResponsesPage = { items: [], nextCursor: null }
   if (isPublic) {
     try {
-      firstPage = await getPublicAskResponses(ask.id, null)
+      firstPage = await getPublicAskResponses(ask.id, 'latest', null)
     } catch (error) {
       console.error('[CuriosityAsk] Failed to load public answers:', error instanceof Error ? error.message : error)
     }
@@ -89,10 +91,14 @@ export default async function PromptPage({ params }: PromptPageProps) {
   return (
     <main className={`relative flex min-h-screen justify-center overflow-hidden bg-[#0A0A10] px-4 py-12 ${isPublic ? 'items-start' : 'items-center'}`}>
       <div aria-hidden className="pointer-events-none absolute inset-0" style={{ background: 'radial-gradient(ellipse 60% 45% at 50% 0%, rgba(139,92,246,0.14), transparent 70%)' }} />
+      <AskViewBeacon askId={ask.id} />
       <div className="relative w-full space-y-8">
         {closed ? (
           <div className="mx-auto w-full max-w-lg rounded-2xl border border-[#23232E] bg-[#12121A] p-6 text-center md:p-8">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#C4B5FD]">This ask has closed</p>
+            <div className="flex items-center justify-center gap-3 text-xs">
+              <p className="font-medium uppercase tracking-[0.18em] text-[#C4B5FD]">This ask has closed</p>
+              <AskViewCount count={ask.view_count} className="text-[#8F8FA3]" />
+            </div>
             <h1 className="mt-3 text-2xl font-medium leading-snug tracking-tight text-[#F2F2F6]">{ask.question}</h1>
             <p className="mt-3 text-sm text-[#8F8FA3]">
               {isPublic ? 'It’s no longer taking answers. Here’s what people said.' : 'The answers are private to its creator.'}
@@ -114,6 +120,7 @@ export default async function PromptPage({ params }: PromptPageProps) {
             options={options}
             isPublic={isPublic}
             windowLabel={windowLabel}
+            viewCount={ask.view_count}
           />
         )}
 

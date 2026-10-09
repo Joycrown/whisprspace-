@@ -1,26 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createHash, randomBytes } from 'crypto'
+import { randomBytes } from 'crypto'
 import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { containsBlockedContent } from '@/lib/moderation/blocklist'
 import { revalidatePublicAsk } from '@/lib/prompts/public'
+import { SENDER_TOKEN_COOKIE, getClientIp, hashValue as hash } from '@/lib/prompts/sender'
 import { sanitizeMultilineInput, sanitizeUuid } from '@/lib/security/input-sanitization'
 
-const SENDER_TOKEN_COOKIE = 'whs_sit'
 const SENDER_TOKEN_TTL_DAYS = 90
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000
 const RATE_LIMIT_MAX = 3
 const IP_RATE_LIMIT_MAX = 20
-
-const hash = (value: string) => createHash('sha256').update(value).digest('hex')
-
-function getClientIp(request: NextRequest): string {
-  return (
-    request.headers.get('cf-connecting-ip') ||
-    request.headers.get('x-real-ip') ||
-    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    'unknown'
-  )
-}
 
 async function isRateLimited(promptId: string, senderTokenHash: string, ipHash: string, ipKnown: boolean) {
   const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString()
