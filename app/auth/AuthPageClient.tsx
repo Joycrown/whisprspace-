@@ -275,6 +275,11 @@ const AuthPage = () => {
       return;
     }
     await login(email, password, rememberMe);
+    const { session: signedInSession, error: loginError } = useUserStore.getState();
+    if (!loginError && signedInSession.isAuthenticated && !signedInSession.user?.isAnonymous && !hasRedirected.current) {
+      hasRedirected.current = true;
+      window.location.replace(redirectTo);
+    }
   };
 
   const handleSignup = async (e: React.FormEvent) => {
