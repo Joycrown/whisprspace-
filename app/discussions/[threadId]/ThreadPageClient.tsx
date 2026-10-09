@@ -7,7 +7,7 @@ import ThreadMessages from '@/components/features/threads/ThreadMessages';
 import ThreadInput from '@/components/features/threads/ThreadInput';
 import ThreadSidebar from '@/components/features/threads/ThreadSideBar';
 import ThreadHeader from '@/components/features/threads/ThreadHeader';
-import { useThreadQuery, useOlderThreadMessages, useCreateThreadMessageMutation, useEditThreadMessageMutation, useLikeThreadMutation, useDeleteThreadMutation, useUpdateThreadMutation, useMessageReactionMutation, useVoteOnPollMutation, useJoinThreadMutation, useLeaveThreadMutation, useRemoveParticipantMutation, checkThreadBan, inviteUserToThread, reportThread, markThreadRead } from '@/lib/threads';
+import { useThreadQuery, useOlderThreadMessages, useCreateThreadMessageMutation, useEditThreadMessageMutation, useDeleteThreadMessageMutation, useLikeThreadMutation, useDeleteThreadMutation, useUpdateThreadMutation, useMessageReactionMutation, useVoteOnPollMutation, useJoinThreadMutation, useLeaveThreadMutation, useRemoveParticipantMutation, checkThreadBan, inviteUserToThread, reportThread, markThreadRead } from '@/lib/threads';
 import { useUserStore } from '@/store/userStore';
 import { Message, Participant, ReactionType, ThreadPrivacy } from '@/types';
 import { SearchProvider } from '@/hooks/hooks/ThreadSearchHook';
@@ -91,6 +91,7 @@ const ThreadPage = () => {
   );
   const createMessageMutation = useCreateThreadMessageMutation();
   const editMessageMutation = useEditThreadMessageMutation();
+  const deleteMessageMutation = useDeleteThreadMessageMutation();
   const likeThreadMutation = useLikeThreadMutation();
   const deleteThreadMutation = useDeleteThreadMutation();
   const updateThreadMutation = useUpdateThreadMutation();
@@ -674,6 +675,11 @@ const ThreadPage = () => {
     });
   };
 
+  const handleDeleteMessage = (messageId: string) => {
+    if (!threadId || !currentUserId) return;
+    deleteMessageMutation.mutate({ threadId, messageId });
+  };
+
   const messagesMap = useMemo(() => {
     const map: { [key: string]: Message } = {};
     messages.forEach(msg => map[msg.id] = msg);
@@ -980,7 +986,30 @@ const ThreadPage = () => {
   }
 
   if (!currentThread) {
-    return <div className="text-white p-4">Discussion not found.</div>;
+    return (
+      <div className="min-h-[100dvh] bg-[#121212] flex items-center justify-center p-4">
+        <div className="w-full max-w-md rounded-xl border border-gray-800 bg-[#1E1E1E] p-6 text-white shadow-2xl">
+          <h2 className="text-lg font-semibold">This discussion has closed</h2>
+          <p className="mt-2 text-sm text-gray-300">It&apos;s no longer available, but there are other conversations happening right now.</p>
+          <div className="mt-5 flex gap-2">
+            <button
+              type="button"
+              onClick={() => router.push('/discussions')}
+              className="flex-1 rounded-md bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition-colors"
+            >
+              Join a live discussion
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push('/discussions/create')}
+              className="flex-1 rounded-md bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
+            >
+              Start a new one
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const previewFallbackData: ThreadPreviewData = {
@@ -1108,6 +1137,7 @@ const ThreadPage = () => {
           threadCreatorId={threadCreatorId}
           onReply={handleReply}
           onEditMessage={handleEditMessage}
+          onDeleteMessage={handleDeleteMessage}
           onReact={handleReact}
           getRepliedMessage={(id: string) => messagesMap[id]}
           messageFilter={messageFilter}

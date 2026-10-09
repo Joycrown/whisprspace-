@@ -282,6 +282,7 @@ export const fetchThreadById = async (
       'messages.order': 'created_at.desc',
       'messages.limit': 50,
       'messages.moderation_status': 'eq.visible',
+      'messages.deleted_at': 'is.null',
       'thread_participants.limit': 200,
     };
     if (safeUserId) {
@@ -877,9 +878,21 @@ export const addMessage = async (
   );
 }
 
-/**
- * Edit a thread message owned by the current user.
- */
+export const deleteOwnThreadMessage = async (messageId: string): Promise<void> => {
+  const safeMessageId = sanitizeUuid(messageId);
+  if (!safeMessageId) {
+    throw new Error('Invalid message reference');
+  }
+
+  const { data, error } = await rawDb.rpc<boolean>('delete_own_thread_message', { p_message_id: safeMessageId });
+  if (error) {
+    throw error;
+  }
+  if (data !== true) {
+    throw new Error('This reply could not be deleted');
+  }
+};
+
 export const editThreadMessage = async (
   messageId: string,
   content: string,
@@ -2216,8 +2229,6 @@ function transformThreadData(
     ...baseThread,
     expiresAt: dbThread.expires_at,
     pollId: dbThread.poll?.id,
-    // Reverse messages to show oldest first (since we fetched newest first)
-    // Reverse messages to show oldest first (since we fetched newest first)
     messages: (dbThread.messages || []).slice().reverse().map((msg: any) => transformMessage(msg, userId)),
     pollOptions: (() => {
       if (!dbThread.poll?.poll_options) return undefined;
@@ -2398,6 +2409,7 @@ export const fetchOlderThreadMessages = async (
   const filters: Record<string, string> = {
     'thread_id': rawDb.filter.eq(safeThreadId),
     'moderation_status': 'eq.visible',
+    'deleted_at': 'is.null',
     'or': `(created_at.lt.${beforeTs},and(created_at.eq.${beforeTs},id.lt.${safeBeforeId}))`,
     'order': 'created_at.desc,id.desc',
   }

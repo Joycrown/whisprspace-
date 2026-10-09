@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Copy, Loader2, Plus, Share2, Star, Trash2 } from 'lucide-react'
+import { Check, Copy, Loader2, Plus, Share2, Shuffle, Star, Trash2 } from 'lucide-react'
 import BackButton from '@/components/navigation/BackButton'
 import posthog from 'posthog-js'
 import { PROMPT_LIBRARY } from '@/lib/prompts/library'
@@ -24,6 +24,7 @@ const durationLabels: Record<PromptDuration, string> = {
 
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 5
+const SUGGESTIONS_PER_PAGE = 6
 
 export default function PromptComposer() {
   const router = useRouter()
@@ -32,6 +33,7 @@ export default function PromptComposer() {
   const [question, setQuestion] = useState('')
   const [category, setCategory] = useState<PromptCategory>('general')
   const [duration, setDuration] = useState<PromptDuration>('48h')
+  const [mode, setMode] = useState<'private' | 'open'>('private')
   const [libraryKey, setLibraryKey] = useState<string | null>(null)
   const [responseFormat, setResponseFormat] = useState<PromptResponseFormat>('text')
   const [options, setOptions] = useState<string[]>(['', ''])
@@ -70,10 +72,17 @@ export default function PromptComposer() {
     downloadName: 'my-whisprspace-ask',
   })
 
+  const [suggestionPage, setSuggestionPage] = useState(0)
+  const categoryItems = useMemo(() => PROMPT_LIBRARY.filter((item) => item.category === category), [category])
+  const suggestionPageCount = Math.max(1, Math.ceil(categoryItems.length / SUGGESTIONS_PER_PAGE))
   const suggestions = useMemo(
-    () => PROMPT_LIBRARY.filter((item) => item.category === category).slice(0, 6),
-    [category]
+    () => categoryItems.slice(suggestionPage * SUGGESTIONS_PER_PAGE, (suggestionPage + 1) * SUGGESTIONS_PER_PAGE),
+    [categoryItems, suggestionPage]
   )
+
+  useEffect(() => {
+    setSuggestionPage(0)
+  }, [category])
 
   const chooseLibraryPrompt = (key: string) => {
     const selected = PROMPT_LIBRARY.find((item) => item.key === key)
@@ -137,6 +146,7 @@ export default function PromptComposer() {
           question,
           category,
           duration,
+          mode,
           libraryKey,
           responseFormat,
           options: responseFormat === 'choice' ? options.map((option) => option.trim()) : undefined,
@@ -144,7 +154,7 @@ export default function PromptComposer() {
         }),
       })
       setCreatedPrompt(prompt)
-      try { posthog.capture('prompt_created', { category: prompt.category, duration, library_key: prompt.library_key, response_format: prompt.response_format }) } catch { /* analytics is optional */ }
+      try { posthog.capture('prompt_created', { category: prompt.category, duration, mode: prompt.mode, library_key: prompt.library_key, response_format: prompt.response_format }) } catch {}
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to create your ask.')
     } finally {
@@ -276,22 +286,48 @@ export default function PromptComposer() {
 
           <section>
             <div className="mb-2 flex items-baseline justify-between"><label className="block text-sm font-medium">Try a library question</label><span className="text-xs text-[#5C5C6E]">Curated for safe, honest answers</span></div>
-            <div className="grid gap-2">{suggestions.map((item) => <button key={item.key} type="button" onClick={() => chooseLibraryPrompt(item.key)} className={`rounded-xl border p-3 text-left text-sm transition-colors ${libraryKey === item.key ? 'border-[#F97316]/60 bg-[#F97316]/10 text-white' : 'border-[#2A2A38] text-[#C8C8D2] hover:border-[#F97316]/35'}`}>{item.question}</button>)}</div>
+            <div className="grid gap-2">{suggestions.map((item) => <button key={item.key} type="button" onClick={() => chooseLibraryPrompt(item.key)} className={`rounded-xl border p-3 text-left text-sm transition-colors ${libraryKey === item.key ? 'border-[#F97316]/60 bg-[#F97316]/10 text-white' : 'border-[#2A2A38] text-[#C8C8D2] hover:border-[#F97316]/35'}`}>{item.question}{item.responseFormat === 'choice' && <span className="ml-2 rounded-full bg-[#8B5CF6]/15 px-2 py-0.5 text-[10px] font-medium text-[#C4B5FD]">Guessing game</span>}</button>)}</div>
+            {suggestionPageCount > 1 && (
+              <button
+                type="button"
+                onClick={() => setSuggestionPage((page) => (page + 1) % suggestionPageCount)}
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-[#C4B5FD] hover:text-white"
+              >
+                <Shuffle className="h-3.5 w-3.5" /> Show other questions
+              </button>
+            )}
           </section>
 
           <section>
             <label className="mb-2 block text-sm font-medium">Who can see answers?</label>
-            <div className="grid gap-2 sm:grid-cols-2"><button type="button" className="rounded-xl border border-[#8B5CF6]/65 bg-[#8B5CF6]/10 p-3 text-left"><span className="block text-sm font-medium">Private</span><span className="mt-1 block text-xs text-[#8F8FA3]">Only you see the answers, until you decide to share them.</span></button><div className="rounded-xl border border-[#2A2A38] p-3 opacity-60"><span className="block text-sm font-medium">Open <span className="ml-1 text-xs text-[#F97316]">Coming soon</span></span><span className="mt-1 block text-xs text-[#8F8FA3]">People can read others&apos; answers after they send theirs.</span></div></div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button type="button" onClick={() => setMode('private')} className={`rounded-xl border p-3 text-left transition-colors ${mode === 'private' ? 'border-[#8B5CF6]/65 bg-[#8B5CF6]/10' : 'border-[#2A2A38] hover:border-[#8B5CF6]/35'}`}>
+                <span className="block text-sm font-medium">Private</span>
+                <span className="mt-1 block text-xs text-[#8F8FA3]">Only you see the answers, until you decide to share them.</span>
+              </button>
+              <button type="button" onClick={() => setMode('open')} className={`rounded-xl border p-3 text-left transition-colors ${mode === 'open' ? 'border-[#F97316]/60 bg-[#F97316]/10' : 'border-[#2A2A38] hover:border-[#F97316]/35'}`}>
+                <span className="block text-sm font-medium">Public</span>
+                <span className="mt-1 block text-xs text-[#8F8FA3]">Anyone with the link can answer and see everyone&apos;s answers.</span>
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-[#5C5C6E]">You can&apos;t change this after you publish.</p>
           </section>
 
-          <section>
-            <label className="mb-2 block text-sm font-medium">Duration</label>
-            <div className="grid grid-cols-3 gap-2">{PROMPT_DURATIONS.map((value) => {
-              const locked = value === '7d' && !isPremium
-              return <button key={value} type="button" disabled={locked} onClick={() => setDuration(value)} className={`relative rounded-xl border py-3 text-sm transition-colors ${locked ? 'cursor-not-allowed border-[#2A2A38] text-[#5C5C6E] opacity-60' : duration === value ? 'border-[#8B5CF6]/70 bg-[#8B5CF6]/15 text-white' : 'border-[#2A2A38] text-[#8F8FA3] hover:border-[#8B5CF6]/35'}`}>{durationLabels[value]}{locked && <span className="ml-1.5 text-[10px] text-[#F97316]">Premium</span>}</button>
-            })}</div>
-            {!isPremium && <p className="mt-2 text-xs text-[#5C5C6E]">Keep an ask open for a full week with Premium.</p>}
-          </section>
+          {mode === 'open' ? (
+            <section>
+              <label className="mb-2 block text-sm font-medium">Duration</label>
+              <p className="rounded-xl border border-[#2A2A38] bg-white/[0.02] px-4 py-3 text-sm text-[#C8C8D2]">Stays open while people keep answering, and closes after a stretch with no new answers.</p>
+            </section>
+          ) : (
+            <section>
+              <label className="mb-2 block text-sm font-medium">Duration</label>
+              <div className="grid grid-cols-3 gap-2">{PROMPT_DURATIONS.map((value) => {
+                const locked = value === '7d' && !isPremium
+                return <button key={value} type="button" disabled={locked} onClick={() => setDuration(value)} className={`relative rounded-xl border py-3 text-sm transition-colors ${locked ? 'cursor-not-allowed border-[#2A2A38] text-[#5C5C6E] opacity-60' : duration === value ? 'border-[#8B5CF6]/70 bg-[#8B5CF6]/15 text-white' : 'border-[#2A2A38] text-[#8F8FA3] hover:border-[#8B5CF6]/35'}`}>{durationLabels[value]}{locked && <span className="ml-1.5 text-[10px] text-[#F97316]">Premium</span>}</button>
+              })}</div>
+              {!isPremium && <p className="mt-2 text-xs text-[#5C5C6E]">Keep an ask open for a full week with Premium.</p>}
+            </section>
+          )}
 
           {error && <p className="rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}
           <button disabled={!question.trim() || !isChoiceValid || isSubmitting} onClick={handleCreate} className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#8B5CF6] to-[#F97316] text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40">{isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}{isSubmitting ? 'Publishing…' : 'Publish ask'}</button>

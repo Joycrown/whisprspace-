@@ -3,9 +3,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/lib/react-query/queryKeys'
 import { 
-  addMessage, 
+  addMessage,
   editThreadMessage,
-  deleteThread, 
+  deleteOwnThreadMessage,
+  deleteThread,
   likeThread, 
   unlikeThread, 
   updateThread, 
@@ -401,6 +402,36 @@ export function useEditThreadMessageMutation() {
         )
         return { ...old, messages: nextMessages }
       })
+    },
+  })
+}
+
+export function useDeleteThreadMessageMutation() {
+  const queryClient = useQueryClient()
+  const toast = useToastHelpers()
+
+  return useMutation({
+    mutationFn: async ({ messageId }: { threadId: string; messageId: string }) => {
+      await deleteOwnThreadMessage(messageId)
+    },
+    onMutate: async ({ threadId, messageId }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.threads.detail(threadId) })
+      const previousThread = queryClient.getQueryData<ThreadData>(queryKeys.threads.detail(threadId))
+
+      queryClient.setQueryData<ThreadData>(queryKeys.threads.detail(threadId), (old) => {
+        if (!old) return old
+        const messages = (old.messages || []).filter((msg) => msg.id !== messageId)
+        if (messages.length === (old.messages || []).length) return old
+        return { ...old, messages, messageCount: Math.max(0, (old.messageCount || 0) - 1) }
+      })
+
+      return { previousThread }
+    },
+    onError: (error: Error, variables, context) => {
+      if (context?.previousThread) {
+        queryClient.setQueryData(queryKeys.threads.detail(variables.threadId), context.previousThread)
+      }
+      toast.error(error.message || 'Failed to delete your reply')
     },
   })
 }

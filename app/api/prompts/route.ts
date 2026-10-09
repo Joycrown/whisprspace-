@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/core/supabase/admin-client'
 import { containsBlockedContent } from '@/lib/moderation/blocklist'
 import { getLibraryPrompt } from '@/lib/prompts/library'
+import { getPublicAskWindowHours } from '@/lib/prompts/config'
 import { hasThirdPartyPromptFraming } from '@/lib/prompts/safety'
 import { PROMPT_CATEGORIES, PROMPT_DURATIONS, PROMPT_RESPONSE_FORMATS, type PromptCategory, type PromptDuration, type PromptResponseFormat } from '@/lib/prompts/types'
 import { resolveUserFromRequest } from '@/lib/security/request-auth'
@@ -51,13 +52,15 @@ async function resolveRegisteredCreator(request: NextRequest) {
 
   const { data: profile } = await supabaseAdmin
     .from('users')
-    .select('id, is_anonymous, is_premium')
+    .select('id, is_anonymous, is_premium, is_official')
     .eq('id', user.id)
     .maybeSingle()
 
   if (!profile || profile.is_anonymous) return null
-  return { ...user, isPremium: profile.is_premium ?? false }
+  return { ...user, isPremium: profile.is_premium ?? false, isOfficial: profile.is_official === true }
 }
+
+const PROMPT_MODES = ['private', 'open'] as const
 
 export async function GET(request: NextRequest) {
   try {
@@ -106,8 +109,9 @@ export async function POST(request: NextRequest) {
       ? libraryPrompt.category
       : sanitizeEnumValue(raw.category, PROMPT_CATEGORIES, 'general') as PromptCategory
     const duration = sanitizeEnumValue(raw.duration, PROMPT_DURATIONS, '48h') as PromptDuration
+    const mode = sanitizeEnumValue(raw.mode, PROMPT_MODES, 'private') as (typeof PROMPT_MODES)[number]
 
-    if (duration === '7d' && !creator.isPremium) {
+    if (mode === 'private' && duration === '7d' && !creator.isPremium && !creator.isOfficial) {
       return NextResponse.json(
         { error: 'The 7-day duration is a premium feature. Upgrade to keep an ask open for a full week.' },
         { status: 403 }
@@ -125,9 +129,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // The client's own responseFormat/options take priority — a creator can
-    // start from a library template and still fully rewrite its options, or
-    // skip the library and build a choice-format ask entirely from scratch.
     const hasOwnChoicePayload = Array.isArray(raw.options)
     const responseFormat = sanitizeEnumValue(
       raw.responseFormat,
@@ -182,15 +183,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const expiresAt = new Date(Date.now() + durationToHours[duration] * 60 * 60 * 1000).toISOString()
+    const lifetimeHours = mode === 'open' ? await getPublicAskWindowHours() : durationToHours[duration]
+    const expiresAt = creator.isOfficial
+      ? null
+      : new Date(Date.now() + lifetimeHours * 60 * 60 * 1000).toISOString()
     const { data: prompt, error } = await supabaseAdmin
       .from('prompts')
       .insert({
         creator_id: creator.id,
         question,
-        // Open mode is intentionally deferred. Keeping this server-side prevents
-        // a crafted client request from publishing before its safety flow ships.
-        mode: 'private',
+        mode,
         category,
         library_key: libraryPrompt?.key ?? null,
         expires_at: expiresAt,

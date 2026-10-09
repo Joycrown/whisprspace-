@@ -7,6 +7,8 @@ export type PromptDuration = (typeof PROMPT_DURATIONS)[number]
 export type PromptMode = 'private' | 'open'
 export type PromptResponseFormat = (typeof PROMPT_RESPONSE_FORMATS)[number]
 
+export type PromptMood = 'fun' | 'juicy' | 'emotional' | 'nostalgic'
+
 export interface PromptLibraryItem {
   key: string
   question: string
@@ -15,6 +17,8 @@ export interface PromptLibraryItem {
   responseFormat?: PromptResponseFormat
   options?: string[]
   correctOptionIndex?: number
+  mood?: PromptMood
+  about?: 'me' | 'you'
 }
 
 export interface Prompt {
@@ -25,9 +29,10 @@ export interface Prompt {
   category: PromptCategory
   library_key: string | null
   response_count: number
-  expires_at: string
+  expires_at: string | null
   is_saved: boolean
   export_count: number
+  view_count?: number
   response_format: PromptResponseFormat
   options: string[] | null
   created_at: string
@@ -40,6 +45,9 @@ export interface PromptResponse {
   is_starred: boolean
   starred_at: string | null
   option_index: number | null
+  same_count?: number
+  bold_count?: number
+  oof_count?: number
   created_at: string
 }
 
